@@ -253,7 +253,6 @@ static int codegen_pattern_subpattern(compiler *,
                                       pattern_ty, pattern_context *);
 static int codegen_make_closure(compiler *c, location loc,
                                 PyCodeObject *co, Py_ssize_t flags);
-static int codegen_expr_ast(PyObject *ast_data, expr_ty expr);
 
 
 /* Add an opcode with an integer argument */
@@ -1080,73 +1079,163 @@ codegen_visit_annexpr(compiler *c, expr_ty annotation)
     return SUCCESS;
 }
 
-static int
-ast_list_helper(PyObject *ast_data, asdl_expr_seq *seq)
-{
-    PyObject *value = NULL;
-    Py_ssize_t i, n = asdl_seq_LEN(seq);
-    for (i = 0; i < n; i++) {
-        RETURN_IF_ERROR(codegen_expr_ast(ast_data, asdl_seq_GET(seq, i)));
-    }
-    value = PyLong_FromSsize_t(n);
-    if (!value) {
-        return ERROR;
-    }
-    PyList_Append(ast_data, value);
-    Py_DECREF(value);
-    return SUCCESS;
-}
-
 #define AST_ADD_NEW(D, F, V)        \
     do {                            \
         value = (V);                \
         if (!value) {               \
             goto F;                 \
         }                           \
-        PyList_Append((D), value);  \
+        PyList_Append(D, value);    \
         Py_DECREF(value);           \
     } while (0)
 
-static int
-codegen_expr_ast(PyObject *ast_data, expr_ty expr)
+#define AST_ADD_TO_TUPLE(D, I, V)       \
+    do {                                \
+        PyObject *value = (V);          \
+        if (!value) {                   \
+            Py_DecRef(D);               \
+            return NULL;                \
+        }                               \
+        PyTuple_SetItem(D, I, value);   \
+    } while (0)                         \
+
+static PyObject* build_ast_expr(expr_ty expr);
+
+static PyObject*
+build_ast_expr_seq(asdl_expr_seq *seq)
+{
+    if (!seq) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    PyObject *value = NULL;
+    Py_ssize_t i, n = asdl_seq_LEN(seq);
+    PyObject *data = PyTuple_New(n);
+    if (!data) {
+        return NULL;
+    }
+    for (i = 0; i < n; i++) {
+        value = build_ast_expr(asdl_seq_GET(seq, i));
+        if (!value) {
+            return NULL;
+        }
+        PyTuple_SetItem(data, i, value);
+    }
+    return data;
+}
+
+static PyObject*
+build_ast_arg(arg_ty arg) {
+    if (!arg) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    PyObject *type_comment = arg->type_comment;
+    if (!type_comment) {
+        type_comment = Py_None;
+    }
+    PyObject *annotation = build_ast_expr(arg->annotation);
+    if (!annotation) {
+        return NULL;
+    }
+    PyObject *data = PyTuple_Pack(3, type_comment, annotation, arg->arg);
+    Py_DECREF(annotation);
+    return data;
+}
+
+static PyObject*
+build_ast_arg_seq(asdl_arg_seq *seq)
+{
+    if (!seq) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    PyObject *value = NULL;
+    Py_ssize_t i, n = asdl_seq_LEN(seq);
+    PyObject *data = PyTuple_New(n);
+    if (!data) {
+        return NULL;
+    }
+    for (i = 0; i < n; i++) {
+        value = build_ast_arg(asdl_seq_GET(seq, i));
+        if (!value) {
+            return NULL;
+        }
+        PyTuple_SetItem(data, i, value);
+    }
+    return data;
+}
+
+static PyObject*
+build_ast_args(arguments_ty args) {
+    PyObject *data = PyTuple_New(7);
+    AST_ADD_TO_TUPLE(data, 0, build_ast_arg_seq(args->posonlyargs));
+    AST_ADD_TO_TUPLE(data, 1, build_ast_arg_seq(args->args));
+    AST_ADD_TO_TUPLE(data, 2, build_ast_arg(args->vararg));
+    AST_ADD_TO_TUPLE(data, 3, build_ast_arg_seq(args->kwonlyargs));
+    AST_ADD_TO_TUPLE(data, 4, build_ast_expr_seq(args->kw_defaults));
+    AST_ADD_TO_TUPLE(data, 5, build_ast_arg(args->kwarg));
+    AST_ADD_TO_TUPLE(data, 6, build_ast_expr_seq(args->defaults));
+    return data;
+}
+
+static PyObject*
+build_ast_expr(expr_ty expr)
 {
     PyObject *value = NULL;
-    int result = 0;
-    if (Py_EnterRecursiveCall(" during compilation")) {
-        return ERROR;
+    PyObject *data = PyList_New(0);
+    if (!expr) {
+        return Py_None;
     }
+    if (Py_EnterRecursiveCall(" during compilation")) {
+        return NULL;
+    }
+    AST_ADD_NEW(data, failed, PyLong_FromLong(expr->kind));
     switch (expr->kind) {
     case BoolOp_kind:
-        result = ast_list_helper(ast_data, expr->v.BoolOp.values);
-        if (result) {
-            goto failed;
-        }
-        AST_ADD_NEW(ast_data, failed, PyLong_FromLong(expr->v.BoolOp.op));
+        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.BoolOp.op));
+        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.BoolOp.values));
+        break;
+    case NamedExpr_kind:
+        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.NamedExpr.target));
+        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.NamedExpr.value));
+        break;
+    case BinOp_kind:
+        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.BinOp.left));
+        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.BinOp.op));
+        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.BinOp.right));
+        break;
+    case UnaryOp_kind:
+        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.UnaryOp.op));
+        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.UnaryOp.operand));
+        break;
+    case Lambda_kind:
+        AST_ADD_NEW(data, failed, build_ast_args(expr->v.Lambda.args));
+        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Lambda.body));
         break;
     case Name_kind:
-        AST_ADD_NEW(ast_data, failed, PyLong_FromLong(expr->v.Name.ctx));
-        PyList_Append(ast_data, expr->v.Name.id);
+        PyList_Append(data, expr->v.Name.id);
+        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.Name.ctx));
         break;
     default:
         break;
     }
-    AST_ADD_NEW(ast_data, failed, PyLong_FromLong(expr->kind));
     Py_LeaveRecursiveCall();
-    return SUCCESS;
+    PyObject *data_tuple = PyList_AsTuple(data);
+    Py_DECREF(data);
+    return data_tuple;
 failed:
     Py_LeaveRecursiveCall();
     Py_XDECREF(value);
-    return ERROR;
+    Py_XDECREF(data);
+    return NULL;
 }
 
 static int
 codegen_visit_annast(compiler *c, expr_ty annotation)
 {
     location loc = LOC(annotation);
-    PyObject *ast_data = PyList_New(0);
-    codegen_expr_ast(ast_data, annotation);
-    PyObject *ast_tuple = PyList_AsTuple(ast_data);
-    Py_DECREF(ast_data);
+    PyObject *ast_tuple = build_ast_expr(annotation);
     ADDOP_LOAD_CONST_NEW(c, loc, ast_tuple);
     return SUCCESS;
 }
