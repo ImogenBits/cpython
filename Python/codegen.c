@@ -253,6 +253,7 @@ static int codegen_pattern_subpattern(compiler *,
                                       pattern_ty, pattern_context *);
 static int codegen_make_closure(compiler *c, location loc,
                                 PyCodeObject *co, Py_ssize_t flags);
+static int codegen_expr_ast(PyObject *ast_data, expr_ty expr);
 
 
 /* Add an opcode with an integer argument */
@@ -1080,6 +1081,77 @@ codegen_visit_annexpr(compiler *c, expr_ty annotation)
 }
 
 static int
+ast_list_helper(PyObject *ast_data, asdl_expr_seq *seq)
+{
+    PyObject *value = NULL;
+    Py_ssize_t i, n = asdl_seq_LEN(seq);
+    for (i = 0; i < n; i++) {
+        RETURN_IF_ERROR(codegen_expr_ast(ast_data, asdl_seq_GET(seq, i)));
+    }
+    value = PyLong_FromSsize_t(n);
+    if (!value) {
+        return ERROR;
+    }
+    PyList_Append(ast_data, value);
+    Py_DECREF(value);
+    return SUCCESS;
+}
+
+#define AST_ADD_NEW(D, F, V)        \
+    do {                            \
+        value = (V);                \
+        if (!value) {               \
+            goto F;                 \
+        }                           \
+        PyList_Append((D), value);  \
+        Py_DECREF(value);           \
+    } while (0)
+
+static int
+codegen_expr_ast(PyObject *ast_data, expr_ty expr)
+{
+    PyObject *value = NULL;
+    int result = 0;
+    if (Py_EnterRecursiveCall(" during compilation")) {
+        return ERROR;
+    }
+    switch (expr->kind) {
+    case BoolOp_kind:
+        result = ast_list_helper(ast_data, expr->v.BoolOp.values);
+        if (result) {
+            goto failed;
+        }
+        AST_ADD_NEW(ast_data, failed, PyLong_FromLong(expr->v.BoolOp.op));
+        break;
+    case Name_kind:
+        AST_ADD_NEW(ast_data, failed, PyLong_FromLong(expr->v.Name.ctx));
+        PyList_Append(ast_data, expr->v.Name.id);
+        break;
+    default:
+        break;
+    }
+    AST_ADD_NEW(ast_data, failed, PyLong_FromLong(expr->kind));
+    Py_LeaveRecursiveCall();
+    return SUCCESS;
+failed:
+    Py_LeaveRecursiveCall();
+    Py_XDECREF(value);
+    return ERROR;
+}
+
+static int
+codegen_visit_annast(compiler *c, expr_ty annotation)
+{
+    location loc = LOC(annotation);
+    PyObject *ast_data = PyList_New(0);
+    codegen_expr_ast(ast_data, annotation);
+    PyObject *ast_tuple = PyList_AsTuple(ast_data);
+    Py_DECREF(ast_data);
+    ADDOP_LOAD_CONST_NEW(c, loc, ast_tuple);
+    return SUCCESS;
+}
+
+static int
 codegen_argannotation(compiler *c, identifier id,
     expr_ty annotation, Py_ssize_t *annotations_len, location loc)
 {
@@ -1097,17 +1169,7 @@ codegen_argannotation(compiler *c, identifier id,
         VISIT(c, annexpr, annotation);
     }
     else {
-        if (annotation->kind == Starred_kind) {
-            // *args: *Ts (where Ts is a TypeVarTuple).
-            // Do [annotation_value] = [*Ts].
-            // (Note that in theory we could end up here even for an argument
-            // other than *args, but in practice the grammar doesn't allow it.)
-            VISIT(c, expr, annotation->v.Starred.value);
-            ADDOP_I(c, loc, UNPACK_SEQUENCE, (Py_ssize_t) 1);
-        }
-        else {
-            VISIT(c, expr, annotation);
-        }
+        VISIT(c, annast, annotation);
     }
     *annotations_len += 1;
     return SUCCESS;
