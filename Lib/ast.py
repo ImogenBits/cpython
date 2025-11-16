@@ -662,6 +662,66 @@ def unparse(ast_obj):
     return unparser.visit(ast_obj)
 
 
+def _class_from_enum(_class, i):
+    return _class.__subclasses__()[i - 1]
+
+
+def _args_from_tuple(data):
+    if data is None:
+        return None
+    return arguments(
+        posonlyargs=[_arg_from_tuple(arg) for arg in data[0]],
+        args=[_arg_from_tuple(arg) for arg in data[1]],
+        vararg=_arg_from_tuple(data[2]),
+        kwonlyargs=[_arg_from_tuple(arg) for arg in data[3]],
+        kw_defaults=[_expr_from_tuple(e) for e in data[4]],
+        kwarg=_arg_from_tuple(data[5]),
+        defaults=[_expr_from_tuple(e) for e in data[6]],
+    )
+
+
+def _arg_from_tuple(data):
+    if data is None:
+        return None
+    return arg(
+        arg=data[0],
+        annotation=_expr_from_tuple(data[1]),
+        type_comment=data[2],
+    )
+
+
+def _expr_from_tuple(data):
+    if data is None:
+        return None
+    match data[0]:
+        case 1:
+            op = _class_from_enum(boolop, data[1])
+            values = [_expr_from_tuple(val) for val in data[2]]
+            return BoolOp(op, values)
+        case 2:
+            target = _expr_from_tuple(data[1])
+            value = _expr_from_tuple(data[2])
+            return NamedExpr(target, value)
+        case 3:
+            left = _expr_from_tuple(data[1])
+            op = _class_from_enum(operator, data[2])
+            right = _expr_from_tuple(data[3])
+            return BinOp(left, op, right)
+        case 4:
+            op = _class_from_enum(unaryop, data[1])
+            operand = _expr_from_tuple(data[2])
+            return UnaryOp(op, operand)
+        case 5:
+            args = _args_from_tuple(data[1])
+            body = _expr_from_tuple(data[2])
+            return Lambda(args, body)
+        case 26:
+            ctx = _class_from_enum(expr_context, data[2])
+            return Name(data[1], ctx)
+        case _:
+            raise ValueError
+
+
 def main(args=None):
     import argparse
     import sys
