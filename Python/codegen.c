@@ -1235,8 +1235,20 @@ static int
 codegen_visit_annast(compiler *c, expr_ty annotation)
 {
     location loc = LOC(annotation);
+    PyObject *ast = PyUnicode_FromStringAndSize("ast", 3);
+    PyObject *expr = PyUnicode_FromStringAndSize("_expr_from_tuple", 16);
     PyObject *ast_tuple = build_ast_expr(annotation);
+
+    ADDOP_LOAD_CONST(c, loc, _PyLong_GetZero());
+    ADDOP_LOAD_CONST(c, loc, Py_None);
+    ADDOP_NAME(c, loc, IMPORT_NAME, ast, names);
+    ADDOP_NAME(c, loc, IMPORT_FROM, expr, names);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, loc, POP_TOP);
+    ADDOP(c, loc, PUSH_NULL);
     ADDOP_LOAD_CONST_NEW(c, loc, ast_tuple);
+    ADDOP_I(c, loc, CALL, 1);
+
     return SUCCESS;
 }
 
