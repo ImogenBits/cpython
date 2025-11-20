@@ -1013,6 +1013,7 @@ enum _PyAnnotateFormat {
     _Py_ANNOTATE_FORMAT_VALUE_WITH_FAKE_GLOBALS = 2,
     _Py_ANNOTATE_FORMAT_FORWARDREF = 3,
     _Py_ANNOTATE_FORMAT_STRING = 4,
+    _Py_ANNOTATE_FORMAT_AST = 5,
 };
 
 extern int _PyObject_SetDict(PyObject *obj, PyObject *value);
