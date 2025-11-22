@@ -826,12 +826,12 @@ def _expr_from_tuple(data):
             return Name(data[1], ctx)
         case 27:
             return List(
-                [_expr_from_tuple(data[1])],
+                [_expr_from_tuple(e) for e in data[1]],
                 _class_from_enum(expr_context, data[2]),
             )
         case 28:
             return Tuple(
-                [_expr_from_tuple(data[1])],
+                [_expr_from_tuple(e) for e in data[1]],
                 _class_from_enum(expr_context, data[2]),
             )
         case 29:
