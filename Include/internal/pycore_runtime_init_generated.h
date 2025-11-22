@@ -1314,12 +1314,14 @@ extern "C" {
     INIT_STR(anon_setcomp, "<setcomp>"), \
     INIT_STR(anon_string, "<string>"), \
     INIT_STR(anon_unknown, "<unknown>"), \
+    INIT_STR(build_ast, ".build_ast"), \
     INIT_STR(dbl_close_br, "}}"), \
     INIT_STR(dbl_open_br, "{{"), \
     INIT_STR(dbl_percent, "%%"), \
     INIT_STR(defaults, ".defaults"), \
     INIT_STR(dot_locals, ".<locals>"), \
     INIT_STR(empty, ""), \
+    INIT_STR(expr_from_tuple, "_expr_from_tuple"), \
     INIT_STR(format, ".format"), \
     INIT_STR(gc, "<GC>"), \
     INIT_STR(generic_base, ".generic_base"), \
