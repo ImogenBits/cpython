@@ -690,34 +690,152 @@ def _arg_from_tuple(data):
     )
 
 
+def _comprehension_from_tuple(data):
+    if data is None:
+        return None
+    return comprehension(
+        target=_expr_from_tuple(data[0]),
+        iter=_expr_from_tuple(data[1]),
+        ifs=[_expr_from_tuple(data[2])],
+        is_async=data[3],
+    )
+
+
+def _keyword_from_tuple(data):
+    if data is None:
+        return None
+    return keyword(
+        arg=data[0],
+        value=_expr_from_tuple(data[1]),
+    )
+
+
 def _expr_from_tuple(data):
     if data is None:
         return None
     match data[0]:
         case 1:
-            op = _class_from_enum(boolop, data[1])
-            values = [_expr_from_tuple(val) for val in data[2]]
-            return BoolOp(op, values)
+            return BoolOp(
+                _class_from_enum(boolop, data[1]),
+                [_expr_from_tuple(val) for val in data[2]],
+            )
         case 2:
-            target = _expr_from_tuple(data[1])
-            value = _expr_from_tuple(data[2])
-            return NamedExpr(target, value)
+            return NamedExpr(*(_expr_from_tuple(e for e in data[1:])))
         case 3:
-            left = _expr_from_tuple(data[1])
-            op = _class_from_enum(operator, data[2])
-            right = _expr_from_tuple(data[3])
-            return BinOp(left, op, right)
+            return BinOp(
+                _expr_from_tuple(data[1]),
+                _class_from_enum(operator, data[2]),
+                _expr_from_tuple(data[3]),
+            )
         case 4:
-            op = _class_from_enum(unaryop, data[1])
-            operand = _expr_from_tuple(data[2])
-            return UnaryOp(op, operand)
+            return UnaryOp(
+                _class_from_enum(unaryop, data[1]),
+                _expr_from_tuple(data[2]),
+            )
         case 5:
-            args = _args_from_tuple(data[1])
-            body = _expr_from_tuple(data[2])
-            return Lambda(args, body)
+            return Lambda(
+                _args_from_tuple(data[1]),
+                _expr_from_tuple(data[2]),
+            )
+        case 6:
+            return IfExp(*(_expr_from_tuple(e for e in data[1:])))
+        case 7:
+            return Dict(
+                [_expr_from_tuple(e) for e in data[1]],
+                [_expr_from_tuple(e) for e in data[2]],
+            )
+        case 8:
+            return Set([_expr_from_tuple(e) for e in data[1]])
+        case 9:
+            return ListComp(
+                _expr_from_tuple(data[1]),
+                [_comprehension_from_tuple(e) for e in data[2]],
+            )
+        case 10:
+            return SetComp(
+                _expr_from_tuple(data[1]),
+                [_comprehension_from_tuple(e) for e in data[2]],
+            )
+        case 11:
+            return DictComp(
+                _expr_from_tuple(data[1]),
+                _expr_from_tuple(data[2]),
+                [_comprehension_from_tuple(e) for e in data[3]],
+            )
+        case 12:
+            return GeneratorExp(
+                _expr_from_tuple(data[1]),
+                [_comprehension_from_tuple(e) for e in data[2]],
+            )
+        case 13:
+            return Await(_expr_from_tuple(data[1]))
+        case 14:
+            return Yield(_expr_from_tuple(data[1]))
+        case 15:
+            return YieldFrom(_expr_from_tuple(data[1]))
+        case 16:
+            return Compare(
+                _expr_from_tuple(data[1]),
+                _class_from_enum(cmpop, data[2]),
+                [_expr_from_tuple(data[3])],
+            )
+        case 17:
+            return Call(
+                _expr_from_tuple(data[1]),
+                [_expr_from_tuple(e) for e in data[2]],
+                [_keyword_from_tuple(e) for e in data[3]],
+            )
+        case 18:
+            return FormattedValue(
+                _expr_from_tuple(data[1]),
+                data[2],
+                _expr_from_tuple(data[3]),
+            )
+        case 19:
+            return Interpolation(
+                _expr_from_tuple(data[1]),
+                data[2],
+                data[3],
+                _expr_from_tuple(data[4]),
+            )
+        case 20:
+            return JoinedStr([_expr_from_tuple(e) for e in data[1]])
+        case 21:
+            return TemplateStr([_expr_from_tuple(e) for e in data[1]])
+        case 22:
+            return Constant(*data[1:])
+        case 23:
+            return Attribute(
+                _expr_from_tuple(data[1]),
+                data[2],
+                _class_from_enum(expr_context, data[3]),
+            )
+        case 24:
+            return Subscript(
+                _expr_from_tuple(data[1]),
+                _expr_from_tuple(data[2]),
+                _class_from_enum(expr_context, data[3]),
+            )
+        case 25:
+            return Starred(
+                _expr_from_tuple(data[1]),
+                _class_from_enum(expr_context, data[2]),
+            )
         case 26:
             ctx = _class_from_enum(expr_context, data[2])
             return Name(data[1], ctx)
+        case 27:
+            return List(
+                [_expr_from_tuple(data[1])],
+                _class_from_enum(expr_context, data[2]),
+            )
+        case 28:
+            return Tuple(
+                [_expr_from_tuple(data[1])],
+                _class_from_enum(expr_context, data[2]),
+            )
+        case 29:
+            return Slice(*(_expr_from_tuple(e) for e in data[1:]))
         case _:
             raise ValueError
 
