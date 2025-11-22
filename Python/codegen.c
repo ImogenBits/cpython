@@ -200,6 +200,7 @@ static int codegen_nameop(compiler *, location, identifier, expr_context_ty);
 static int codegen_visit_stmt(compiler *, stmt_ty);
 static int codegen_visit_keyword(compiler *, keyword_ty);
 static int codegen_visit_expr(compiler *, expr_ty);
+static int codegen_visit_annast(compiler *, expr_ty);
 static int codegen_augassign(compiler *, stmt_ty);
 static int codegen_annassign(compiler *, stmt_ty);
 static int codegen_subscript(compiler *, expr_ty);
@@ -802,7 +803,7 @@ codegen_leave_annotations_scope(compiler *c, location loc)
 
 static int
 codegen_deferred_annotations_body(compiler *c, location loc,
-    PyObject *deferred_anno, PyObject *conditional_annotation_indices, int scope_type)
+    PyObject *deferred_anno, PyObject *conditional_annotation_indices, int scope_type, bool as_ast)
 {
     Py_ssize_t annotations_len = PyList_GET_SIZE(deferred_anno);
 
@@ -844,7 +845,11 @@ codegen_deferred_annotations_body(compiler *c, location loc,
             ADDOP_JUMP(c, LOC(st), POP_JUMP_IF_FALSE, not_set);
         }
 
-        VISIT(c, expr, st->v.AnnAssign.annotation);
+        if (as_ast) {
+            VISIT(c, annast, st->v.AnnAssign.annotation);
+        } else {
+            VISIT(c, expr, st->v.AnnAssign.annotation);
+        }
         ADDOP_I(c, LOC(st), COPY, 2);
         ADDOP_LOAD_CONST_NEW(c, LOC(st), mangled);
         // stack now contains <annos> <name> <annos> <value>
@@ -889,15 +894,19 @@ codegen_process_deferred_annotations(compiler *c, location loc)
         goto error;
     }
     if (codegen_deferred_annotations_body(c, loc, deferred_anno,
-                                          conditional_annotation_indices, scope_type) < 0) {
+                                          conditional_annotation_indices, scope_type, 0) < 0) {
         _PyCompile_ExitScope(c);
         goto error;
     }
-
+    RETURN_IF_ERROR_IN_SCOPE(c, codegen_setup_ast_annotations(c, loc, &ast_start));
+    if (codegen_deferred_annotations_body(c, loc, deferred_anno,
+                                          conditional_annotation_indices, scope_type, 1) < 0) {
+        _PyCompile_ExitScope(c);
+        goto error;
+    }
     Py_DECREF(deferred_anno);
     Py_DECREF(conditional_annotation_indices);
-    RETURN_IF_ERROR_IN_SCOPE(c, codegen_setup_ast_annotations(c, loc, &ast_start));
-    ADDOP_I_IN_SCOPE(c, loc, BUILD_MAP, 0);
+    RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, loc));
     RETURN_IF_ERROR(codegen_leave_annotations_scope(c, loc));
     RETURN_IF_ERROR(codegen_nameop(
         c, loc,
@@ -1382,9 +1391,12 @@ codegen_function_annotations(compiler *c, location loc,
         );
         ADDOP_I(c, loc, BUILD_MAP, annotations_len);
         RETURN_IF_ERROR_IN_SCOPE(c, codegen_setup_ast_annotations(c, loc, &ast_start));
+        annotations_len = 0;
         RETURN_IF_ERROR_IN_SCOPE(
             c, codegen_annotations_in_scope(c, loc, args, returns, &annotations_len, 1)
         );
+        ADDOP_I(c, loc, BUILD_MAP, annotations_len);
+        RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, loc));
         RETURN_IF_ERROR(codegen_leave_annotations_scope(c, loc));
         return MAKE_FUNCTION_ANNOTATE;
     }
@@ -1472,7 +1484,7 @@ codegen_type_param_bound_or_default(compiler *c, expr_ty e,
     }
     RETURN_IF_ERROR_IN_SCOPE(c, codegen_setup_ast_annotations(c, LOC(e), &ast_start));
     VISIT(c, annast, e);
-    ADDOP_IN_SCOPE(c, LOC(e), RETURN_VALUE);
+    RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, LOC(e)));
     PyCodeObject *co = _PyCompile_OptimizeAndAssemble(c, 1);
     _PyCompile_ExitScope(c);
     if (co == NULL) {
@@ -1980,7 +1992,7 @@ codegen_typealias_body(compiler *c, stmt_ty s)
     VISIT_IN_SCOPE(c, expr, s->v.TypeAlias.value);
     codegen_setup_ast_annotations(c, loc, &ast_start);
     VISIT_IN_SCOPE(c, annast, s->v.TypeAlias.value);
-    ADDOP_IN_SCOPE(c, loc, RETURN_VALUE);
+    RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, LOC(s)));
     PyCodeObject *co = _PyCompile_OptimizeAndAssemble(c, 0);
     _PyCompile_ExitScope(c);
     if (co == NULL) {
