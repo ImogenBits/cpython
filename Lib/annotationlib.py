@@ -24,6 +24,7 @@ class Format(enum.IntEnum):
     VALUE_WITH_FAKE_GLOBALS = 2
     FORWARDREF = 3
     STRING = 4
+    AST = 5
 
 
 _sentinel = object()
@@ -844,6 +845,8 @@ def call_annotate_function(annotate, format, *, owner=None, _is_evaluate=False):
         # Should be impossible because __annotate__ functions must not raise
         # NotImplementedError for this format.
         raise RuntimeError("annotate function does not support VALUE format")
+    elif format == Format.AST:
+        raise RuntimeError("annotate function does not support AST format")
     else:
         raise ValueError(f"Invalid format: {format!r}")
 
@@ -994,6 +997,10 @@ def get_annotations(
                 return annotations_to_string(ann)
         case Format.VALUE_WITH_FAKE_GLOBALS:
             raise ValueError("The VALUE_WITH_FAKE_GLOBALS format is for internal use only")
+        case Format.AST:
+            ann = _get_and_call_annotate(obj, format)
+            if ann is not None:
+                return dict(ann)
         case _:
             raise ValueError(f"Unsupported format {format!r}")
 
