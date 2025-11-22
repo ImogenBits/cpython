@@ -744,8 +744,17 @@ codegen_setup_annotations_scope(compiler *c, location loc,
 static int
 codegen_setup_ast_annotations(compiler *c, location loc, jump_target_label *ast_start)
 {
+    PyObject *ast = PyUnicode_FromStringAndSize("ast", 3);
+    PyObject *expr = PyUnicode_FromStringAndSize("_expr_from_tuple", 16);
+    PyObject *build = PyUnicode_FromStringAndSize(".build_ast", 10);
     ADDOP(c, loc, RETURN_VALUE);
     USE_LABEL(c, *ast_start);
+    ADDOP_LOAD_CONST(c, loc, _PyLong_GetZero());
+    ADDOP_LOAD_CONST(c, loc, Py_None);
+    ADDOP_NAME(c, loc, IMPORT_NAME, ast, names);
+    ADDOP_NAME(c, loc, IMPORT_FROM, expr, names);
+    ADDOP_N(c, loc, STORE_FAST, build, varnames);
+    ADDOP(c, loc, POP_TOP);
     return SUCCESS;
 }
 
@@ -1262,16 +1271,9 @@ static int
 codegen_visit_annast(compiler *c, expr_ty annotation)
 {
     location loc = LOC(annotation);
-    PyObject *ast = PyUnicode_FromStringAndSize("ast", 3);
-    PyObject *expr = PyUnicode_FromStringAndSize("_expr_from_tuple", 16);
+    PyObject *build = PyUnicode_FromStringAndSize(".build_ast", 10);
     PyObject *ast_tuple = build_ast_expr(annotation);
-
-    ADDOP_LOAD_CONST(c, loc, _PyLong_GetZero());
-    ADDOP_LOAD_CONST(c, loc, Py_None);
-    ADDOP_NAME(c, loc, IMPORT_NAME, ast, names);
-    ADDOP_NAME(c, loc, IMPORT_FROM, expr, names);
-    ADDOP_I(c, loc, SWAP, 2);
-    ADDOP(c, loc, POP_TOP);
+    ADDOP_N(c, loc, LOAD_FAST, build, varnames);
     ADDOP(c, loc, PUSH_NULL);
     ADDOP_LOAD_CONST_NEW(c, loc, ast_tuple);
     ADDOP_I(c, loc, CALL, 1);
