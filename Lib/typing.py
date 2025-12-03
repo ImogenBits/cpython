@@ -2455,6 +2455,14 @@ def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
         return annotations
 
 
+def eval_type_string(string, globals=None, locals=None, *, format=None):
+    globals = dict(globals)
+    exec(f"type __eval_alias = {string}", globals, locals)
+    return eval_annotate_as_types(
+        globals["__eval_alias"].evaluate_value, globals, locals, format=format
+    )
+
+
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False,
                    *, format=None):
     """Return type hints for an object.
