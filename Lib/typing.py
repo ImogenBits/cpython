@@ -20,7 +20,7 @@ that may be changed without notice. Use at your own risk!
 
 from abc import abstractmethod, ABCMeta
 import collections
-from collections import defaultdict
+from collections import defaultdict, ChainMap
 import collections.abc
 import copyreg
 import functools
@@ -42,6 +42,9 @@ from _typing import (
     Union,
     NoDefault,
 )
+import ast
+
+from annotationlib import Format
 
 # Please keep __all__ alphabetized within each category.
 __all__ = [
@@ -2375,6 +2378,81 @@ def assert_type(val, typ, /):
             assert_type(name, int)  # type checker error
     """
     return val
+
+
+def _resolve_type_ast(expr, namespace):
+    match expr:
+        case ast.Attribute(value, attr):
+            resolved = _resolve_type_ast(value, namespace)
+            return getattr(resolved, attr)
+        case ast.Subscript(value, slice):
+            resolved_value = _resolve_type_ast(value, namespace)
+            if isinstance(slice, ast.Tuple):
+                resolved_elements = tuple(_resolve_type_ast(element, namespace) for element in slice)
+                return resolved_value[tuple(resolved_elements)]
+            else:
+                resolved = _resolve_type_ast(slice, namespace)
+                return resolved_value[resolved]
+        case ast.Starred(value):
+            return Unpack[_resolve_type_ast(value, namespace)]
+        case ast.Name(identifier):
+            return namespace[identifier]
+        case ast.List(elts):
+            return [_resolve_type_ast(element, namespace) for element in elts]
+        case ast.BinOp(left, ast.BitOr, right):
+            return _resolve_type_ast(left, namespace) | _resolve_type_ast(right, namespace)
+        case _:
+            raise ValueError("invalid type expression")
+
+
+def _transform_type_ast(expr):
+    return expr
+
+
+def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
+    Format = _lazy_annotationlib.Format
+    annotations = _lazy_annotationlib.call_annotate_function(annotate, Format.AST)
+    if annotations is None:
+        return None
+    elif not isinstance(annotations, dict):
+        annotations = {"": annotations}
+    annotations = {name: _transform_type_ast(value) for name, value in annotations.items()}
+
+    if format is None:
+        format = Format.VALUE
+    match format:
+        case Format.VALUE:
+            if annotate.__closure__:
+                cell_vars = {
+                    name: cell.cell_contents
+                    for name, cell
+                    in zip(annotate.__code__.co_freevars, annotate.__closure__)
+                }
+                if "__classdict__" in cell_vars:
+                    class_dict = cell_vars["__classdict__"]
+                    del cell_vars["__classdict__"]
+                    cell_vars = cell_vars | class_dict
+            else:
+                cell_vars = {}
+            if globals is None:
+                globals = annotate.__globals__
+            if locals is None:
+                locals = {}
+            namespace = ChainMap(annotate.__builtins__, globals, locals, cell_vars)
+            annotations = {name: _resolve_type_ast(value, namespace) for name, value in annotations.items()}
+        case Format.VALUE_WITH_FAKE_GLOBALS:
+            raise ValueError
+        case Format.STRING:
+            annotations = {name: ast.unparse(value) for name, value in annotations.items()}
+        case Format.FORWARDREF:
+            annotations = {name: _make_forward_ref(ast.unparse(value)) for name, value in annotations.items()}
+        case Format.AST:
+            pass
+
+    if "" in annotations:
+        return annotations[""]
+    else:
+        return annotations
 
 
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False,
