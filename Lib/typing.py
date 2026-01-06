@@ -2380,29 +2380,57 @@ def assert_type(val, typ, /):
     return val
 
 
-def evaluate_annotation_AST(expr, namespace):
-    match expr:
-        case ast.Attribute(value, attr):
-            resolved = evaluate_annotation_AST(value, namespace)
-            return getattr(resolved, attr)
-        case ast.Subscript(value, slice):
-            resolved_value = evaluate_annotation_AST(value, namespace)
-            if isinstance(slice, ast.Tuple):
-                resolved_elements = tuple(evaluate_annotation_AST(element, namespace) for element in slice)
-                return resolved_value[tuple(resolved_elements)]
-            else:
-                resolved = evaluate_annotation_AST(slice, namespace)
+def _resolve_or_fwd(expr, namespace, format):
+    try:
+        return evaluate_annotation_AST(expr, namespace, format)
+    except KeyError:
+        if format == _lazy_annotationlib.Format.FORWARDREF:
+            return ...
+        else:
+            raise
+
+
+def evaluate_annotation_AST(expr, namespace, format):
+    if format == _lazy_annotationlib.Format.STRING:
+        return expr.unparse()
+    if format == _lazy_annotationlib.Format.VALUE_WITH_FAKE_GLOBALS:
+        raise ValueError
+    if format == _lazy_annotationlib.Format.AST:
+        return expr
+    try:
+        match expr:
+            case ast.Attribute(value, attr):
+                resolved = evaluate_annotation_AST(value, namespace, format)
+                return getattr(resolved, attr)
+            case ast.Subscript(value, slice):
+                resolved_value = evaluate_annotation_AST(value, namespace, format)
+                if isinstance(slice, ast.Tuple):
+                    resolved = tuple(
+                        _resolve_or_fwd(element, namespace, format)
+                        for element in slice
+                    )
+                else:
+                    resolved = _resolve_or_fwd(slice, namespace, format)
                 return resolved_value[resolved]
-        case ast.Starred(value):
-            return Unpack[evaluate_annotation_AST(value, namespace)]
-        case ast.Name(identifier):
-            return namespace[identifier]
-        case ast.List(elts):
-            return [evaluate_annotation_AST(element, namespace) for element in elts]
-        case ast.BinOp(left, ast.BitOr, right):
-            return evaluate_annotation_AST(left, namespace) | evaluate_annotation_AST(right, namespace)
-        case _:
-            raise ValueError("invalid type expression")
+            case ast.Starred(value):
+                return Unpack[_resolve_or_fwd(value, namespace, format)]
+            case ast.Name(identifier):
+                return namespace[identifier]
+            case ast.List(elts):
+                return [_resolve_or_fwd(element, namespace, format) for element in elts]
+            case ast.BinOp(left, ast.BitOr, right):
+                return types.UnionType[
+                    _resolve_or_fwd(left, namespace, format),
+                    _resolve_or_fwd(right, namespace, format),
+                ]
+            case _:
+                raise ValueError("invalid type expression")
+    except KeyError:
+        if format == _lazy_annotationlib.Format.FORWARDREF:
+            return ...
+        else:
+            raise
+
 
 def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
     Format = _lazy_annotationlib.Format
