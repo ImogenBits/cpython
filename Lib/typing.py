@@ -2380,34 +2380,29 @@ def assert_type(val, typ, /):
     return val
 
 
-def _resolve_type_ast(expr, namespace):
+def evaluate_annotation_AST(expr, namespace):
     match expr:
         case ast.Attribute(value, attr):
-            resolved = _resolve_type_ast(value, namespace)
+            resolved = evaluate_annotation_AST(value, namespace)
             return getattr(resolved, attr)
         case ast.Subscript(value, slice):
-            resolved_value = _resolve_type_ast(value, namespace)
+            resolved_value = evaluate_annotation_AST(value, namespace)
             if isinstance(slice, ast.Tuple):
-                resolved_elements = tuple(_resolve_type_ast(element, namespace) for element in slice)
+                resolved_elements = tuple(evaluate_annotation_AST(element, namespace) for element in slice)
                 return resolved_value[tuple(resolved_elements)]
             else:
-                resolved = _resolve_type_ast(slice, namespace)
+                resolved = evaluate_annotation_AST(slice, namespace)
                 return resolved_value[resolved]
         case ast.Starred(value):
-            return Unpack[_resolve_type_ast(value, namespace)]
+            return Unpack[evaluate_annotation_AST(value, namespace)]
         case ast.Name(identifier):
             return namespace[identifier]
         case ast.List(elts):
-            return [_resolve_type_ast(element, namespace) for element in elts]
+            return [evaluate_annotation_AST(element, namespace) for element in elts]
         case ast.BinOp(left, ast.BitOr, right):
-            return _resolve_type_ast(left, namespace) | _resolve_type_ast(right, namespace)
+            return evaluate_annotation_AST(left, namespace) | evaluate_annotation_AST(right, namespace)
         case _:
             raise ValueError("invalid type expression")
-
-
-def _transform_type_ast(expr):
-    return expr
-
 
 def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
     Format = _lazy_annotationlib.Format
@@ -2439,7 +2434,7 @@ def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
             if locals is None:
                 locals = {}
             namespace = ChainMap(annotate.__builtins__, globals, locals, cell_vars)
-            annotations = {name: _resolve_type_ast(value, namespace) for name, value in annotations.items()}
+            annotations = {name: evaluate_annotation_AST(value, namespace) for name, value in annotations.items()}
         case Format.VALUE_WITH_FAKE_GLOBALS:
             raise ValueError
         case Format.STRING:
@@ -2458,7 +2453,7 @@ def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
 def eval_type(type_string, globals=None, locals=None, *, format=None):
     namespace = ChainMap(globals or {}, locals or {})
     tree = ast.parse(type_string, "<type_string>", "eval").body
-    return _resolve_type_ast(tree, namespace)
+    return evaluate_annotation_AST(tree, namespace)
 
 
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False,
