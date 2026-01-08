@@ -663,7 +663,7 @@ def unparse(ast_obj):
 
 
 def _class_from_enum(_class, i):
-    return _class.__subclasses__()[i - 1]
+    return _class.__subclasses__()[i - 1]()
 
 
 def _args_from_tuple(data):
