@@ -2380,17 +2380,40 @@ def assert_type(val, typ, /):
     return val
 
 
-def _resolve_or_fwd(expr, namespace, format):
-    try:
-        return evaluate_annotation_AST(expr, namespace, format)
-    except KeyError:
-        if format == _lazy_annotationlib.Format.FORWARDREF:
-            return ...
-        else:
-            raise
+def _resolve_ast(expr, namespace, format):
+    match expr:
+        case ast.Attribute(value, attr):
+            resolved = _resolve_ast(value, namespace, format)
+            return getattr(resolved, attr)
+        case ast.Subscript(value, slice):
+            resolved_value = _resolve_ast(value, namespace, format)
+            if isinstance(slice, ast.Tuple):
+                resolved = tuple(
+                    eval_annotation_AST(element, namespace, format)
+                    for element in slice
+                )
+            else:
+                resolved = eval_annotation_AST(slice, namespace, format)
+            return resolved_value[resolved]
+        case ast.Starred(value):
+            return Unpack[eval_annotation_AST(value, namespace, format)]
+        case ast.Name(identifier):
+            return namespace[identifier]
+        case ast.List(elts):
+            return [
+                eval_annotation_AST(element, namespace, format)
+                for element in elts
+            ]
+        case ast.BinOp(left, ast.BitOr, right):
+            return types.UnionType[
+                eval_annotation_AST(left, namespace, format),
+                eval_annotation_AST(right, namespace, format),
+            ]
+        case _:
+            raise ValueError("invalid type expression")
 
 
-def evaluate_annotation_AST(expr, namespace, format):
+def eval_annotation_AST(expr, *, namespace, format):
     if format == _lazy_annotationlib.Format.STRING:
         return expr.unparse()
     if format == _lazy_annotationlib.Format.VALUE_WITH_FAKE_GLOBALS:
@@ -2398,33 +2421,7 @@ def evaluate_annotation_AST(expr, namespace, format):
     if format == _lazy_annotationlib.Format.AST:
         return expr
     try:
-        match expr:
-            case ast.Attribute(value, attr):
-                resolved = evaluate_annotation_AST(value, namespace, format)
-                return getattr(resolved, attr)
-            case ast.Subscript(value, slice):
-                resolved_value = evaluate_annotation_AST(value, namespace, format)
-                if isinstance(slice, ast.Tuple):
-                    resolved = tuple(
-                        _resolve_or_fwd(element, namespace, format)
-                        for element in slice
-                    )
-                else:
-                    resolved = _resolve_or_fwd(slice, namespace, format)
-                return resolved_value[resolved]
-            case ast.Starred(value):
-                return Unpack[_resolve_or_fwd(value, namespace, format)]
-            case ast.Name(identifier):
-                return namespace[identifier]
-            case ast.List(elts):
-                return [_resolve_or_fwd(element, namespace, format) for element in elts]
-            case ast.BinOp(left, ast.BitOr, right):
-                return types.UnionType[
-                    _resolve_or_fwd(left, namespace, format),
-                    _resolve_or_fwd(right, namespace, format),
-                ]
-            case _:
-                raise ValueError("invalid type expression")
+        return eval_annotation_AST(expr, namespace, format)
     except KeyError:
         if format == _lazy_annotationlib.Format.FORWARDREF:
             return ...
@@ -2432,45 +2429,38 @@ def evaluate_annotation_AST(expr, namespace, format):
             raise
 
 
-def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
+def _get_namespaces(annotate):
+    if annotate.__closure__:
+        locals = {
+            name: cell.cell_contents
+            for name, cell
+            in zip(annotate.__code__.co_freevars, annotate.__closure__)
+        }
+        if "__classdict__" in locals:
+            class_dict = locals["__classdict__"]
+            del locals["__classdict__"]
+            locals = locals | class_dict
+    else:
+        locals = {}
+
+    return ChainMap(annotate.__globals__, locals)
+
+
+def eval_annotate_as_types(annotate, *, format=None):
     Format = _lazy_annotationlib.Format
     annotations = _lazy_annotationlib.call_annotate_function(annotate, Format.AST)
     if annotations is None:
         return None
     elif not isinstance(annotations, dict):
         annotations = {"": annotations}
-    annotations = {name: _transform_type_ast(value) for name, value in annotations.items()}
 
     if format is None:
         format = Format.VALUE
-    match format:
-        case Format.VALUE:
-            if annotate.__closure__:
-                cell_vars = {
-                    name: cell.cell_contents
-                    for name, cell
-                    in zip(annotate.__code__.co_freevars, annotate.__closure__)
-                }
-                if "__classdict__" in cell_vars:
-                    class_dict = cell_vars["__classdict__"]
-                    del cell_vars["__classdict__"]
-                    cell_vars = cell_vars | class_dict
-            else:
-                cell_vars = {}
-            if globals is None:
-                globals = annotate.__globals__
-            if locals is None:
-                locals = {}
-            namespace = ChainMap(annotate.__builtins__, globals, locals, cell_vars)
-            annotations = {name: evaluate_annotation_AST(value, namespace) for name, value in annotations.items()}
-        case Format.VALUE_WITH_FAKE_GLOBALS:
-            raise ValueError
-        case Format.STRING:
-            annotations = {name: ast.unparse(value) for name, value in annotations.items()}
-        case Format.FORWARDREF:
-            annotations = {name: _make_forward_ref(ast.unparse(value)) for name, value in annotations.items()}
-        case Format.AST:
-            pass
+    namespace = _get_namespaces(annotate)
+    annotations = {
+        name: eval_annotation_AST(value, namespace=namespace, format=format)
+        for name, value in annotations.items()
+    }
 
     if "" in annotations:
         return annotations[""]
@@ -2481,7 +2471,7 @@ def eval_annotate_as_types(annotate, globals=None, locals=None, *, format=None):
 def eval_type(type_string, globals=None, locals=None, *, format=None):
     namespace = ChainMap(globals or {}, locals or {})
     tree = ast.parse(type_string, "<type_string>", "eval").body
-    return evaluate_annotation_AST(tree, namespace)
+    return eval_annotation_AST(tree, namespace=namespace, format=format)
 
 
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False,
