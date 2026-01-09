@@ -840,6 +840,10 @@ def _expr_from_tuple(data):
             raise ValueError
 
 
+def _create_annotation_ast(data):
+    return fix_missing_locations(_expr_from_tuple(data))
+
+
 def main(args=None):
     import argparse
     import sys

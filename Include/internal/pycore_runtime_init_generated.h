@@ -1305,6 +1305,7 @@ extern "C" {
 }
 
 #define _Py_str_literals_INIT { \
+    INIT_STR(_create_annotation_ast, "_create_annotation_ast"), \
     INIT_STR(anon_dictcomp, "<dictcomp>"), \
     INIT_STR(anon_genexpr, "<genexpr>"), \
     INIT_STR(anon_lambda, "<lambda>"), \
@@ -1321,7 +1322,6 @@ extern "C" {
     INIT_STR(defaults, ".defaults"), \
     INIT_STR(dot_locals, ".<locals>"), \
     INIT_STR(empty, ""), \
-    INIT_STR(expr_from_tuple, "_expr_from_tuple"), \
     INIT_STR(format, ".format"), \
     INIT_STR(gc, "<GC>"), \
     INIT_STR(generic_base, ".generic_base"), \

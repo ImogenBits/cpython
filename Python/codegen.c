@@ -744,14 +744,14 @@ codegen_setup_annotations_scope(compiler *c, location loc,
 static int
 codegen_setup_ast_annotations(compiler *c, location loc, jump_target_label *ast_start)
 {
-    _Py_DECLARE_STR(expr_from_tuple, "_expr_from_tuple");
+    _Py_DECLARE_STR(_create_annotation_ast, "_create_annotation_ast");
     _Py_DECLARE_STR(build_ast, ".build_ast");
     ADDOP(c, loc, RETURN_VALUE);
     USE_LABEL(c, *ast_start);
     ADDOP_LOAD_CONST(c, loc, _PyLong_GetZero());
     ADDOP_LOAD_CONST(c, loc, Py_None);
     ADDOP_NAME(c, loc, IMPORT_NAME, &_Py_ID(ast), names);
-    ADDOP_N(c, loc, IMPORT_FROM, &_Py_STR(expr_from_tuple), names);
+    ADDOP_N(c, loc, IMPORT_FROM, &_Py_STR(_create_annotation_ast), names);
     ADDOP_N(c, loc, STORE_FAST, &_Py_STR(build_ast), varnames);
     ADDOP(c, loc, POP_TOP);
     return SUCCESS;
