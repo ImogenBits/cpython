@@ -1170,6 +1170,104 @@ def _get_dunder_annotations(obj):
     return ann
 
 
+_NAMESPACE_FORMAT = "__{name}_namespace__"
+_BASE_ANNOTATE = """
+def __annotate__(__self__, __format__):
+    if __format__ <= 2:
+        return "VALUE_DICT"
+    elif __format__ == 5:
+        return "FORMAT_DICT"
+    else:
+        raise NotImplementedError
+"""
+
+
+class _FixGlobalNames(ast.NodeTransformer):
+    def __init__(self, namespace_name, namespace):
+        self.namespace_name = namespace_name
+        self.namespace = namespace
+        super().__init__()
+
+    def visit_Name(self, node):
+        if (getattr(builtins, node.id, object())
+            is not self.namespace.get(node.id, object())
+        ):
+            node = ast.Subscript(
+                ast.Name(self.namespace_name, ast.Load()),
+                ast.Constant(node.id),
+                node.ctx,
+            )
+            ast.fix_missing_locations(node)
+        return node
+
+
+class _InsertAnnotations(ast.NodeTransformer):
+    def __init__(self, annotations):
+        self.annotations = annotations
+        super().__init__()
+
+    def visit_Constant(self, node):
+        if node.value == "VALUE_DICT":
+            node = ast.Dict(
+                keys=[ast.Constant(name) for name in self.annotations],
+                values=list(self.annotations.values()),
+            )
+            node = ast.fix_missing_locations(node)
+        elif node.value == "FORMAT_DICT":
+            node = ast.Dict(
+                keys=[ast.Constant(name) for name in self.annotations],
+                values=[() for expr in self.annotations.values()],
+            )
+            node = ast.fix_missing_locations(node)
+        return node
+
+def create_annotate(annotations):
+    # Annotations is a mapping from names to (object, namespace) tuples.
+    # Each object either is an AST already, or we try to convert it to one by
+    # getting its repr and parsing it. We also try to evaluate it in the given
+    # namespace to check that the repr actually produces the intended AST.
+    ann_exprs = {}
+    for name, (annotation, namespace) in annotations.items():
+        if not isinstance(annotation, ast.expr):
+            annotation_string = type_repr(annotation)
+            try:
+                ann_ast = ast.parse(annotation_string, "<annotation>", "eval").body
+            except Exception as e:
+                raise ValueError from e
+            code = compile(ann_ast, "<annotation>", "eval")
+            try:
+                value = eval(code, globals={}, locals=namespace)
+            except Exception:
+                pass
+            else:
+                if value is not annotation:
+                    raise ValueError
+            annotation = ann_ast
+        ann_exprs[name] = (annotation, namespace)
+
+    # Now that we have every annotation as an AST, we need to construct a
+    # unified globals dict for the created function. It contains references to
+    # the original namespaces used by each annotation. We also need to change
+    # the ASTs so that they refer to these namespaces.
+    new_globals = {}
+    new_annotations = {}
+    for name, (expr, namespace) in ann_exprs.items():
+        namespace_name = _NAMESPACE_FORMAT.format(name)
+        new_globals[namespace_name] = namespace
+        transformer = _FixGlobalNames(namespace_name, namespace)
+        new_annotations[name] = transformer.visit(expr)
+
+    # We've now got a bunch of ASTs that define the new annotations. Now we
+    # just insert them into the appropriate places in the annotate function's
+    # AST and evaluate it to get the actual function object.
+    annotate_ast = ast.parse(_BASE_ANNOTATE, "<annotate>", "exec")
+    annotate_ast = _InsertAnnotations(new_annotations).visit(annotate_ast)
+    eval(compile(annotate_ast, "<annotate>"), globals=new_globals)
+    annotate_func = new_globals["__annotate__"]
+    del new_globals["__annotate__"]
+    return annotate_func
+
+
 class _ExtraNameFixer(ast.NodeTransformer):
     """Fixer for __extra_names__ items in ForwardRef __repr__ and string evaluation"""
     def __init__(self, extra_names):
