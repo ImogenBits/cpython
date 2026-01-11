@@ -1172,11 +1172,11 @@ def _get_dunder_annotations(obj):
 
 _NAMESPACE_FORMAT = "__{name}_namespace__"
 _BASE_ANNOTATE = """
-def __annotate__(__self__, __format__):
+def __annotate__(__self__, __format__, /):
     if __format__ <= 2:
         return "VALUE_DICT"
     elif __format__ == 5:
-        return "FORMAT_DICT"
+        return __AST_DICT__
     else:
         raise NotImplementedError
 """
@@ -1213,7 +1213,7 @@ class _InsertAnnotations(ast.NodeTransformer):
                 values=list(self.annotations.values()),
             )
             node = ast.fix_missing_locations(node)
-        elif node.value == "FORMAT_DICT":
+        elif node.value == "AST_DICT":
             node = ast.Dict(
                 keys=[ast.Constant(name) for name in self.annotations],
                 values=[() for expr in self.annotations.values()],
@@ -1231,7 +1231,7 @@ def create_annotate(annotations):
         if not isinstance(annotation, ast.expr):
             annotation_string = type_repr(annotation)
             try:
-                ann_ast = ast.parse(annotation_string, "<annotation>", "eval").body
+                ann_ast = ast.parse(annotation_string, "<annotation>", "eval")
             except Exception as e:
                 raise ValueError from e
             code = compile(ann_ast, "<annotation>", "eval")
@@ -1242,7 +1242,7 @@ def create_annotate(annotations):
             else:
                 if value is not annotation:
                     raise ValueError
-            annotation = ann_ast
+            annotation = ann_ast.body
         ann_exprs[name] = (annotation, namespace)
 
     # Now that we have every annotation as an AST, we need to construct a
@@ -1252,7 +1252,7 @@ def create_annotate(annotations):
     new_globals = {}
     new_annotations = {}
     for name, (expr, namespace) in ann_exprs.items():
-        namespace_name = _NAMESPACE_FORMAT.format(name)
+        namespace_name = _NAMESPACE_FORMAT.format(name=name)
         new_globals[namespace_name] = namespace
         transformer = _FixGlobalNames(namespace_name, namespace)
         new_annotations[name] = transformer.visit(expr)
@@ -1262,7 +1262,8 @@ def create_annotate(annotations):
     # AST and evaluate it to get the actual function object.
     annotate_ast = ast.parse(_BASE_ANNOTATE, "<annotate>", "exec")
     annotate_ast = _InsertAnnotations(new_annotations).visit(annotate_ast)
-    eval(compile(annotate_ast, "<annotate>"), globals=new_globals)
+    new_globals["__AST_DICT__"] = new_annotations
+    eval(compile(annotate_ast, "<annotate>", "exec"), globals=new_globals)
     annotate_func = new_globals["__annotate__"]
     del new_globals["__annotate__"]
     return annotate_func
