@@ -2390,7 +2390,7 @@ def _resolve_ast(expr, namespace, format):
             if isinstance(slice, ast.Tuple):
                 resolved = tuple(
                     eval_annotation_AST(element, namespace, format)
-                    for element in slice
+                    for element in slice.elts
                 )
             else:
                 resolved = eval_annotation_AST(slice, namespace, format)
@@ -2413,15 +2413,15 @@ def _resolve_ast(expr, namespace, format):
             raise ValueError("invalid type expression")
 
 
-def eval_annotation_AST(expr, *, namespace, format):
+def eval_annotation_AST(expr, namespace, format):
     if format == _lazy_annotationlib.Format.STRING:
-        return expr.unparse()
+        return ast.unparse(expr)
     if format == _lazy_annotationlib.Format.VALUE_WITH_FAKE_GLOBALS:
         raise ValueError
     if format == _lazy_annotationlib.Format.AST:
         return expr
     try:
-        return eval_annotation_AST(expr, namespace, format)
+        return _resolve_ast(expr, namespace, format)
     except KeyError:
         if format == _lazy_annotationlib.Format.FORWARDREF:
             return ...
@@ -2443,7 +2443,7 @@ def _get_namespaces(annotate):
     else:
         locals = {}
 
-    return ChainMap(annotate.__globals__, locals)
+    return ChainMap(annotate.__globals__, locals, __builtins__)
 
 
 def eval_annotate_as_types(annotate, *, format=None):
