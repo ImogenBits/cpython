@@ -1189,16 +1189,18 @@ class _FixGlobalNames(ast.NodeTransformer):
         super().__init__()
 
     def visit_Name(self, node):
-        if (getattr(builtins, node.id, object())
-            is not self.namespace.get(node.id, object())
+        if hasattr(builtins, node.id) and (
+            node.id not in self.namespace or getattr(builtins, node.id) is self.namespace[node.id]
         ):
+            return node
+        else:
             node = ast.Subscript(
                 ast.Name(self.namespace_name, ast.Load()),
                 ast.Constant(node.id),
                 node.ctx,
             )
             ast.fix_missing_locations(node)
-        return node
+            return node
 
 
 class _InsertAnnotations(ast.NodeTransformer):
@@ -1221,7 +1223,7 @@ class _InsertAnnotations(ast.NodeTransformer):
             node = ast.fix_missing_locations(node)
         return node
 
-def create_annotate(annotations):
+def create_annotate_function(annotations):
     # Annotations is a mapping from names to (object, namespace) tuples.
     # Each object either is an AST already, or we try to convert it to one by
     # getting its repr and parsing it. We also try to evaluate it in the given
