@@ -662,186 +662,213 @@ def unparse(ast_obj):
     return unparser.visit(ast_obj)
 
 
-def _class_from_enum(_class, i):
-    return _class.__subclasses__()[i - 1]()
+def _ann_enum(_class, data):
+    return _class.__subclasses__()[next(data) - 1]()
+
+def _ann_int(data):
+    value = next(data)
+    res = value & 0x7F
+    while value & 0x80:
+        value = next(data)
+        res <<= 7
+        res += value & 0x7F
+    return res
 
 
-def _args_from_tuple(data):
-    if data is None:
+def _ann_const(data, consts):
+    index = next(data)
+    if index == 0:
         return None
+    else:
+        return consts[index - 1]
+
+
+def _ann_list(data, consts, func):
+    length = _ann_int(data)
+    return [func(data, consts) for _ in range(length)]
+
+
+def _ann_args(data, consts):
     return arguments(
-        posonlyargs=[_arg_from_tuple(arg) for arg in data[0]],
-        args=[_arg_from_tuple(arg) for arg in data[1]],
-        vararg=_arg_from_tuple(data[2]),
-        kwonlyargs=[_arg_from_tuple(arg) for arg in data[3]],
-        kw_defaults=[_expr_from_tuple(e) for e in data[4]],
-        kwarg=_arg_from_tuple(data[5]),
-        defaults=[_expr_from_tuple(e) for e in data[6]],
+        posonlyargs=_ann_list(data, consts, _ann_arg),
+        args=_ann_list(data, consts, _ann_arg),
+        vararg=_ann_arg(data, consts),
+        kwonlyargs=_ann_list(data, consts, _ann_arg),
+        kw_defaults=_ann_list(data, consts, _ann_expr),
+        kwarg=_ann_arg(data, consts),
+        defaults=_ann_list(data, consts, _ann_expr),
     )
 
 
-def _arg_from_tuple(data):
-    if data is None:
+def _ann_arg(data, consts):
+    arg_name = _ann_const(data, consts)
+    if arg_name is None:
         return None
     return arg(
-        arg=data[0],
-        annotation=_expr_from_tuple(data[1]),
-        type_comment=data[2],
+        arg=arg_name,
+        annotation=_ann_expr(data, consts),
+        type_comment=_ann_const(data, consts),
     )
 
 
-def _comprehension_from_tuple(data):
-    if data is None:
-        return None
+def _ann_comprehension(data, consts):
     return comprehension(
-        target=_expr_from_tuple(data[0]),
-        iter=_expr_from_tuple(data[1]),
-        ifs=[_expr_from_tuple(data[2])],
-        is_async=data[3],
+        target=_ann_expr(data, consts),
+        iter=_ann_expr(data, consts),
+        ifs=_ann_list(data, consts, _ann_expr),
+        is_async=_ann_int(data),
     )
 
 
-def _keyword_from_tuple(data):
-    if data is None:
-        return None
+def _ann_keyword(data, consts):
     return keyword(
-        arg=data[0],
-        value=_expr_from_tuple(data[1]),
+        arg=_ann_const(data, consts),
+        value=_ann_expr(data, consts),
     )
 
 
-def _expr_from_tuple(data):
-    if data is None:
-        return None
-    match data[0]:
+def _ann_expr(data, consts):
+    match next(data):
+        case 0:
+            return None
         case 1:
             return BoolOp(
-                _class_from_enum(boolop, data[1]),
-                [_expr_from_tuple(val) for val in data[2]],
+                _ann_enum(boolop, data),
+                _ann_list(data, consts, _ann_expr),
             )
-        case 2:
-            return NamedExpr(*(_expr_from_tuple(e for e in data[1:])))
         case 3:
             return BinOp(
-                _expr_from_tuple(data[1]),
-                _class_from_enum(operator, data[2]),
-                _expr_from_tuple(data[3]),
+                _ann_expr(data, consts),
+                _ann_enum(operator, data),
+                _ann_expr(data, consts),
             )
         case 4:
             return UnaryOp(
-                _class_from_enum(unaryop, data[1]),
-                _expr_from_tuple(data[2]),
+                _ann_enum(unaryop, data),
+                _ann_expr(data, consts),
             )
         case 5:
             return Lambda(
-                _args_from_tuple(data[1]),
-                _expr_from_tuple(data[2]),
+                _ann_args(data, consts),
+                _ann_expr(data, consts),
             )
         case 6:
-            return IfExp(*(_expr_from_tuple(e for e in data[1:])))
+            return IfExp(
+                _ann_expr(data, consts),
+                _ann_expr(data, consts),
+                _ann_expr(data, consts),
+            )
         case 7:
             return Dict(
-                [_expr_from_tuple(e) for e in data[1]],
-                [_expr_from_tuple(e) for e in data[2]],
+                _ann_list(data, consts, _ann_expr),
+                _ann_list(data, consts, _ann_expr),
             )
         case 8:
-            return Set([_expr_from_tuple(e) for e in data[1]])
+            return Set(_ann_list(data, consts, _ann_expr))
         case 9:
             return ListComp(
-                _expr_from_tuple(data[1]),
-                [_comprehension_from_tuple(e) for e in data[2]],
+                _ann_expr(data, consts),
+                _ann_list(data, consts, _ann_comprehension),
             )
         case 10:
             return SetComp(
-                _expr_from_tuple(data[1]),
-                [_comprehension_from_tuple(e) for e in data[2]],
+                _ann_expr(data, consts),
+                _ann_list(data, consts, _ann_comprehension),
             )
         case 11:
             return DictComp(
-                _expr_from_tuple(data[1]),
-                _expr_from_tuple(data[2]),
-                [_comprehension_from_tuple(e) for e in data[3]],
+                _ann_expr(data, consts),
+                _ann_expr(data, consts),
+                _ann_list(data, consts, _ann_comprehension),
             )
         case 12:
             return GeneratorExp(
-                _expr_from_tuple(data[1]),
-                [_comprehension_from_tuple(e) for e in data[2]],
+                _ann_expr(data, consts),
+                _ann_list(data, consts, _ann_comprehension),
             )
-        case 13:
-            return Await(_expr_from_tuple(data[1]))
-        case 14:
-            return Yield(_expr_from_tuple(data[1]))
-        case 15:
-            return YieldFrom(_expr_from_tuple(data[1]))
         case 16:
             return Compare(
-                _expr_from_tuple(data[1]),
-                _class_from_enum(cmpop, data[2]),
-                [_expr_from_tuple(data[3])],
+                _ann_expr(data, consts),
+                _ann_list(data, consts, lambda op: _ann_enum(cmpop, op)),
+                _ann_list(data, consts, _ann_expr),
             )
         case 17:
             return Call(
-                _expr_from_tuple(data[1]),
-                [_expr_from_tuple(e) for e in data[2]],
-                [_keyword_from_tuple(e) for e in data[3]],
+                _ann_expr(data, consts),
+                _ann_list(data, consts, _ann_expr),
+                _ann_list(data, consts, _ann_keyword),
             )
         case 18:
             return FormattedValue(
-                _expr_from_tuple(data[1]),
-                data[2],
-                _expr_from_tuple(data[3]),
+                _ann_expr(data, consts),
+                _ann_int(data),
+                _ann_expr(data, consts),
             )
         case 19:
             return Interpolation(
-                _expr_from_tuple(data[1]),
-                data[2],
-                data[3],
-                _expr_from_tuple(data[4]),
+                _ann_expr(data, consts),
+                _ann_const(data, consts),
+                _ann_int(data, consts),
+                _ann_expr(data, consts),
             )
         case 20:
-            return JoinedStr([_expr_from_tuple(e) for e in data[1]])
+            return JoinedStr(_ann_list(data, consts, _ann_expr))
         case 21:
-            return TemplateStr([_expr_from_tuple(e) for e in data[1]])
+            return TemplateStr(_ann_list(data, consts, _ann_expr))
         case 22:
-            return Constant(*data[1:])
+            return Constant(_ann_const(data, consts), None)
         case 23:
             return Attribute(
-                _expr_from_tuple(data[1]),
-                data[2],
-                _class_from_enum(expr_context, data[3]),
+                _ann_expr(data, consts),
+                _ann_const(data, consts),
+                Load(),
             )
         case 24:
             return Subscript(
-                _expr_from_tuple(data[1]),
-                _expr_from_tuple(data[2]),
-                _class_from_enum(expr_context, data[3]),
+                _ann_expr(data, consts),
+                _ann_expr(data, consts),
+                Load(),
             )
         case 25:
             return Starred(
-                _expr_from_tuple(data[1]),
-                _class_from_enum(expr_context, data[2]),
+                _ann_expr(data, consts),
+                Load(),
             )
         case 26:
-            ctx = _class_from_enum(expr_context, data[2])
-            return Name(data[1], ctx)
+            return Name(
+                _ann_const(data, consts),
+                Load(),
+            )
         case 27:
             return List(
-                [_expr_from_tuple(e) for e in data[1]],
-                _class_from_enum(expr_context, data[2]),
+                _ann_list(data, consts, _ann_expr),
+                Load()
             )
         case 28:
             return Tuple(
-                [_expr_from_tuple(e) for e in data[1]],
-                _class_from_enum(expr_context, data[2]),
+                _ann_list(data, consts, _ann_expr),
+                Load()
             )
         case 29:
-            return Slice(*(_expr_from_tuple(e) for e in data[1:]))
+            return Slice(
+                _ann_expr(data, consts),
+                _ann_expr(data, consts),
+                _ann_expr(data, consts),
+            )
         case _:
             raise ValueError
 
 
-def _create_annotation_ast(data):
-    return fix_missing_locations(_expr_from_tuple(data))
+def _create_annotation_ast(data, consts):
+    data_iter = iter(data)
+    expr = _ann_expr(data_iter, consts)
+    try:
+        next(data_iter)
+    except StopIteration:
+        pass
+    else:
+        raise ValueError
+    return fix_missing_locations(expr)
 
 
 def main(args=None):

@@ -1114,274 +1114,369 @@ codegen_visit_annexpr(compiler *c, expr_ty annotation)
     return SUCCESS;
 }
 
-#define AST_ADD_NEW(D, F, V)        \
-    do {                            \
-        value = (V);                \
-        if (!value) {               \
-            goto F;                 \
-        }                           \
-        PyList_Append(D, value);    \
-        Py_DECREF(value);           \
-    } while (0)
-
-#define AST_ADD_TO_TUPLE(D, I, V)       \
+#define AST_ADD_NEW(D, F, V)            \
     do {                                \
         PyObject *value = (V);          \
         if (!value) {                   \
-            Py_DecRef(D);               \
-            return NULL;                \
+            goto F;                     \
         }                               \
-        PyTuple_SetItem(D, I, value);   \
-    } while (0)                         \
+        if (PyList_Append(D, value)) {  \
+            Py_DECREF(value);           \
+            goto F;                     \
+        };                              \
+        Py_DECREF(value);               \
+    } while (0)
 
-#define DEFINE_AST_SEQ_BUILDER(TYPE)                        \
-static PyObject*                                            \
-build_ast_ ## TYPE ## _seq(asdl_ ## TYPE ## _seq *seq)      \
-{                                                           \
-    if (!seq) {                                             \
-        Py_INCREF(Py_None);                                 \
-        return Py_None;                                     \
-    }                                                       \
-    PyObject *value = NULL;                                 \
-    Py_ssize_t i, n = asdl_seq_LEN(seq);                    \
-    PyObject *data = PyTuple_New(n);                        \
-    if (!data) {                                            \
-        return NULL;                                        \
-    }                                                       \
-    for (i = 0; i < n; i++) {                               \
-        value = build_ast_ ## TYPE (asdl_seq_GET(seq, i));  \
-        if (!value) {                                       \
-            return NULL;                                    \
-        }                                                   \
-        PyTuple_SetItem(data, i, value);                    \
-    }                                                       \
-    return data;                                            \
-}                                                           \
+static int
+build_ast_size_t(PyObject *data, Py_ssize_t value) {
+    do {
+        char leading_bit = (value > 127) << 7;
+        PyObject *part = PyLong_FromLong((value & 0x7F) | leading_bit);
+        if (PyList_Append(data, part)) {
+            Py_DECREF(part);
+            return ERROR;
+        }
+        Py_DECREF(part);
+        value = value >> 7;
+    } while (value);
+    return SUCCESS;
+}
 
-static PyObject* build_ast_expr(expr_ty expr);
+static int
+build_ast_const(PyObject *data, PyObject *consts, PyObject *value) {
+    if (!data || !consts) {
+        return ERROR;
+    }
+    if (!value) {
+        PyObject *value = PyLong_FromLong(0);
+        if (PyList_Append(data, value)) {
+            Py_DECREF(value);
+            return ERROR;
+        }
+        Py_DECREF(value);
+        return SUCCESS;
+    }
+    bool found = 0;
+    Py_ssize_t index = 0;
+    for (Py_ssize_t i = 0; i < PyList_Size(consts); i++) {
+        if (Py_Is(PyList_GetItem(consts, i), value)) {
+            found = 1;
+            index = i;
+            break;
+        }
+    }
+    if (!found) {
+        RETURN_IF_ERROR(PyList_Append(consts, value));
+        index = PyList_Size(consts) - 1;
+    }
+    RETURN_IF_ERROR(build_ast_size_t(data, index + 1));
+    return SUCCESS;
+}
+
+#define DEFINE_AST_SEQ_BUILDER(TYPE)                                        \
+static int                                                                  \
+build_ast_ ## TYPE ## _seq(                                                 \
+    PyObject *data, PyObject *consts, asdl_ ## TYPE ## _seq *seq)           \
+{                                                                           \
+    if (!data || !consts || !seq) {                                         \
+        return ERROR;                                                       \
+    }                                                                       \
+    Py_ssize_t i, n = asdl_seq_LEN(seq);                                    \
+    RETURN_IF_ERROR(build_ast_size_t(data, n));                                \
+    for (i = 0; i < n; i++) {                                               \
+        RETURN_IF_ERROR(                                                    \
+            build_ast_ ## TYPE (data, consts, asdl_seq_GET(seq, i))         \
+        );                                                                  \
+    }                                                                       \
+    return SUCCESS;                                                         \
+}                                                                           \
+
+static int build_ast_expr(PyObject *data, PyObject *consts, expr_ty expr);
 DEFINE_AST_SEQ_BUILDER(expr);
 
-static PyObject*
-build_ast_arg(arg_ty arg) {
+static int
+build_ast_arg(PyObject *data, PyObject *consts, arg_ty arg) {
     if (!arg) {
-        Py_INCREF(Py_None);
-        return Py_None;
+        PyObject *value = PyLong_FromLong(0);
+        if (PyList_Append(data, value)) {
+            Py_DECREF(value);
+            return ERROR;
+        }
+        Py_DECREF(value);
+        return SUCCESS;
     }
-    PyObject *type_comment = arg->type_comment;
-    if (!type_comment) {
-        type_comment = Py_None;
-    }
-    PyObject *annotation = build_ast_expr(arg->annotation);
-    if (!annotation) {
-        return NULL;
-    }
-    PyObject *data = PyTuple_Pack(3, type_comment, annotation, arg->arg);
-    Py_DECREF(annotation);
-    return data;
+    RETURN_IF_ERROR(build_ast_const(data, consts, arg->arg));
+    RETURN_IF_ERROR(build_ast_expr(data, consts, arg->annotation));
+    RETURN_IF_ERROR(build_ast_const(data, consts, arg->type_comment));
+    return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(arg);
 
-static PyObject*
-build_ast_args(arguments_ty args) {
-    PyObject *data = PyTuple_New(7);
-    AST_ADD_TO_TUPLE(data, 0, build_ast_arg_seq(args->posonlyargs));
-    AST_ADD_TO_TUPLE(data, 1, build_ast_arg_seq(args->args));
-    AST_ADD_TO_TUPLE(data, 2, build_ast_arg(args->vararg));
-    AST_ADD_TO_TUPLE(data, 3, build_ast_arg_seq(args->kwonlyargs));
-    AST_ADD_TO_TUPLE(data, 4, build_ast_expr_seq(args->kw_defaults));
-    AST_ADD_TO_TUPLE(data, 5, build_ast_arg(args->kwarg));
-    AST_ADD_TO_TUPLE(data, 6, build_ast_expr_seq(args->defaults));
-    return data;
+static int
+build_ast_args(PyObject *data, PyObject *consts, arguments_ty args) {
+    RETURN_IF_ERROR(build_ast_arg_seq(data, consts, args->posonlyargs));
+    RETURN_IF_ERROR(build_ast_arg_seq(data, consts, args->args));
+    RETURN_IF_ERROR(build_ast_arg(data, consts, args->vararg));
+    RETURN_IF_ERROR(build_ast_arg_seq(data, consts, args->kwonlyargs));
+    RETURN_IF_ERROR(build_ast_expr_seq(data, consts, args->kw_defaults));
+    RETURN_IF_ERROR(build_ast_arg(data, consts, args->kwarg));
+    RETURN_IF_ERROR(build_ast_expr_seq(data, consts, args->defaults));
+    return SUCCESS;
 }
 
-static PyObject*
-build_ast_comprehension(comprehension_ty comp) {
-    PyObject *value = PyTuple_New(4);
-    if (!value) {
-        return NULL;
-    }
-    AST_ADD_TO_TUPLE(value, 0, build_ast_expr(comp->target));
-    AST_ADD_TO_TUPLE(value, 1, build_ast_expr(comp->iter));
-    AST_ADD_TO_TUPLE(value, 2, build_ast_expr_seq(comp->ifs));
-    AST_ADD_TO_TUPLE(value, 3, PyLong_FromLong(comp->is_async));
-    return value;
+static int
+build_ast_comprehension(PyObject *data, PyObject *consts, comprehension_ty comp) {
+    RETURN_IF_ERROR(build_ast_expr(data, consts, comp->target));
+    RETURN_IF_ERROR(build_ast_expr(data, consts, comp->iter));
+    RETURN_IF_ERROR(build_ast_expr_seq(data, consts, comp->ifs));
+    RETURN_IF_ERROR(build_ast_size_t(data, comp->is_async));
+    return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(comprehension);
 
-static PyObject*
-build_ast_int(cmpop_ty op)
+static int
+build_ast_int(PyObject *data, PyObject *consts, cmpop_ty op)
 {
-    return PyLong_FromLong(op);
+    return build_ast_size_t(data, op);
 }
 DEFINE_AST_SEQ_BUILDER(int);
 
-static PyObject*
-build_ast_keyword(keyword_ty keyword)
+static int
+build_ast_keyword(PyObject *data, PyObject *consts, keyword_ty keyword)
 {
-    PyObject *value = PyTuple_New(2);
-    if (!value) {
-        return NULL;
+    if (!data || !consts || !keyword) {
+        return ERROR;
     }
-    if (keyword->arg) {
-        AST_ADD_TO_TUPLE(value, 0, keyword->arg);
-    } else {
-        Py_INCREF(Py_None);
-        AST_ADD_TO_TUPLE(value, 0, Py_None);
-    }
-    AST_ADD_TO_TUPLE(value, 1, build_ast_expr(keyword->value));
-    return value;
+    RETURN_IF_ERROR(build_ast_const(data, consts, keyword->arg));
+    RETURN_IF_ERROR(build_ast_expr(data, consts, keyword->value));
+    return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(keyword);
 
-static PyObject*
-build_ast_expr(expr_ty expr)
+static int
+build_ast_expr(PyObject *data, PyObject *consts, expr_ty expr)
 {
-    PyObject *value = NULL;
-    PyObject *data = PyList_New(0);
+    if (!data || !consts) {
+        return ERROR;
+    }
     if (!expr) {
-        return Py_None;
+        PyObject *value = PyLong_FromLong(0);
+        if (PyList_Append(data, value)) {
+            Py_DECREF(value);
+            return ERROR;
+        }
+        return SUCCESS;
     }
     if (Py_EnterRecursiveCall(" during compilation")) {
-        return NULL;
+        return ERROR;
     }
     AST_ADD_NEW(data, failed, PyLong_FromLong(expr->kind));
     switch (expr->kind) {
     case BoolOp_kind:
         AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.BoolOp.op));
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.BoolOp.values));
-        break;
-    case NamedExpr_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.NamedExpr.target));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.NamedExpr.value));
+        if (build_ast_expr_seq(data, consts, expr->v.BoolOp.values)) {
+            goto failed;
+        }
         break;
     case BinOp_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.BinOp.left));
+        if (build_ast_expr(data, consts, expr->v.BinOp.left)) {
+            goto failed;
+        }
         AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.BinOp.op));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.BinOp.right));
+        if (build_ast_expr(data, consts, expr->v.BinOp.right)) {
+            goto failed;
+        }
         break;
     case UnaryOp_kind:
         AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.UnaryOp.op));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.UnaryOp.operand));
+        if (build_ast_expr(data, consts, expr->v.UnaryOp.operand)) {
+            goto failed;
+        }
         break;
     case Lambda_kind:
-        AST_ADD_NEW(data, failed, build_ast_args(expr->v.Lambda.args));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Lambda.body));
+        if (build_ast_args(data, consts, expr->v.Lambda.args)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.Lambda.body)) {
+            goto failed;
+        }
         break;
     case IfExp_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.IfExp.test));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.IfExp.body));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.IfExp.orelse));
+        if (build_ast_expr(data, consts, expr->v.IfExp.test)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.IfExp.body)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.IfExp.orelse)) {
+            goto failed;
+        }
         break;
     case Dict_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.Dict.keys));
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.Dict.values));
+        if (build_ast_expr_seq(data, consts, expr->v.Dict.keys)) {
+            goto failed;
+        }
+        if (build_ast_expr_seq(data, consts, expr->v.Dict.values)) {
+            goto failed;
+        }
         break;
     case Set_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.Set.elts));
+        if (build_ast_expr_seq(data, consts, expr->v.Set.elts)) {
+            goto failed;
+        }
         break;
     case ListComp_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.ListComp.elt));
-        AST_ADD_NEW(data, failed, build_ast_comprehension_seq(expr->v.ListComp.generators));
+        if (build_ast_expr(data, consts, expr->v.ListComp.elt)) {
+            goto failed;
+        }
+        if (build_ast_comprehension_seq(data, consts, expr->v.ListComp.generators)) {
+            goto failed;
+        }
         break;
     case SetComp_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.SetComp.elt));
-        AST_ADD_NEW(data, failed, build_ast_comprehension_seq(expr->v.SetComp.generators));
+        if (build_ast_expr(data, consts, expr->v.SetComp.elt)) {
+            goto failed;
+        }
+        if (build_ast_comprehension_seq(data, consts, expr->v.SetComp.generators)) {
+            goto failed;
+        }
         break;
     case DictComp_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.DictComp.key));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.DictComp.value));
-        AST_ADD_NEW(data, failed, build_ast_comprehension_seq(expr->v.DictComp.generators));
+        if (build_ast_expr(data, consts, expr->v.DictComp.key)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.DictComp.value)) {
+            goto failed;
+        }
+        if (build_ast_comprehension_seq(data, consts, expr->v.DictComp.generators)) {
+            goto failed;
+        }
         break;
     case GeneratorExp_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.GeneratorExp.elt));
-        AST_ADD_NEW(data, failed, build_ast_comprehension_seq(expr->v.GeneratorExp.generators));
-        break;
-    case Await_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Await.value));
-        break;
-    case Yield_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Yield.value));
-        break;
-    case YieldFrom_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.YieldFrom.value));
+        if (build_ast_expr(data, consts, expr->v.GeneratorExp.elt)) {
+            goto failed;
+        }
+        if (build_ast_comprehension_seq(data, consts, expr->v.GeneratorExp.generators)) {
+            goto failed;
+        }
         break;
     case Compare_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Compare.left));
-        AST_ADD_NEW(data, failed, build_ast_int_seq(expr->v.Compare.ops));
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.Compare.comparators));
+        if (build_ast_expr(data, consts, expr->v.Compare.left)) {
+            goto failed;
+        }
+        if (build_ast_int_seq(data, consts, expr->v.Compare.ops)) {
+            goto failed;
+        }
+        if (build_ast_expr_seq(data, consts, expr->v.Compare.comparators)) {
+            goto failed;
+        }
         break;
     case Call_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Call.func));
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.Call.args));
-        AST_ADD_NEW(data, failed, build_ast_keyword_seq(expr->v.Call.keywords));
+        if (build_ast_expr(data, consts, expr->v.Call.func)) {
+            goto failed;
+        }
+        if (build_ast_expr_seq(data, consts, expr->v.Call.args)) {
+            goto failed;
+        }
+        if (build_ast_keyword_seq(data, consts, expr->v.Call.keywords)) {
+            goto failed;
+        }
         break;
     case FormattedValue_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.FormattedValue.value));
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.FormattedValue.conversion));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.FormattedValue.format_spec));
+        if (build_ast_expr(data, consts, expr->v.FormattedValue.value)) {
+            goto failed;
+        }
+        if (build_ast_size_t(data, expr->v.FormattedValue.conversion)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.FormattedValue.format_spec)) {
+            goto failed;
+        }
         break;
     case Interpolation_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Interpolation.value));
-        PyList_Append(data, expr->v.Interpolation.str);
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.Interpolation.conversion));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Interpolation.format_spec));
+        if (build_ast_expr(data, consts, expr->v.Interpolation.value)) {
+            goto failed;
+        }
+        if (build_ast_const(data, consts, expr->v.Interpolation.str)) {
+            goto failed;
+        }
+        if (build_ast_size_t(data, expr->v.Interpolation.conversion)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.Interpolation.format_spec)) {
+            goto failed;
+        }
         break;
     case JoinedStr_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.JoinedStr.values));
+        if (build_ast_expr_seq(data, consts, expr->v.JoinedStr.values)) {
+            goto failed;
+        }
         break;
     case TemplateStr_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.TemplateStr.values));
+        if (build_ast_expr_seq(data, consts, expr->v.TemplateStr.values)) {
+            goto failed;
+        }
         break;
     case Constant_kind:
-        PyList_Append(data, expr->v.Constant.value);
-        if (expr->v.Constant.kind) {
-            PyList_Append(data, expr->v.Constant.kind);
-        } else {
-            Py_INCREF(Py_None);
-            PyList_Append(data, Py_None);
+        if (build_ast_const(data, consts, expr->v.Constant.value)) {
+            goto failed;
         }
         break;
     case Attribute_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Attribute.value));
-        PyList_Append(data, expr->v.Attribute.attr);
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.Attribute.ctx));
+        if (build_ast_expr(data, consts, expr->v.Attribute.value)) {
+            goto failed;
+        }
+        if (build_ast_const(data, consts, expr->v.Attribute.attr)) {
+            goto failed;
+        }
         break;
     case Subscript_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Subscript.value));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Subscript.slice));
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.Subscript.ctx));
+        if (build_ast_expr(data, consts, expr->v.Subscript.value)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.Subscript.slice)) {
+            goto failed;
+        }
         break;
     case Starred_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Starred.value));
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.Starred.ctx));
+        if (build_ast_expr(data, consts, expr->v.Starred.value)) {
+            goto failed;
+        }
         break;
     case Name_kind:
-        PyList_Append(data, expr->v.Name.id);
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.Name.ctx));
+        if (build_ast_const(data, consts, expr->v.Name.id)) {
+            goto failed;
+        }
         break;
     case List_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.List.elts));
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.List.ctx));
+        if (build_ast_expr_seq(data, consts, expr->v.List.elts)) {
+            goto failed;
+        }
         break;
     case Tuple_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr_seq(expr->v.Tuple.elts));
-        AST_ADD_NEW(data, failed, PyLong_FromLong(expr->v.Tuple.ctx));
+        if (build_ast_expr_seq(data, consts, expr->v.Tuple.elts)) {
+            goto failed;
+        }
         break;
     case Slice_kind:
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Slice.lower));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Slice.upper));
-        AST_ADD_NEW(data, failed, build_ast_expr(expr->v.Slice.step));
+        if (build_ast_expr(data, consts, expr->v.Slice.lower)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.Slice.upper)) {
+            goto failed;
+        }
+        if (build_ast_expr(data, consts, expr->v.Slice.step)) {
+            goto failed;
+        }
         break;
+    default:
+        goto failed;
     }
     Py_LeaveRecursiveCall();
-    PyObject *data_tuple = PyList_AsTuple(data);
-    Py_DECREF(data);
-    return data_tuple;
+    return SUCCESS;
 failed:
     Py_LeaveRecursiveCall();
-    Py_XDECREF(value);
-    Py_XDECREF(data);
-    return NULL;
+    return ERROR;
 }
 
 static int
@@ -1389,11 +1484,18 @@ codegen_visit_annast(compiler *c, expr_ty annotation)
 {
     _Py_DECLARE_STR(build_ast, ".build_ast");
     location loc = LOC(annotation);
-    PyObject *ast_tuple = build_ast_expr(annotation);
+    PyObject *ast_list = PyList_New(0);
+    PyObject *ast_consts = PyList_New(0);
+    RETURN_IF_ERROR(build_ast_expr(ast_list, ast_consts, annotation));
+    PyObject *ast_bytes = PyBytes_FromObject(ast_list);
+    PyObject *const_tuple = PyList_AsTuple(ast_consts);
+    Py_DECREF(ast_list);
+    Py_DECREF(ast_consts);
     ADDOP_N(c, loc, LOAD_FAST, &_Py_STR(build_ast), varnames);
     ADDOP(c, loc, PUSH_NULL);
-    ADDOP_LOAD_CONST_NEW(c, loc, ast_tuple);
-    ADDOP_I(c, loc, CALL, 1);
+    ADDOP_LOAD_CONST_NEW(c, loc, ast_bytes);
+    ADDOP_LOAD_CONST_NEW(c, loc, const_tuple);
+    ADDOP_I(c, loc, CALL, 2);
     return SUCCESS;
 }
 
