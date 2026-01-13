@@ -2468,6 +2468,13 @@ def eval_annotate_as_types(annotate, *, format=None):
         return annotations
 
 
+def get_type_annotations(obj, *, eval_str=False, format=None):
+    if not hasattr(obj, "__annotate__"):
+        raise ValueError
+    annotate = obj.__annotate__
+    return eval_annotate_as_types(annotate, format=format)
+
+
 def eval_type(type_string, globals=None, locals=None, *, format=None):
     namespace = ChainMap(globals or {}, locals or {})
     tree = ast.parse(type_string, "<type_string>", "eval").body
