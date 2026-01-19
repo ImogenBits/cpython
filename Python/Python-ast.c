@@ -18110,7 +18110,8 @@ ann_ast_next(Py_buffer *data, Py_ssize_t *pos) {
 }
 
 static int
-ann_ast_size_t(Py_buffer *data, Py_ssize_t *pos, Py_ssize_t *out)
+ann_ast_size_t(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+                Py_ssize_t *out, PyArena *arena)
 {
     Py_ssize_t res = 0;
     char *curr;
@@ -18131,7 +18132,7 @@ ann_ast_ ## TYPE ## _seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos, \
             asdl_ ## TYPE ## _seq **out, PyArena *arena) \
 { \
     Py_ssize_t len; \
-    if (ann_ast_size_t(data, pos, &len) < 0) { \
+    if (ann_ast_size_t(data, consts, pos, &len, arena) < 0) { \
         return -1; \
     } \
     Py_ssize_t i; \
@@ -18156,10 +18157,10 @@ DEFINE_ANN_AST_SEQ_FUNC(expr);
 
 static int
 ann_ast_const(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
-                PyObject **out)
+                PyObject **out, PyArena *arena)
 {
     Py_ssize_t i;
-    if (ann_ast_size_t(data, pos, &i) < 0) {
+    if (ann_ast_size_t(data, consts, pos, &i, arena) < 0) {
         return -1;
     }
     if (i == 0) {
@@ -18189,13 +18190,13 @@ ann_ast_arg(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
     identifier arg;
     expr_ty annotation;
     string type_comment;
-    if (ann_ast_const(data, consts, pos, &arg) < 0 || !arg) {
+    if (ann_ast_const(data, consts, pos, &arg, arena) < 0 || !arg) {
         return -1;
     }
     if (ann_ast_expr(data, consts, pos, &annotation, arena) < 0) {
         return -1;
     }
-    if (ann_ast_const(data, consts, pos, &type_comment) < 0) {
+    if (ann_ast_const(data, consts, pos, &type_comment, arena) < 0) {
         return -1;
     }
     *out = _PyAST_arg(arg, annotation, type_comment, 1, 0, 1, 0, arena);
@@ -18263,7 +18264,7 @@ ann_ast_comprehension(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
     if (ann_ast_expr_seq(data, consts, pos, &ifs, arena) < 0) {
         return -1;
     }
-    if (ann_ast_size_t(data, pos, &is_async) < 0) {
+    if (ann_ast_size_t(data, consts, pos, &is_async, arena) < 0) {
         return -1;
     }
     *out = _PyAST_comprehension(target, iter, ifs, (int) is_async, arena);
@@ -18280,7 +18281,7 @@ ann_ast_int_seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
             asdl_int_seq **out, PyArena *arena)
 {
     Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0) {
+    if (ann_ast_size_t(data, consts, pos, &len, arena) < 0) {
         return -1;
     }
     Py_ssize_t i;
@@ -18290,7 +18291,7 @@ ann_ast_int_seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
     }
     for (i = 0; i < len; i++) {
         Py_ssize_t value;
-        if (ann_ast_size_t(data, pos, &value) < 0) {
+        if (ann_ast_size_t(data, consts, pos, &value, arena) < 0) {
             return -1;
         }
         asdl_seq_SET(*out, i, (int) value);
@@ -18304,7 +18305,7 @@ ann_ast_keyword(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
 {
     identifier arg;
     expr_ty value;
-    if (ann_ast_const(data, consts, pos, &arg) < 0) {
+    if (ann_ast_const(data, consts, pos, &arg, arena) < 0) {
         return -1;
     }
     if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
@@ -18359,12 +18360,367 @@ ann_ast_expr(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
         }
         break;
     }
+    case BinOp_kind: {
+        expr_ty left;
+        Py_ssize_t op;
+        expr_ty right;
+        if (ann_ast_expr(data, consts, pos, &left, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_size_t(data, consts, pos, &op, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &right, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_BinOp(left, (operator_ty) op, right, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case UnaryOp_kind: {
+        Py_ssize_t op;
+        expr_ty operand;
+        if (ann_ast_size_t(data, consts, pos, &op, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &operand, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_UnaryOp((unaryop_ty) op, operand, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Lambda_kind: {
+        arguments_ty args;
+        expr_ty body;
+        if (ann_ast_arguments(data, consts, pos, &args, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &body, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Lambda(args, body, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case IfExp_kind: {
+        expr_ty test;
+        expr_ty body;
+        expr_ty orelse;
+        if (ann_ast_expr(data, consts, pos, &test, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &body, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &orelse, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_IfExp(test, body, orelse, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Dict_kind: {
+        asdl_expr_seq *keys;
+        asdl_expr_seq *values;
+        if (ann_ast_expr_seq(data, consts, pos, &keys, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr_seq(data, consts, pos, &values, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Dict(keys, values, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Set_kind: {
+        asdl_expr_seq *elts;
+        if (ann_ast_expr_seq(data, consts, pos, &elts, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Set(elts, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case ListComp_kind: {
+        expr_ty elt;
+        asdl_comprehension_seq *generators;
+        if (ann_ast_expr(data, consts, pos, &elt, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_comprehension_seq(data, consts, pos, &generators, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_ListComp(elt, generators, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case SetComp_kind: {
+        expr_ty elt;
+        asdl_comprehension_seq *generators;
+        if (ann_ast_expr(data, consts, pos, &elt, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_comprehension_seq(data, consts, pos, &generators, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_SetComp(elt, generators, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case DictComp_kind: {
+        expr_ty key;
+        expr_ty value;
+        asdl_comprehension_seq *generators;
+        if (ann_ast_expr(data, consts, pos, &key, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_comprehension_seq(data, consts, pos, &generators, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_DictComp(key, value, generators, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case GeneratorExp_kind: {
+        expr_ty elt;
+        asdl_comprehension_seq *generators;
+        if (ann_ast_expr(data, consts, pos, &elt, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_comprehension_seq(data, consts, pos, &generators, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_GeneratorExp(elt, generators, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Compare_kind: {
+        expr_ty left;
+        asdl_int_seq *ops;
+        asdl_expr_seq *comparators;
+        if (ann_ast_expr(data, consts, pos, &left, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_int_seq(data, consts, pos, &ops, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr_seq(data, consts, pos, &comparators, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Compare(left, ops, comparators, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Call_kind: {
+        expr_ty func;
+        asdl_expr_seq *args;
+        asdl_keyword_seq *keywords;
+        if (ann_ast_expr(data, consts, pos, &func, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr_seq(data, consts, pos, &args, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_keyword_seq(data, consts, pos, &keywords, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Call(func, args, keywords, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case FormattedValue_kind: {
+        expr_ty value;
+        Py_ssize_t conversion;
+        expr_ty format_spec;
+        if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_size_t(data, consts, pos, &conversion, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &format_spec, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_FormattedValue(value, (int) conversion, format_spec,
+                                        1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Interpolation_kind: {
+        expr_ty value;
+        constant str;
+        Py_ssize_t conversion;
+        expr_ty format_spec;
+        if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_const(data, consts, pos, &str, arena) < 0 || !str) {
+            goto failed;
+        }
+        if (ann_ast_size_t(data, consts, pos, &conversion, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &format_spec, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Interpolation(value, str, (int) conversion, format_spec,
+                                    1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case JoinedStr_kind: {
+        asdl_expr_seq *values;
+        if (ann_ast_expr_seq(data, consts, pos, &values, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_JoinedStr(values, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case TemplateStr_kind: {
+        asdl_expr_seq *values;
+        if (ann_ast_expr_seq(data, consts, pos, &values, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_TemplateStr(values, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Constant_kind: {
+        constant value;
+        if (ann_ast_const(data, consts, pos, &value, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Attribute_kind: {
+        expr_ty value;
+        identifier attr;
+        if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_const(data, consts, pos, &attr, arena) < 0 || !attr) {
+            goto failed;
+        }
+        *out = _PyAST_Attribute(value, attr, Load, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Subscript_kind: {
+        expr_ty value;
+        expr_ty slice;
+        if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &slice, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Subscript(value, slice, Load, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Starred_kind: {
+        expr_ty value;
+        if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Starred(value, Load, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
     case Name_kind: {
         identifier id;
-        if (ann_ast_const(data, consts, pos, &id) < 0 || !id) {
+        if (ann_ast_const(data, consts, pos, &id, arena) < 0 || !id) {
             goto failed;
         }
         *out = _PyAST_Name(id, Load, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case List_kind: {
+        asdl_expr_seq *elts;
+        if (ann_ast_expr_seq(data, consts, pos, &elts, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_List(elts, Load, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Tuple_kind: {
+        asdl_expr_seq *elts;
+        if (ann_ast_expr_seq(data, consts, pos, &elts, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Tuple(elts, Load, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Slice_kind: {
+        expr_ty lower;
+        expr_ty upper;
+        expr_ty step;
+        if (ann_ast_expr(data, consts, pos, &lower, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &upper, arena) < 0) {
+            goto failed;
+        }
+        if (ann_ast_expr(data, consts, pos, &step, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Slice(lower, upper, step, 1, 0, 1, 0, arena);
         if (*out == NULL) {
             goto failed;
         }
