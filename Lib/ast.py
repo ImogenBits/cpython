@@ -22,6 +22,8 @@ that work tightly with the python syntax (template engines for example).
 """
 from _ast import *
 lazy import warnings
+from _ast import _create_annotation_ast
+
 
 def parse(source, filename='<unknown>', mode='exec', *,
           type_comments=False, feature_version=None, optimize=-1, module=None):
@@ -857,18 +859,6 @@ def _ann_expr(data, consts):
             )
         case _:
             raise ValueError
-
-
-def _create_annotation_ast(data, consts):
-    data_iter = iter(data)
-    expr = _ann_expr(data_iter, consts)
-    try:
-        next(data_iter)
-    except StopIteration:
-        pass
-    else:
-        raise ValueError
-    return fix_missing_locations(expr)
 
 
 def main(args=None):

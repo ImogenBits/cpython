@@ -18101,6 +18101,321 @@ static struct PyMethodDef astmodule_methods[] = {
     {"_is_abstract", ast_is_abstract, METH_O, NULL},
     {NULL}  /* Sentinel */
 };
+static char*
+ann_ast_next(Py_buffer *data, Py_ssize_t *pos) {
+    if (*pos >= data->len) {
+        return NULL;
+    }
+    return &((char *) data->buf)[(*pos)++];
+}
+
+static int
+ann_ast_size_t(Py_buffer *data, Py_ssize_t *pos, Py_ssize_t *out)
+{
+    Py_ssize_t res = 0;
+    char *curr;
+    do {
+        curr = ann_ast_next(data, pos);
+        if (!curr) {
+            return -1;
+        }
+        res = (res << 7) | (*curr & 0x7F);
+    } while (*curr & 0x80);
+    *out = res;
+    return 0;
+}
+
+#define DEFINE_ANN_AST_SEQ_FUNC(TYPE) \
+static int \
+ann_ast_ ## TYPE ## _seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos, \
+            asdl_ ## TYPE ## _seq **out, PyArena *arena) \
+{ \
+    Py_ssize_t len; \
+    if (ann_ast_size_t(data, pos, &len) < 0) { \
+        return -1; \
+    } \
+    Py_ssize_t i; \
+    *out = _Py_asdl_ ## TYPE ## _seq_new(len, arena); \
+    if (*out == NULL) { \
+        return -1; \
+    } \
+    for (i = 0; i < len; i++) { \
+        TYPE ## _ty value; \
+        if (ann_ast_ ## TYPE (data, consts, pos, &value, arena) < 0) { \
+            return -1; \
+        } \
+        asdl_seq_SET(*out, i, value); \
+    } \
+    return 0; \
+}
+
+static int
+ann_ast_expr(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+                expr_ty *out, PyArena *arena);
+DEFINE_ANN_AST_SEQ_FUNC(expr);
+
+static int
+ann_ast_const(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+                PyObject **out)
+{
+    Py_ssize_t i;
+    if (ann_ast_size_t(data, pos, &i) < 0) {
+        return -1;
+    }
+    if (i == 0) {
+        *out = NULL;
+        return 0;
+    }
+    *out = PyTuple_GetItem(consts, i - 1);
+    if (*out == NULL) {
+        return -1;
+    }
+    return 0;
+}
+
+static int
+ann_ast_arg(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+            arg_ty *out, PyArena *arena)
+{
+    char *next = ann_ast_next(data, pos);
+    if (!next) {
+        return -1;
+    }
+    if (*next == 0) {
+        *out = NULL;
+        return 0;
+    }
+    (*pos)--;
+    identifier arg;
+    expr_ty annotation;
+    string type_comment;
+    if (ann_ast_const(data, consts, pos, &arg) < 0 || !arg) {
+        return -1;
+    }
+    if (ann_ast_expr(data, consts, pos, &annotation, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_const(data, consts, pos, &type_comment) < 0) {
+        return -1;
+    }
+    *out = _PyAST_arg(arg, annotation, type_comment, 1, 0, 1, 0, arena);
+    if (*out == NULL) {
+        return -1;
+    }
+    return 0;
+}
+DEFINE_ANN_AST_SEQ_FUNC(arg);
+
+static int
+ann_ast_arguments(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+                arguments_ty *out, PyArena *arena)
+{
+    asdl_arg_seq *posonlyargs;
+    asdl_arg_seq *args;
+    arg_ty vararg;
+    asdl_arg_seq *kwonlyargs;
+    asdl_expr_seq *kw_defaults;
+    arg_ty kwarg;
+    asdl_expr_seq *defaults;
+    if (ann_ast_arg_seq(data, consts, pos, &posonlyargs, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_arg_seq(data, consts, pos, &args, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_arg(data, consts, pos, &vararg, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_arg_seq(data, consts, pos, &kwonlyargs, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_expr_seq(data, consts, pos, &kw_defaults, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_arg(data, consts, pos, &kwarg, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_expr_seq(data, consts, pos, &defaults, arena) < 0) {
+        return -1;
+    }
+    *out = _PyAST_arguments(posonlyargs, args, vararg, kwonlyargs, kw_defaults,
+        kwarg, defaults, arena);
+    if (*out == NULL) {
+        return -1;
+    }
+    return 0;
+}
+
+static int
+ann_ast_comprehension(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+                comprehension_ty *out, PyArena *arena)
+{
+    expr_ty target;
+    expr_ty iter;
+    asdl_expr_seq *ifs;
+    Py_ssize_t is_async;
+    if (ann_ast_expr(data, consts, pos, &target, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_expr(data, consts, pos, &iter, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_expr_seq(data, consts, pos, &ifs, arena) < 0) {
+        return -1;
+    }
+    if (ann_ast_size_t(data, pos, &is_async) < 0) {
+        return -1;
+    }
+    *out = _PyAST_comprehension(target, iter, ifs, (int) is_async, arena);
+    if (*out == NULL) {
+        return -1;
+    }
+    return 0;
+}
+DEFINE_ANN_AST_SEQ_FUNC(comprehension);
+
+
+static int
+ann_ast_int_seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+            asdl_int_seq **out, PyArena *arena)
+{
+    Py_ssize_t len;
+    if (ann_ast_size_t(data, pos, &len) < 0) {
+        return -1;
+    }
+    Py_ssize_t i;
+    *out = _Py_asdl_int_seq_new(len, arena);
+    if (*out == NULL) {
+        return -1;
+    }
+    for (i = 0; i < len; i++) {
+        Py_ssize_t value;
+        if (ann_ast_size_t(data, pos, &value) < 0) {
+            return -1;
+        }
+        asdl_seq_SET(*out, i, (int) value);
+    }
+    return 0;
+}
+
+static int
+ann_ast_keyword(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+                keyword_ty *out, PyArena *arena)
+{
+    identifier arg;
+    expr_ty value;
+    if (ann_ast_const(data, consts, pos, &arg) < 0) {
+        return -1;
+    }
+    if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+        return -1;
+    }
+    *out = _PyAST_keyword(arg, value, 1, 0, 1, 0, arena);
+    if (*out == NULL) {
+        return -1;
+    }
+    return 0;
+}
+DEFINE_ANN_AST_SEQ_FUNC(keyword);
+
+static int
+ann_ast_expr(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+                expr_ty *out, PyArena *arena)
+{
+    char *next = ann_ast_next(data, pos);
+    if (!next) {
+        *out = NULL;
+        return -1;
+    }
+    if (Py_EnterRecursiveCall(" during ast construction")) {
+        return -1;
+    }
+    switch (*next) {
+    case 0:
+        *out = NULL;
+        break;
+    case BoolOp_kind: {
+        next = ann_ast_next(data, pos);
+        if (!next) goto failed;
+        boolop_ty op = *next;
+                        next = ann_ast_next(data, pos);
+                        if (!next) goto failed;
+                        Py_ssize_t len = *next;
+                        Py_ssize_t i;
+                        asdl_expr_seq *values = _Py_asdl_expr_seq_new(len, arena);
+                        if (!values) {
+                            goto failed;
+                        }
+                        for (i = 0; i < len; i++) {
+                            expr_ty value;
+                            if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+                                goto failed;
+                            }
+                            asdl_seq_SET(values, i, value);
+                        }
+        *out = _PyAST_BoolOp(op, values, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    case Name_kind: {
+        identifier id;
+        if (ann_ast_const(data, consts, pos, &id) < 0 || !id) {
+            goto failed;
+        }
+        *out = _PyAST_Name(id, Load, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    default: {
+        goto failed;
+    }
+    }
+    Py_LeaveRecursiveCall();
+    return 0;
+    failed:
+    Py_LeaveRecursiveCall();
+    return -1;
+}
+
+static PyObject *
+ann_ast(PyObject *module, PyObject *args)
+{
+    Py_buffer data;
+    PyObject *consts;
+    if (!PyArg_ParseTuple(args, "y*O!", &data, &PyTuple_Type, &consts)) {
+        return NULL;
+    }
+    PyArena *arena = _PyArena_New();
+    if (arena == NULL) {
+        PyBuffer_Release(&data);
+        return NULL;
+    }
+    Py_ssize_t i = 0;
+    expr_ty expr_ast;
+    if (ann_ast_expr(&data, consts, &i, &expr_ast, arena) < 0) {
+        _PyArena_Free(arena);
+        PyBuffer_Release(&data);
+        if (!PyErr_Occurred()) {
+            PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
+        }
+        return NULL;
+    }
+    if (i != data.len) {
+        _PyArena_Free(arena);
+        PyBuffer_Release(&data);
+        PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
+        return NULL;
+    }
+    PyBuffer_Release(&data);
+    struct ast_state *state = get_ast_state();
+    PyObject *expr_obj = ast2obj_expr(state, expr_ast);
+    _PyArena_Free(arena);
+    return expr_obj;
+}
 
 static int
 astmodule_exec(PyObject *m)
@@ -18521,6 +18836,12 @@ static PyModuleDef_Slot astmodule_slots[] = {
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
+};
+
+static PyMethodDef astmodule_methods[] = {
+    {"_create_annotation_ast", ann_ast, METH_VARARGS,
+    "Create an annotation AST object."},
+    {NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef _astmodule = {
