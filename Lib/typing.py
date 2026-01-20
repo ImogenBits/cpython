@@ -2446,13 +2446,17 @@ def _get_namespaces(annotate):
     return ChainMap(annotate.__globals__, locals, __builtins__)
 
 
-def eval_annotate_as_types(annotate, *, format=None):
+def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
     Format = _lazy_annotationlib.Format
     annotations = _lazy_annotationlib.call_annotate_function(annotate, Format.AST)
     if annotations is None:
         return None
     elif not isinstance(annotations, dict):
         annotations = {"": annotations}
+
+    for name, annotation in annotations.items():
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            annotations[name] = ast.parse(annotation.value, "<annotation>", "eval").body
 
     if format is None:
         format = Format.VALUE
