@@ -66,6 +66,7 @@ struct compiler_unit {
 
     instr_sequence *u_instr_sequence; /* codegen output */
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
+    PyBytesWriter *u_ann_ast_data;
 
     int u_nfblocks;
     int u_in_inlined_comp;
@@ -201,6 +202,7 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_static_attributes);
     Py_CLEAR(u->u_deferred_annotations);
     Py_CLEAR(u->u_conditional_annotation_indices);
+    PyBytesWriter_Discard(u->u_ann_ast_data);
     PyMem_Free(u);
 }
 
@@ -699,6 +701,8 @@ _PyCompile_EnterScope(compiler *c, identifier name, int scope_type,
         u->u_static_attributes = NULL;
     }
 
+    u->u_ann_ast_data = NULL;
+
     u->u_instr_sequence = (instr_sequence*)_PyInstructionSequence_New();
     if (!u->u_instr_sequence) {
         compiler_unit_free(u);
@@ -841,6 +845,32 @@ _PyCompile_DeferredAnnotations(compiler *c,
 {
     *deferred_annotations = Py_XNewRef(c->u->u_deferred_annotations);
     *conditional_annotation_indices = Py_XNewRef(c->u->u_conditional_annotation_indices);
+}
+
+int
+_PyCompile_AnnotationASTAddChar(compiler *c, char data) {
+    if (!c->u->u_ann_ast_data) {
+        c->u->u_ann_ast_data = PyBytesWriter_Create(0);
+        if (!c->u->u_ann_ast_data) {
+            return ERROR;
+        }
+    }
+    return PyBytesWriter_WriteBytes(c->u->u_ann_ast_data, &data, 1);
+}
+
+PyObject *
+_PyCompile_AnnotationASTFinalize(compiler *c) {
+    if (!c->u->u_ann_ast_data) {
+        return PyBytes_FromString("");
+    }
+    PyObject *result = PyBytesWriter_Finish(c->u->u_ann_ast_data);
+    c->u->u_ann_ast_data = NULL;
+    return result;
+}
+
+Py_ssize_t
+_PyCompile_GetNumConsts(compiler *c) {
+    return PyDict_GET_SIZE(c->u->u_metadata.u_consts);
 }
 
 static location

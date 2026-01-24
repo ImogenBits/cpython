@@ -18167,7 +18167,7 @@ ann_ast_const(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
         *out = NULL;
         return 0;
     }
-    *out = PyTuple_GetItem(consts, i - 1);
+    *out = PyTuple_GetItem(consts, i);
     if (*out == NULL) {
         return -1;
     }
@@ -18741,8 +18741,7 @@ static PyObject *
 ann_ast(PyObject *module, PyObject *args)
 {
     Py_buffer data;
-    PyObject *consts;
-    if (!PyArg_ParseTuple(args, "y*O!", &data, &PyTuple_Type, &consts)) {
+    if (PyObject_GetBuffer(PyTuple_GetItem(args, 0), &data, 0) < 0) {
         return NULL;
     }
     PyArena *arena = _PyArena_New();
@@ -18752,7 +18751,7 @@ ann_ast(PyObject *module, PyObject *args)
     }
     Py_ssize_t i = 0;
     expr_ty expr_ast;
-    if (ann_ast_expr(&data, consts, &i, &expr_ast, arena) < 0) {
+    if (ann_ast_expr(&data, args, &i, &expr_ast, arena) < 0) {
         _PyArena_Free(arena);
         PyBuffer_Release(&data);
         if (!PyErr_Occurred()) {
