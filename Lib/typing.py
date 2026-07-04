@@ -2455,8 +2455,11 @@ def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
         annotations = {"": annotations}
 
     for name, annotation in annotations.items():
+        annotation = annotation.body
         if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
             annotations[name] = ast.parse(annotation.value, "<annotation>", "eval").body
+        else:
+            annotations[name] = annotation
 
     if format is None:
         format = Format.VALUE

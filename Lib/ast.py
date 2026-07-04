@@ -22,7 +22,6 @@ that work tightly with the python syntax (template engines for example).
 """
 from _ast import *
 lazy import warnings
-from _ast import _create_annotation_ast
 
 
 def parse(source, filename='<unknown>', mode='exec', *,

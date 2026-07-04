@@ -14,6 +14,7 @@
 #include "pycore_runtime.h"       // _Py_ID()
 #include "pycore_typevarobject.h" // _Py_make_typevar()
 #include "pycore_unicodeobject.h" // _PyUnicode_FromASCII()
+#include "pycore_ast.h"
 
 
 /******** Unary functions ********/
@@ -270,6 +271,13 @@ make_typevar_with_constraints(PyThreadState* Py_UNUSED(ignored), PyObject *name,
     return _Py_make_typevar(name, NULL, evaluate_constraints);
 }
 
+static PyObject *
+build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *data, PyObject *consts)
+{
+    assert(PyTuple_CheckExact(consts));
+    return _PyAST_FromAnnotationData(data, consts);
+}
+
 const intrinsic_func2_info
 _PyIntrinsics_BinaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_2_INVALID, no_intrinsic2)
@@ -278,6 +286,7 @@ _PyIntrinsics_BinaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEVAR_WITH_CONSTRAINTS, make_typevar_with_constraints)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_FUNCTION_TYPE_PARAMS, _Py_set_function_type_params)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_TYPEPARAM_DEFAULT, _Py_set_typeparam_default)
+    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_AST, build_annotation_ast)
 };
 
 #undef INTRINSIC_FUNC_ENTRY

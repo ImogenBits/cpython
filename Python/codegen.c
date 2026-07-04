@@ -745,22 +745,14 @@ codegen_setup_annotations_scope(compiler *c, location loc,
 static int
 codegen_finalize_annotations_scope(compiler *c, location loc, jump_target_label *ast_start)
 {
-    _Py_DECLARE_STR(_create_annotation_ast, "_create_annotation_ast");
     PyObject *ast_data, *ast_consts;
     RETURN_IF_ERROR(_PyCompile_AnnotationASTFinalize(c, &ast_data, &ast_consts));
 
     ADDOP(c, loc, RETURN_VALUE);
     USE_LABEL(c, *ast_start);
-    ADDOP_LOAD_CONST(c, loc, _PyLong_GetZero());
-    ADDOP_LOAD_CONST(c, loc, Py_None);
-    ADDOP_NAME(c, loc, IMPORT_NAME, &_Py_ID(ast), names);
-    ADDOP_N(c, loc, IMPORT_FROM, &_Py_STR(_create_annotation_ast), names);
-    ADDOP_I(c, loc, SWAP, 2);
-    ADDOP(c, loc, POP_TOP);
-    ADDOP(c, loc, PUSH_NULL);
     ADDOP_LOAD_CONST_NEW(c, loc, ast_data);
     ADDOP_LOAD_CONST_NEW(c, loc, ast_consts);
-    ADDOP_I(c, loc, CALL, 2);
+    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_AST);
     ADDOP(c, loc, RETURN_VALUE);
     return SUCCESS;
 }
