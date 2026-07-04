@@ -25,6 +25,7 @@
 #include "pycore_stats.h"
 #include "pycore_tuple.h"         // _PyTuple_FromPair
 #include "pycore_unicodeobject.h" // _PyUnicode_EqualToASCIIString()
+#include "pycore_long.h"          // _PyLong_GetZero()
 
 #include "cpython/code.h"
 
@@ -67,6 +68,7 @@ struct compiler_unit {
     instr_sequence *u_instr_sequence; /* codegen output */
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
     PyBytesWriter *u_ann_ast_data;
+    PyObject *u_ann_ast_consts;
 
     int u_nfblocks;
     int u_in_inlined_comp;
@@ -203,6 +205,7 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_deferred_annotations);
     Py_CLEAR(u->u_conditional_annotation_indices);
     PyBytesWriter_Discard(u->u_ann_ast_data);
+    Py_CLEAR(u->u_ann_ast_consts);
     PyMem_Free(u);
 }
 
@@ -332,6 +335,8 @@ compiler_set_qualname(compiler *c)
 
     return SUCCESS;
 }
+
+static PyObject *consts_dict_keys_inorder(PyObject *dict);
 
 /* Merge const *o* and return constant key object.
  * If recursive, insert all elements if o is a tuple or frozen set.
@@ -702,6 +707,7 @@ _PyCompile_EnterScope(compiler *c, identifier name, int scope_type,
     }
 
     u->u_ann_ast_data = NULL;
+    u->u_ann_ast_consts = NULL;
 
     u->u_instr_sequence = (instr_sequence*)_PyInstructionSequence_New();
     if (!u->u_instr_sequence) {
@@ -858,14 +864,49 @@ _PyCompile_AnnotationASTAddChar(compiler *c, char data) {
     return PyBytesWriter_WriteBytes(c->u->u_ann_ast_data, &data, 1);
 }
 
-PyObject *
-_PyCompile_AnnotationASTFinalize(compiler *c) {
-    if (!c->u->u_ann_ast_data) {
-        return PyBytes_FromString("");
+Py_ssize_t
+_PyCompile_AnnotationASTAddConst(compiler *c, PyObject *o) {
+    if (!c->u->u_ann_ast_consts) {
+        c->u->u_ann_ast_consts = PyDict_New();
+        if (!c->u->u_ann_ast_consts) {
+            return ERROR;
+        }
+        _PyCompile_DictAddObj(c->u->u_ann_ast_consts, Py_None);
     }
-    PyObject *result = PyBytesWriter_Finish(c->u->u_ann_ast_data);
-    c->u->u_ann_ast_data = NULL;
-    return result;
+    Py_ssize_t arg = _PyCompile_DictAddObj(c->u->u_ann_ast_consts, o);
+    Py_DECREF(o);
+    return arg;
+}
+
+int
+_PyCompile_AnnotationASTFinalize(compiler *c, PyObject **data, PyObject **consts) {
+    if (!c->u->u_ann_ast_data) {
+        *data = PyBytes_FromString("");
+    } else {
+        *data = PyBytesWriter_Finish(c->u->u_ann_ast_data);
+        c->u->u_ann_ast_data = NULL;
+    }
+    if (!*data) {
+        return ERROR;
+    }
+    if (!c->u->u_ann_ast_consts) {
+        *consts = PyTuple_New(0);
+    } else {
+        PyObject *consts_list = consts_dict_keys_inorder(c->u->u_ann_ast_consts);
+        if (!consts_list) {
+            Py_DECREF(c->u->u_ann_ast_consts);
+            c->u->u_ann_ast_consts = NULL;
+            return ERROR;
+        }
+        Py_DECREF(c->u->u_ann_ast_consts);
+        c->u->u_ann_ast_consts = NULL;
+        *consts = PyList_AsTuple(consts_list);
+        Py_DECREF(consts_list);
+        if (!*consts) {
+            return ERROR;
+        }
+    }
+    return SUCCESS;
 }
 
 Py_ssize_t

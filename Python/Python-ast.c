@@ -18096,9 +18096,13 @@ ast_is_abstract(PyObject *Py_UNUSED(module), PyObject *cls) {
     }
     Py_RETURN_FALSE;
 }
+static PyObject *
+ann_ast(PyObject *module, PyObject *args);
 
 static struct PyMethodDef astmodule_methods[] = {
     {"_is_abstract", ast_is_abstract, METH_O, NULL},
+    {"_create_annotation_ast", ann_ast, METH_VARARGS,
+    "Create an annotation AST object."},
     {NULL}  /* Sentinel */
 };
 static char*
@@ -18167,7 +18171,7 @@ ann_ast_const(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
         *out = NULL;
         return 0;
     }
-    *out = PyTuple_GetItem(consts, i);
+    *out = PyTuple_GetItem(consts, i - 1);
     if (*out == NULL) {
         return -1;
     }
@@ -18744,32 +18748,81 @@ ann_ast(PyObject *module, PyObject *args)
     if (PyObject_GetBuffer(PyTuple_GetItem(args, 0), &data, 0) < 0) {
         return NULL;
     }
+    PyObject *consts = PyTuple_GetItem(args, 1);
+    if (!PyTuple_Check(consts)) {
+        PyBuffer_Release(&data);
+        PyErr_SetString(PyExc_TypeError, "expected a tuple for consts");
+        return NULL;
+    }
     PyArena *arena = _PyArena_New();
     if (arena == NULL) {
         PyBuffer_Release(&data);
         return NULL;
     }
-    Py_ssize_t i = 0;
-    expr_ty expr_ast;
-    if (ann_ast_expr(&data, args, &i, &expr_ast, arena) < 0) {
+    PyObject *out = PyDict_New();
+    if (out == NULL) {
         _PyArena_Free(arena);
         PyBuffer_Release(&data);
-        if (!PyErr_Occurred()) {
-            PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
-        }
         return NULL;
     }
+    Py_ssize_t i = 0;
+    struct ast_state *state = get_ast_state();
+    while (i < data.len) {
+        PyObject *name;
+        if (ann_ast_const(&data, consts, &i, &name, arena) < 0) {
+            _PyArena_Free(arena);
+            PyBuffer_Release(&data);
+            if (!PyErr_Occurred()) {
+                PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
+            }
+            Py_DECREF(out);
+            return NULL;
+        }
+        expr_ty expr_ast;
+        if (ann_ast_expr(&data, consts, &i, &expr_ast, arena) < 0) {
+            _PyArena_Free(arena);
+            PyBuffer_Release(&data);
+            if (!PyErr_Occurred()) {
+                PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
+            }
+            Py_XDECREF(name);
+            Py_DECREF(out);
+            return NULL;
+        }
+        PyObject *expr_obj = ast2obj_expr(state, expr_ast);
+        if (expr_obj == NULL) {
+            _PyArena_Free(arena);
+            PyBuffer_Release(&data);
+            Py_XDECREF(name);
+            Py_DECREF(out);
+            return NULL;
+        }
+        if (name == NULL) {
+            _PyArena_Free(arena);
+            PyBuffer_Release(&data);
+            Py_XDECREF(name);
+            Py_DECREF(out);
+            return expr_obj;
+        }
+        if (PyDict_SetItem(out, name, expr_obj) < 0) {
+            _PyArena_Free(arena);
+            PyBuffer_Release(&data);
+            Py_DECREF(name);
+            Py_DECREF(expr_obj);
+            Py_DECREF(out);
+            return NULL;
+        }
+        Py_DECREF(name);
+        Py_DECREF(expr_obj);
+    }
+    _PyArena_Free(arena);
     if (i != data.len) {
-        _PyArena_Free(arena);
         PyBuffer_Release(&data);
         PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
         return NULL;
     }
     PyBuffer_Release(&data);
-    struct ast_state *state = get_ast_state();
-    PyObject *expr_obj = ast2obj_expr(state, expr_ast);
-    _PyArena_Free(arena);
-    return expr_obj;
+    return out;
 }
 
 static int
@@ -19191,12 +19244,6 @@ static PyModuleDef_Slot astmodule_slots[] = {
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
-};
-
-static PyMethodDef astmodule_methods[] = {
-    {"_create_annotation_ast", ann_ast, METH_VARARGS,
-    "Create an annotation AST object."},
-    {NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef _astmodule = {

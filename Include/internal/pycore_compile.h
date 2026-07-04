@@ -146,7 +146,8 @@ void _PyCompile_DeferredAnnotations(
     struct _PyCompiler *c, PyObject **deferred_annotations,
     PyObject **conditional_annotation_indices);
 int _PyCompile_AnnotationASTAddChar(struct _PyCompiler *c, char data);
-PyObject * _PyCompile_AnnotationASTFinalize(struct _PyCompiler *c);
+Py_ssize_t _PyCompile_AnnotationASTAddConst(struct _PyCompiler *c, PyObject *o);
+int _PyCompile_AnnotationASTFinalize(struct _PyCompiler *c, PyObject **data, PyObject **consts);
 Py_ssize_t _PyCompile_GetNumConsts(struct _PyCompiler *c);
 PyObject *_PyCompile_Mangle(struct _PyCompiler *c, PyObject *name);
 PyObject *_PyCompile_MaybeMangle(struct _PyCompiler *c, PyObject *name);
