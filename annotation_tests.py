@@ -45,8 +45,8 @@ def test_annotations(name: str):
     for test_name, expr in tests:
         try:
             time = timeit(expr, globals=globals(), number=10_000)
-        except NameError, KeyError:
-            time = "--------"
+        except (NameError, KeyError) as e:
+            time = str(e)
         print(f"{test_name: <16} {time}")
 
 

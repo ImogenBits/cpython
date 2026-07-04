@@ -2414,16 +2414,16 @@ def _resolve_ast(expr, namespace, format):
 
 
 def eval_annotation_AST(expr, namespace, format):
-    if format == _lazy_annotationlib.Format.STRING:
+    if format == annotationlib.Format.STRING:
         return ast.unparse(expr)
-    if format == _lazy_annotationlib.Format.VALUE_WITH_FAKE_GLOBALS:
+    if format == annotationlib.Format.VALUE_WITH_FAKE_GLOBALS:
         raise ValueError
-    if format == _lazy_annotationlib.Format.AST:
+    if format == annotationlib.Format.AST:
         return expr
     try:
         return _resolve_ast(expr, namespace, format)
     except KeyError:
-        if format == _lazy_annotationlib.Format.FORWARDREF:
+        if format == annotationlib.Format.FORWARDREF:
             return ...
         else:
             raise
@@ -2447,8 +2447,7 @@ def _get_namespaces(annotate):
 
 
 def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
-    Format = _lazy_annotationlib.Format
-    annotations = _lazy_annotationlib.call_annotate_function(annotate, Format.AST)
+    annotations = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
     if annotations is None:
         return None
     elif not isinstance(annotations, dict):
@@ -2462,7 +2461,7 @@ def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
             annotations[name] = annotation
 
     if format is None:
-        format = Format.VALUE
+        format = annotationlib.Format.VALUE
     namespace = _get_namespaces(annotate)
     annotations = {
         name: eval_annotation_AST(value, namespace=namespace, format=format)
