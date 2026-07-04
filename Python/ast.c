@@ -1729,15 +1729,14 @@ ann_ast_expr(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
 }
 
 PyObject *
-_PyAST_FromAnnotationData(PyObject *data_bytes, PyObject *consts)
+_PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
 {
-    Py_buffer data;
-    if (PyObject_GetBuffer(data_bytes, &data, 0) < 0) {
+    if (!PyTuple_Check(consts) || PyTuple_Size(consts) < 1) {
+        PyErr_SetString(PyExc_TypeError, "expected a tuple for consts");
         return NULL;
     }
-    if (!PyTuple_Check(consts)) {
-        PyBuffer_Release(&data);
-        PyErr_SetString(PyExc_TypeError, "expected a tuple for consts");
+    Py_buffer data;
+    if (PyObject_GetBuffer(PyTuple_GetItem(consts, 0), &data, 0) < 0) {
         return NULL;
     }
     PyArena *arena = _PyArena_New();

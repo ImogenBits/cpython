@@ -878,35 +878,37 @@ _PyCompile_AnnotationASTAddConst(compiler *c, PyObject *o) {
     return arg;
 }
 
-int
-_PyCompile_AnnotationASTFinalize(compiler *c, PyObject **data, PyObject **consts) {
+PyObject *
+_PyCompile_AnnotationASTFinalize(compiler *c) {
+    PyObject *data, *consts;
     if (!c->u->u_ann_ast_data) {
-        *data = PyBytes_FromString("");
+        data = PyBytes_FromString("");
     } else {
-        *data = PyBytesWriter_Finish(c->u->u_ann_ast_data);
+        data = PyBytesWriter_Finish(c->u->u_ann_ast_data);
         c->u->u_ann_ast_data = NULL;
     }
-    if (!*data) {
-        return ERROR;
+    if (!data) {
+        return NULL;
     }
     if (!c->u->u_ann_ast_consts) {
-        *consts = PyTuple_New(0);
+        consts = PyTuple_New(0);
     } else {
         PyObject *consts_list = consts_dict_keys_inorder(c->u->u_ann_ast_consts);
         if (!consts_list) {
             Py_DECREF(c->u->u_ann_ast_consts);
             c->u->u_ann_ast_consts = NULL;
-            return ERROR;
+            return NULL;
         }
         Py_DECREF(c->u->u_ann_ast_consts);
         c->u->u_ann_ast_consts = NULL;
-        *consts = PyList_AsTuple(consts_list);
+        PyList_SetItem(consts_list, 0, data);
+        consts = PyList_AsTuple(consts_list);
         Py_DECREF(consts_list);
-        if (!*consts) {
-            return ERROR;
+        if (!consts) {
+            return NULL;
         }
     }
-    return SUCCESS;
+    return consts;
 }
 
 Py_ssize_t

@@ -272,10 +272,10 @@ make_typevar_with_constraints(PyThreadState* Py_UNUSED(ignored), PyObject *name,
 }
 
 static PyObject *
-build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *data, PyObject *consts)
+build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *consts, PyObject *indices)
 {
     assert(PyTuple_CheckExact(consts));
-    return _PyAST_FromAnnotationData(data, consts);
+    return _PyAST_FromAnnotationData(consts, indices);
 }
 
 const intrinsic_func2_info
