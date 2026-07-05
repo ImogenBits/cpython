@@ -1751,61 +1751,41 @@ _PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
         return NULL;
     }
     Py_ssize_t i = 0;
+    PyObject *name = NULL, *index = NULL;
     while (i < data.len) {
-        PyObject *name;
-        if (ann_ast_const(&data, consts, &i, &name, arena) < 0) {
-            _PyArena_Free(arena);
-            PyBuffer_Release(&data);
-            if (!PyErr_Occurred()) {
-                PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
-            }
-            Py_DECREF(out);
-            return NULL;
+        if (ann_ast_const(&data, consts, &i, &name, arena) < 0 || !name) {
+            goto parsing_err;
+        }
+        Py_ssize_t idx;
+        if (ann_ast_size_t(&data, consts, &i, &idx, arena) < 0) {
+            goto parsing_err;
+        }
+        index = PyLong_FromSsize_t(idx - 1);
+        if (!index) {
+            goto parsing_err;
         }
         expr_ty expr_ast;
         if (ann_ast_expr(&data, consts, &i, &expr_ast, arena) < 0) {
-            _PyArena_Free(arena);
-            PyBuffer_Release(&data);
-            if (!PyErr_Occurred()) {
-                PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
-            }
-            Py_XDECREF(name);
-            Py_DECREF(out);
-            return NULL;
+            goto parsing_err;
+        }
+        if (idx != 0 && !PySet_Contains(indices, index)) {
+            Py_DECREF(index);
+            continue;
         }
         mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
         if (!mod_ast) {
-            _PyArena_Free(arena);
-            PyBuffer_Release(&data);
-            Py_XDECREF(name);
-            Py_DECREF(out);
-            return NULL;
+            goto parsing_err;
         }
         PyObject *expr_obj = PyAST_mod2obj(mod_ast);
-        if (expr_obj == NULL) {
-            _PyArena_Free(arena);
-            PyBuffer_Release(&data);
-            Py_XDECREF(name);
-            Py_DECREF(out);
-            return NULL;
-        }
-        if (name == NULL) {
-            _PyArena_Free(arena);
-            PyBuffer_Release(&data);
-            Py_XDECREF(name);
-            Py_DECREF(out);
-            return expr_obj;
+        if (!expr_obj) {
+            goto parsing_err;
         }
         if (PyDict_SetItem(out, name, expr_obj) < 0) {
-            _PyArena_Free(arena);
-            PyBuffer_Release(&data);
-            Py_DECREF(name);
-            Py_DECREF(expr_obj);
-            Py_DECREF(out);
-            return NULL;
+            goto parsing_err;
         }
         Py_DECREF(name);
         Py_DECREF(expr_obj);
+        Py_DECREF(index);
     }
     _PyArena_Free(arena);
     if (i != data.len) {
@@ -1815,4 +1795,14 @@ _PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
     }
     PyBuffer_Release(&data);
     return out;
+parsing_err:
+    _PyArena_Free(arena);
+    PyBuffer_Release(&data);
+    if (!PyErr_Occurred()) {
+        PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
+    }
+    Py_XDECREF(name);
+    Py_XDECREF(out);
+    Py_XDECREF(index);
+    return NULL;
 }

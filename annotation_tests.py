@@ -4,10 +4,24 @@ from annotationlib import get_annotations, Format
 from timeit import timeit
 from dis import dis
 
-def f(a: int): ...
+something = True
+other = False
 
-dis(f.__annotate__)
-print(f.__annotate__(Format.AST))
+annotated_var: int
+if something:
+    conditional_var: str
+
+class Test:
+    a: int
+    if something:
+        b: str
+    if other:
+        c: list
+
+dis(Test.__annotate__)
+print(Test.__annotate__(Format.AST))
+
+
 
 
 class Mixed:
