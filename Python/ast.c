@@ -1768,7 +1768,7 @@ _PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
         if (ann_ast_expr(&data, consts, &i, &expr_ast, arena) < 0) {
             goto parsing_err;
         }
-        if (idx != 0 && !PySet_Contains(indices, index)) {
+        if (idx != 0 && PySet_Check(indices) && !PySet_Contains(indices, index)) {
             Py_DECREF(index);
             continue;
         }
