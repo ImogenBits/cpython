@@ -874,7 +874,6 @@ _PyCompile_AnnotationASTAddConst(compiler *c, PyObject *o) {
         _PyCompile_DictAddObj(c->u->u_ann_ast_consts, Py_None);
     }
     Py_ssize_t arg = _PyCompile_DictAddObj(c->u->u_ann_ast_consts, o);
-    Py_DECREF(o);
     return arg;
 }
 
@@ -891,16 +890,15 @@ _PyCompile_AnnotationASTFinalize(compiler *c) {
         return NULL;
     }
     if (!c->u->u_ann_ast_consts) {
-        consts = PyTuple_New(0);
+        consts = PyTuple_New(1);
+        PyTuple_SET_ITEM(consts, 0, data);
     } else {
         PyObject *consts_list = consts_dict_keys_inorder(c->u->u_ann_ast_consts);
-        if (!consts_list) {
-            Py_DECREF(c->u->u_ann_ast_consts);
-            c->u->u_ann_ast_consts = NULL;
-            return NULL;
-        }
         Py_DECREF(c->u->u_ann_ast_consts);
         c->u->u_ann_ast_consts = NULL;
+        if (!consts_list) {
+            return NULL;
+        }
         PyList_SetItem(consts_list, 0, data);
         consts = PyList_AsTuple(consts_list);
         Py_DECREF(consts_list);
