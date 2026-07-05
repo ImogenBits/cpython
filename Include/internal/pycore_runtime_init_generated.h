@@ -1305,7 +1305,6 @@ extern "C" {
 }
 
 #define _Py_str_literals_INIT { \
-    INIT_STR(_create_annotation_ast, "_create_annotation_ast"), \
     INIT_STR(anon_dictcomp, "<dictcomp>"), \
     INIT_STR(anon_genexpr, "<genexpr>"), \
     INIT_STR(anon_lambda, "<lambda>"), \
@@ -1315,7 +1314,6 @@ extern "C" {
     INIT_STR(anon_setcomp, "<setcomp>"), \
     INIT_STR(anon_string, "<string>"), \
     INIT_STR(anon_unknown, "<unknown>"), \
-    INIT_STR(build_ast, ".build_ast"), \
     INIT_STR(dbl_close_br, "}}"), \
     INIT_STR(dbl_open_br, "{{"), \
     INIT_STR(dbl_percent, "%%"), \

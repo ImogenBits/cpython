@@ -1310,7 +1310,6 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_SINGLETON(bytes_characters)[253]);
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_SINGLETON(bytes_characters)[254]);
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_SINGLETON(bytes_characters)[255]);
-    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(_create_annotation_ast));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_dictcomp));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_genexpr));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_lambda));
@@ -1320,7 +1319,6 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_setcomp));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_string));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_unknown));
-    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(build_ast));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(dbl_close_br));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(dbl_open_br));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(dbl_percent));
