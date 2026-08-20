@@ -1,7 +1,8 @@
 from collections.abc import Callable, Iterable, Mapping
 from sys import _is_interned, getsizeof
+import sys
 from types import EllipsisType, ModuleType
-from typing import Self, TypeAliasType, get_type_annotations
+from typing import ClassVar, Self, TypeAliasType, get_type_annotations
 from annotationlib import get_annotations, Format
 from timeit import timeit
 from dis import dis, Bytecode, opmap
@@ -56,16 +57,20 @@ def get_ast_consts(annotate: Callable[..., object]) -> Constant:
 
 @dataclass
 class MeasureAnnotates:
-    interned: set[str] = field(default_factory=set)
+    interned: dict[str, bool] = field(default_factory=dict)
     num_annotates: int = 0
-    const_size: int = 0
+    ast_consts: int = 0
+    base_consts: int = 0
+    base_bytecode: int = 0
+
+    AST_BYTECODE_LEN: ClassVar[int] = 22
 
     @property
-    def bytecode_size(self) -> int:
-        return self.num_annotates * 22
+    def ast_bytecode_size(self) -> int:
+        return self.num_annotates * self.AST_BYTECODE_LEN
 
-    def interned_size(self) -> int:
-        return sum(getsizeof(val) for val in self.interned)
+    def interned_size(self, *, is_base: bool) -> int:
+        return sum(getsizeof(val) for val, base in self.interned.items() if base == is_base)
 
     @classmethod
     def measure(cls, packages: Iterable[str]) -> Self:
@@ -76,40 +81,62 @@ class MeasureAnnotates:
                 annotates |= {id(annotate): annotate for annotate in iter_annotates(module)}
         for annotate in annotates.values():
             self.num_annotates += 1
-            self.process_const(get_ast_consts(annotate))
+            ast_data = get_ast_consts(annotate)
+            self.ast_consts += self.const_size(ast_data, is_base=False)
+            self.base_consts += sum(self.const_size(const, is_base=True) for const in annotate.__code__.co_consts if const is not ast_data)
+            self.base_bytecode += self.base_bytecode_size(annotate)
         return self
 
-    def process_const(self, value: Constant) -> None:
+    def const_size(self, value: Constant, *, is_base: bool) -> int:
         match value:
             case float() | complex() | bytes():
-                self.const_size += getsizeof(value)
+                return getsizeof(value)
             case int() if value < -5 or value > 256:
-                self.const_size += getsizeof(value)
+                return getsizeof(value)
             case str():
                 if _is_interned(value):
-                    self.interned.add(value)
+                    self.interned[value] = self.interned.get(value, False) | is_base
+                    return 0
                 else:
-                    self.const_size += getsizeof(value)
+                    return getsizeof(value)
             case tuple():
-                self.const_size += getsizeof(value)
-                for elem in value:
-                    self.process_const(elem)
+                return getsizeof(value) + sum(self.const_size(elem, is_base=is_base) for elem in value)
             case int() | None | EllipsisType():
-                return
+                return 0
             case _:
                 raise ValueError
 
+    def base_bytecode_size(self, annotate: Callable) -> int:
+        return len(annotate.__code__.co_code) - self.AST_BYTECODE_LEN
+
+sys.path.append("./venv/Lib/site-packages")
 
 measurement = MeasureAnnotates.measure([
-    "dummy_module",
-    #"packaging",
-    #"urllib3",
+    "urllib",
+    "certifi",
+    "idna",
+    "requests",
+    "charset-normalizer",
+    "setuptools",
+    "cryptography",
+    "pluggy",
+    "pydantic",
+    "pytest",
+    "click",
+    "iniconfig",
+    "anyio",
+    "attrs",
+    "h11",
 ])
 print(
     f"""Number of Annotates: {measurement.num_annotates: }
-Bytecode: {measurement.bytecode_size: }
-Consts: {measurement.const_size: }
-Interned: {measurement.interned_size(): }"""
+Base Bytecode: {measurement.base_bytecode: }
+Base Consts: {measurement.base_consts: }
+Base Interned: {measurement.interned_size(is_base=True): }
+AST Bytecode: {measurement.ast_bytecode_size: }
+AST Consts: {measurement.ast_consts: }
+AST Interned: {measurement.interned_size(is_base=False): }
+"""
 )
 
 
