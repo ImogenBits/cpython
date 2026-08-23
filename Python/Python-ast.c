@@ -18097,12 +18097,10 @@ ast_is_abstract(PyObject *Py_UNUSED(module), PyObject *cls) {
     Py_RETURN_FALSE;
 }
 
-
 static struct PyMethodDef astmodule_methods[] = {
     {"_is_abstract", ast_is_abstract, METH_O, NULL},
     {NULL}  /* Sentinel */
 };
-
 
 static int
 astmodule_exec(PyObject *m)
