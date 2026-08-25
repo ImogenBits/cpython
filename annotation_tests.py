@@ -4,13 +4,7 @@ from types import ModuleType
 from importlib import import_module
 import pkgutil
 
-from dataclasses import dataclass, field
-
 import tracemalloc
-
-from pathlib import Path
-
-from typing import eval_annotate_as_types
 
 from annotationlib import Format
 
@@ -53,7 +47,7 @@ obj_cache = set()
 
 def iter_annotates(obj: object) -> Iterable[Callable[[int], object]]:
     obj_cache.add(id(obj))
-    if getattr(obj, "__annotate__", None) is not None:
+    if getattr(obj, "__annotate__", None) is not None and callable(obj.__annotate__):
         yield obj.__annotate__
     if isinstance(obj, (type, ModuleType)) and hasattr(obj, "__dict__"):
         for attr_value in obj.__dict__.values():
@@ -76,8 +70,8 @@ successful = 0
 for annotate in annotates:
     time_start = timeit.default_timer()
     try:
-        eval_annotate_as_types(annotate, format=Format.VALUE)
-    except (KeyError, TypeError, RuntimeError, SystemError) as e:
+        annotate(Format.VALUE)
+    except (NameError, KeyError) as e:
         pass
     else:
         successful += 1
@@ -85,6 +79,6 @@ for annotate in annotates:
 
 print(f"Total memory usage: {end - start}")
 print(f"Total time taken: {time}")
-print(f"Successful evaluations: {successful}")
+print(f"Successful evaluations: {successful} / {len(annotates)}")
 
 raise SystemExit
