@@ -787,7 +787,8 @@ codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
     if (scope_type == COMPILE_SCOPE_CLASS) {
         ADDOP_NAME(c, loc, LOAD_DEREF, &_Py_ID(__conditional_annotations__), freevars);
     } else if (scope_type == COMPILE_SCOPE_MODULE) {
-        ADDOP_NAME(c, loc, LOAD_GLOBAL, &_Py_ID(__conditional_annotations__), names);
+        RETURN_IF_ERROR(codegen_nameop(c, loc, &_Py_ID(__conditional_annotations__), Load));
+        //ADDOP_NAME(c, loc, LOAD_GLOBAL, &_Py_ID(__conditional_annotations__), names);
     } else {
         Py_INCREF(Py_None);
         ADDOP_LOAD_CONST_NEW(c, loc, Py_None);
@@ -965,7 +966,6 @@ codegen_process_deferred_annotations(compiler *c, location loc)
         PyObject *cond_index = PyList_GET_ITEM(conditional_annotation_indices, i);
         assert(PyLong_CheckExact(cond_index));
         long idx = PyLong_AS_LONG(cond_index);
-        Py_DECREF(cond_index);
         if (idx != -1) {
             found_conditional = 1;
             break;
