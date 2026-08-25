@@ -743,9 +743,47 @@ codegen_setup_annotations_scope(compiler *c, location loc, void *key, PyObject *
 static int
 codegen_load_name_into_map(compiler *c, location loc, PyObject *name)
 {
+    NEW_JUMP_TARGET_LABEL(c, body);
+    NEW_JUMP_TARGET_LABEL(c, end);
+    NEW_JUMP_TARGET_LABEL(c, except);
+    NEW_JUMP_TARGET_LABEL(c, cleanup);
+    NEW_JUMP_TARGET_LABEL(c, cleanup_body);
+
+    ADDOP_JUMP(c, loc, SETUP_FINALLY, except);
+    USE_LABEL(c, body);
+    RETURN_IF_ERROR(
+        _PyCompile_PushFBlock(c, loc, COMPILE_FBLOCK_TRY_EXCEPT, body, NO_LABEL, NULL));
     ADDOP_LOAD_CONST(c, loc, name);
     RETURN_IF_ERROR(codegen_nameop(c, loc, name, Load));
     ADDOP_I(c, loc, MAP_ADD, 1);
+    _PyCompile_PopFBlock(c, COMPILE_FBLOCK_TRY_EXCEPT, body);
+    ADDOP(c, loc, POP_BLOCK);
+    ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, end);
+
+    USE_LABEL(c, except);
+    ADDOP_JUMP(c, NO_LOCATION, SETUP_CLEANUP, cleanup);
+    ADDOP(c, NO_LOCATION, PUSH_EXC_INFO);
+    /* Runtime will push a block here, so we need to account for that */
+    RETURN_IF_ERROR(
+        _PyCompile_PushFBlock(c, loc, COMPILE_FBLOCK_EXCEPTION_HANDLER,
+                              NO_LABEL, NO_LABEL, NULL));
+    ADDOP(c, loc, POP_TOP);
+    USE_LABEL(c, cleanup_body);
+    RETURN_IF_ERROR(
+        _PyCompile_PushFBlock(c, loc, COMPILE_FBLOCK_HANDLER_CLEANUP, cleanup_body,
+                                NO_LABEL, NULL));
+    ADDOP(c, loc, NOP);
+    _PyCompile_PopFBlock(c, COMPILE_FBLOCK_HANDLER_CLEANUP, cleanup_body);
+    ADDOP(c, NO_LOCATION, POP_BLOCK);
+    ADDOP(c, NO_LOCATION, POP_EXCEPT);
+    ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, end);
+    _PyCompile_PopFBlock(c, COMPILE_FBLOCK_EXCEPTION_HANDLER, NO_LABEL);
+    ADDOP_I(c, NO_LOCATION, RERAISE, 0);
+
+    USE_LABEL(c, cleanup);
+    POP_EXCEPT_AND_RERAISE(c, NO_LOCATION);
+
+    USE_LABEL(c, end);
     return SUCCESS;
 }
 
