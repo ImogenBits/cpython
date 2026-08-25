@@ -3,12 +3,10 @@ import sys
 from types import ModuleType
 from importlib import import_module
 import pkgutil
-
 import tracemalloc
-
 from annotationlib import Format
-
 import timeit
+from typing import eval_annotate_as_types
 
 
 sys.path.insert(0, "/workspaces/cpython/.venv/Lib/site-packages")
@@ -66,19 +64,13 @@ for package in PACKAGES:
 end, _ = tracemalloc.get_traced_memory()
 
 time = 0
-successful = 0
 for annotate in annotates:
     time_start = timeit.default_timer()
-    try:
-        annotate(Format.VALUE)
-    except (NameError, KeyError) as e:
-        pass
-    else:
-        successful += 1
+    eval_annotate_as_types(annotate, format=Format.VALUE)
     time += timeit.default_timer() - time_start
 
 print(f"Total memory usage: {end - start}")
 print(f"Total time taken: {time}")
-print(f"Successful evaluations: {successful} / {len(annotates)}")
+#print(f"Successful evaluations: {successful} / {len(annotates)}")
 
 raise SystemExit
