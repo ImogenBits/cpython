@@ -746,8 +746,6 @@ codegen_load_name_into_map(compiler *c, location loc, PyObject *name)
     NEW_JUMP_TARGET_LABEL(c, body);
     NEW_JUMP_TARGET_LABEL(c, end);
     NEW_JUMP_TARGET_LABEL(c, except);
-    NEW_JUMP_TARGET_LABEL(c, cleanup);
-    NEW_JUMP_TARGET_LABEL(c, cleanup_body);
 
     ADDOP_JUMP(c, loc, SETUP_FINALLY, except);
     USE_LABEL(c, body);
@@ -761,27 +759,7 @@ codegen_load_name_into_map(compiler *c, location loc, PyObject *name)
     ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, end);
 
     USE_LABEL(c, except);
-    ADDOP_JUMP(c, NO_LOCATION, SETUP_CLEANUP, cleanup);
-    ADDOP(c, NO_LOCATION, PUSH_EXC_INFO);
-    /* Runtime will push a block here, so we need to account for that */
-    RETURN_IF_ERROR(
-        _PyCompile_PushFBlock(c, loc, COMPILE_FBLOCK_EXCEPTION_HANDLER,
-                              NO_LABEL, NO_LABEL, NULL));
     ADDOP(c, loc, POP_TOP);
-    USE_LABEL(c, cleanup_body);
-    RETURN_IF_ERROR(
-        _PyCompile_PushFBlock(c, loc, COMPILE_FBLOCK_HANDLER_CLEANUP, cleanup_body,
-                                NO_LABEL, NULL));
-    ADDOP(c, loc, NOP);
-    _PyCompile_PopFBlock(c, COMPILE_FBLOCK_HANDLER_CLEANUP, cleanup_body);
-    ADDOP(c, NO_LOCATION, POP_BLOCK);
-    ADDOP(c, NO_LOCATION, POP_EXCEPT);
-    ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, end);
-    _PyCompile_PopFBlock(c, COMPILE_FBLOCK_EXCEPTION_HANDLER, NO_LABEL);
-    ADDOP_I(c, NO_LOCATION, RERAISE, 0);
-
-    USE_LABEL(c, cleanup);
-    POP_EXCEPT_AND_RERAISE(c, NO_LOCATION);
 
     USE_LABEL(c, end);
     return SUCCESS;
