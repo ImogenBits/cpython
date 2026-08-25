@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 import sys
 from types import ModuleType
 from importlib import import_module
@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 import tracemalloc
 
 from pathlib import Path
+
+from typing import eval_annotate_as_types
+
+from annotationlib import Format
+
+import timeit
 
 
 sys.path.insert(0, "/workspaces/cpython/.venv/Lib/site-packages")
@@ -43,13 +49,38 @@ def iter_modules(package: str) -> Iterable[ModuleType]:
             yield from iter_modules(name)
 
 
+obj_cache = set()
+
+def iter_annotates(obj: object) -> Iterable[Callable[[int], object]]:
+    obj_cache.add(id(obj))
+    if getattr(obj, "__annotate__", None) is not None:
+        yield obj.__annotate__
+    if isinstance(obj, (type, ModuleType)) and hasattr(obj, "__dict__"):
+        for attr_value in obj.__dict__.values():
+            if id(attr_value) not in obj_cache:
+                yield from iter_annotates(attr_value)
+
+
+annotates = []
+
+
 tracemalloc.start()
 start, _ = tracemalloc.get_traced_memory()
 for package in PACKAGES:
     for mod in iter_modules(package):
-        pass
+        annotates.extend(iter_annotates(mod))
 end, _ = tracemalloc.get_traced_memory()
 
+time = 0
+for annotate in annotates:
+    time_start = timeit.default_timer()
+    try:
+        eval_annotate_as_types(annotate, format=Format.VALUE)
+    except (KeyError, TypeError, RuntimeError, SystemError) as e:
+        pass
+    time += timeit.default_timer() - time_start
+
 print(f"Total memory usage: {end - start}")
+print(f"Total time taken: {time}")
 
 raise SystemExit
