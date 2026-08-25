@@ -69,6 +69,7 @@ struct compiler_unit {
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
     PyBytesWriter *u_ann_ast_data;
     PyObject *u_ann_ast_consts;
+    PyObject *u_ann_ast_names;
 
     int u_nfblocks;
     int u_in_inlined_comp;
@@ -206,6 +207,7 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_conditional_annotation_indices);
     PyBytesWriter_Discard(u->u_ann_ast_data);
     Py_CLEAR(u->u_ann_ast_consts);
+    Py_CLEAR(u->u_ann_ast_names);
     PyMem_Free(u);
 }
 
@@ -708,6 +710,7 @@ _PyCompile_EnterScope(compiler *c, identifier name, int scope_type,
 
     u->u_ann_ast_data = NULL;
     u->u_ann_ast_consts = NULL;
+    u->u_ann_ast_names = NULL;
 
     u->u_instr_sequence = (instr_sequence*)_PyInstructionSequence_New();
     if (!u->u_instr_sequence) {
@@ -877,9 +880,20 @@ _PyCompile_AnnotationASTAddConst(compiler *c, PyObject *o) {
     return arg;
 }
 
-PyObject *
-_PyCompile_AnnotationASTFinalize(compiler *c) {
-    PyObject *data, *consts;
+int
+_PyCompile_AnnotationASTAddName(compiler *c, PyObject *name) {
+    if (!c->u->u_ann_ast_names) {
+        c->u->u_ann_ast_names = PySet_New(NULL);
+        if (!c->u->u_ann_ast_names) {
+            return ERROR;
+        }
+    }
+    return PySet_Add(c->u->u_ann_ast_names, name);
+}
+
+int
+_PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **names) {
+    PyObject *data;
     if (!c->u->u_ann_ast_data) {
         data = PyBytes_FromString("");
     } else {
@@ -887,31 +901,37 @@ _PyCompile_AnnotationASTFinalize(compiler *c) {
         c->u->u_ann_ast_data = NULL;
     }
     if (!data) {
-        return NULL;
+        return ERROR;
     }
     if (!c->u->u_ann_ast_consts) {
-        consts = PyTuple_New(1);
-        PyTuple_SET_ITEM(consts, 0, data);
+        *consts = PyTuple_New(1);
+        PyTuple_SET_ITEM(*consts, 0, data);
     } else {
         PyObject *consts_list = consts_dict_keys_inorder(c->u->u_ann_ast_consts);
         Py_DECREF(c->u->u_ann_ast_consts);
         c->u->u_ann_ast_consts = NULL;
         if (!consts_list) {
-            return NULL;
+            return ERROR;
         }
         PyList_SetItem(consts_list, 0, data);
-        consts = PyList_AsTuple(consts_list);
+        *consts = PyList_AsTuple(consts_list);
         Py_DECREF(consts_list);
-        if (!consts) {
-            return NULL;
+        if (!*consts) {
+            return ERROR;
         }
     }
-    return consts;
-}
-
-Py_ssize_t
-_PyCompile_GetNumConsts(compiler *c) {
-    return PyDict_GET_SIZE(c->u->u_metadata.u_consts);
+    if (c->u->u_ann_ast_names) {
+        *names = c->u->u_ann_ast_names;
+        c->u->u_ann_ast_names = NULL;
+    } else {
+        *names = PySet_New(NULL);
+        if (!*names) {
+            Py_DECREF(*consts);
+            *consts = NULL;
+            return ERROR;
+        }
+    }
+    return SUCCESS;
 }
 
 static location

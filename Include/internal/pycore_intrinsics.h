@@ -31,8 +31,9 @@
 #define INTRINSIC_SET_FUNCTION_TYPE_PARAMS       4
 #define INTRINSIC_SET_TYPEPARAM_DEFAULT          5
 #define INTRINSIC_BUILD_ANNOTATION_AST           6
+#define INTRINSIC_BUILD_ANNOTATION_VALUE         7
 
-#define MAX_INTRINSIC_2                          6
+#define MAX_INTRINSIC_2                          7
 
 typedef PyObject *(*intrinsic_func1)(PyThreadState* tstate, PyObject *value);
 typedef PyObject *(*intrinsic_func2)(PyThreadState* tstate, PyObject *value1, PyObject *value2);

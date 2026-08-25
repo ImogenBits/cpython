@@ -18610,3 +18610,41 @@ int PyAST_Check(PyObject* obj)
 }
 
 
+PyObject *PyAST_AnnotationDictToAST(PyObject *asts) {
+    struct ast_state *state = get_ast_state();
+    PyTypeObject *tp;
+
+    tp = (PyTypeObject *)state->Expression_type;
+    PyObject *expr = PyType_GenericNew(tp, NULL, NULL);
+    if (!expr) {
+        return NULL;
+    }
+    PyObject_SetAttr(expr, state->lineno, PyLong_FromLong(0));
+    PyObject_SetAttr(expr, state->col_offset, PyLong_FromLong(0));
+    tp = (PyTypeObject *)state->Dict_type;
+    PyObject *map = PyType_GenericNew(tp, NULL, NULL);
+    if (!map) {
+        Py_DECREF(expr);
+        return NULL;
+    }
+    PyObject_SetAttr(expr, state->body, map);
+    PyObject_SetAttr(map, state->lineno, PyLong_FromLong(0));
+    PyObject_SetAttr(map, state->col_offset, PyLong_FromLong(0));
+    PyObject *keys = PyDict_Keys(asts);
+    for (Py_ssize_t i = 0; i < PyList_Size(keys); i++) {
+        tp = (PyTypeObject *)state->Constant_type;
+        PyObject *name_node = PyType_GenericNew(tp, NULL, NULL);
+        PyObject_SetAttr(name_node, state->lineno, PyLong_FromLong(0));
+        PyObject_SetAttr(name_node, state->col_offset, PyLong_FromLong(0));
+        PyObject_SetAttr(name_node, state->value, PyList_GetItem(keys, i));
+        PyList_SetItem(keys, i, name_node);
+    }
+    PyObject_SetAttr(map, state->keys, keys);
+    PyObject *values = PyDict_Values(asts);
+    for (Py_ssize_t i = 0; i < PyList_Size(values); i++) {
+        PyList_SetItem(values, i, PyObject_GetAttr(PyList_GetItem(values, i), state->body));
+    }
+    PyObject_SetAttr(map, state->values, values);
+    return expr;
+}
+

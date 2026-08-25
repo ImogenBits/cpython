@@ -931,6 +931,7 @@ PyObject* PyAST_mod2obj(mod_ty t);
 int PyAst_CheckMode(PyObject *ast, int mode);
 mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode);
 int PyAST_Check(PyObject* obj);
+PyObject *PyAST_AnnotationDictToAST(PyObject *asts);
 
 extern int _PyAST_Validate(mod_ty);
 
