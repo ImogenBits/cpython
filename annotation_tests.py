@@ -72,15 +72,19 @@ for package in PACKAGES:
 end, _ = tracemalloc.get_traced_memory()
 
 time = 0
+successful = 0
 for annotate in annotates:
     time_start = timeit.default_timer()
     try:
         eval_annotate_as_types(annotate, format=Format.VALUE)
     except (KeyError, TypeError, RuntimeError, SystemError) as e:
         pass
+    else:
+        successful += 1
     time += timeit.default_timer() - time_start
 
 print(f"Total memory usage: {end - start}")
 print(f"Total time taken: {time}")
+print(f"Successful evaluations: {successful}")
 
 raise SystemExit
