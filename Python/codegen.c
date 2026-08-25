@@ -1447,7 +1447,9 @@ build_ast_expr(compiler *c, expr_ty expr)
         }
         break;
     case Name_kind:
-        _PyCompile_AnnotationASTAddName(c, expr->v.Name.id);
+        if (expr->v.Name.ctx == Load) {
+            _PyCompile_AnnotationASTAddName(c, expr->v.Name.id);
+        }
         if (build_ast_const(c, expr->v.Name.id)) {
             goto failed;
         }
@@ -1488,7 +1490,12 @@ add_annotation_ast(compiler *c, PyObject *name, expr_ty annotation, long conditi
 {
     RETURN_IF_ERROR(build_ast_const(c, name));
     RETURN_IF_ERROR(build_ast_size_t(c, conditional_index + 1));
-    RETURN_IF_ERROR(build_ast_expr(c, annotation));
+    if (FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Constant_kind));
+        RETURN_IF_ERROR(build_ast_const(c, _PyAST_ExprAsUnicode(annotation)));
+    } else {
+        RETURN_IF_ERROR(build_ast_expr(c, annotation));
+    }
     return SUCCESS;
 }
 
@@ -3718,7 +3725,7 @@ codegen_nameop(compiler *c, location loc,
     }
 
     /* XXX Leave assert here, but handle __doc__ and the like better */
-    //assert(scope || PyUnicode_READ_CHAR(name, 0) == '_');
+    assert(scope || PyUnicode_READ_CHAR(name, 0) == '_');
 
     int op = 0;
     switch (optype) {
