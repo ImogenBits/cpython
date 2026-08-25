@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 import tracemalloc
 
+from pathlib import Path
+
 
 sys.path.insert(0, "/workspaces/cpython/.venv/Lib/site-packages")
 PACKAGES = [
@@ -28,12 +30,16 @@ PACKAGES = [
     "h11",
 ]
 
+failed_modules = []
+module_list_path = Path("/workspaces/cpython/module_list.txt")
 
 def iter_modules(package: str) -> Iterable[ModuleType]:
     """Iterate over all modules in a package."""
     try:
         package_module = import_module(package)
     except Exception:
+        failed_modules.append(package)
+        print(f"Failed to import {package}")
         return
     yield package_module
     if hasattr(package_module, "__path__"):
@@ -49,5 +55,7 @@ for package in PACKAGES:
 end, _ = tracemalloc.get_traced_memory()
 
 print(f"Total memory usage: {end - start}")
+if failed_modules:
+    module_list_path.write_text("\n".join(failed_modules))
 
 raise SystemExit
