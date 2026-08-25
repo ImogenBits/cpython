@@ -776,19 +776,6 @@ codegen_load_name_into_map(compiler *c, location loc, PyObject *name)
 static int
 codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
 {
-    PyObject *value_with_fake_globals = PyLong_FromLong(_Py_ANNOTATE_FORMAT_VALUE_WITH_FAKE_GLOBALS);
-    if (value_with_fake_globals == NULL) {
-        return ERROR;
-    }
-    _Py_DECLARE_STR(format, ".format");
-    NEW_JUMP_TARGET_LABEL(c, ast);
-    ADDOP_I(c, loc, LOAD_FAST, 0);
-    ADDOP_LOAD_CONST_NEW(c, loc, value_with_fake_globals);
-    ADDOP_I(c, loc, COMPARE_OP, (Py_GT << 5) | compare_masks[Py_GT]);
-    ADDOP_JUMP(c, loc, POP_JUMP_IF_TRUE, ast);
-    ADDOP(c, loc, RETURN_VALUE);
-
-    USE_LABEL(c, ast);
     PyObject *ast_data, *ast_names, *name_iter, *name;
     RETURN_IF_ERROR(_PyCompile_AnnotationASTFinalize(c, &ast_data, &ast_names));
     name_iter = PyObject_GetIter(ast_names);
@@ -805,21 +792,22 @@ codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
     Py_DECREF(name_iter);
     Py_DECREF(ast_names);
     Py_DECREF(ast_data);
-    /*
-    ADDOP_LOAD_CONST_NEW(c, loc, ast_data);
-    if (scope_type == COMPILE_SCOPE_CLASS) {
-        ADDOP_NAME(c, loc, LOAD_DEREF, &_Py_ID(__conditional_annotations__), freevars);
-    } else if (scope_type == COMPILE_SCOPE_MODULE) {
-        ADDOP_NAME(c, loc, LOAD_GLOBAL, &_Py_ID(__conditional_annotations__), names);
-    } else {
-        Py_INCREF(Py_None);
-        ADDOP_LOAD_CONST_NEW(c, loc, Py_None);
-    }
-    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_AST);
-    */
 
+    PyObject *value_with_fake_globals = PyLong_FromLong(_Py_ANNOTATE_FORMAT_VALUE_WITH_FAKE_GLOBALS);
+    if (value_with_fake_globals == NULL) {
+        return ERROR;
+    }
+    _Py_DECLARE_STR(format, ".format");
+    NEW_JUMP_TARGET_LABEL(c, ast);
+    ADDOP_I(c, loc, LOAD_FAST, 0);
+    ADDOP_LOAD_CONST_NEW(c, loc, value_with_fake_globals);
+    ADDOP_I(c, loc, COMPARE_OP, (Py_GT << 5) | compare_masks[Py_GT]);
+    ADDOP_JUMP(c, loc, POP_JUMP_IF_TRUE, ast);
+    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_VALUE);
+    ADDOP(c, loc, RETURN_VALUE);
+
+    USE_LABEL(c, ast);
     ADDOP_I(c, loc, BUILD_TUPLE, 2);
-    //ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_VALUE);
     ADDOP(c, loc, RETURN_VALUE);
     return SUCCESS;
 }

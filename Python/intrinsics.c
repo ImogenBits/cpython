@@ -279,41 +279,49 @@ build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *consts, PyObje
 }
 
 static PyObject *
-build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *namespace, PyObject *asts)
+build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObject *namespace)
 {
-    PyObject *expr = PyAST_AnnotationDictToAST(asts);
-    if (expr == NULL) {
+    PyObject *result = PyDict_New();
+    if (result == NULL) {
         return NULL;
     }
 
-    PyArena *arena = _PyArena_New();
-    if (arena == NULL) {
-        Py_DECREF(expr);
-        return NULL;
-    }
-
-    mod_ty mod = PyAST_obj2mod(expr, arena, 1 /* eval */);
-    Py_DECREF(expr);
-    if (mod == NULL || !_PyAST_Validate(mod)) {
-        _PyArena_Free(arena);
-        return NULL;
-    }
-
-    PyCompilerFlags flags = _PyCompilerFlags_INIT;
     PyObject *filename = PyUnicode_FromString("<annotation>");
     if (filename == NULL) {
-        _PyArena_Free(arena);
-        return NULL;
-    }
-    PyCodeObject *code = _PyAST_Compile(mod, filename, &flags, -1, arena, NULL);
-    Py_DECREF(filename);
-    _PyArena_Free(arena);
-    if (code == NULL) {
+        Py_DECREF(result);
         return NULL;
     }
 
-    PyObject *result = PyEval_EvalCode((PyObject *)code, namespace, namespace);
-    Py_DECREF(code);
+    PyObject *key, *annotation;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(asts, &pos, &key, &annotation)) {
+        const char *source = PyUnicode_AsUTF8(annotation);
+        if (source == NULL) {
+            Py_DECREF(filename);
+            Py_DECREF(result);
+            return NULL;
+        }
+
+        PyCompilerFlags flags = _PyCompilerFlags_INIT;
+        PyObject *code = Py_CompileStringObject(source, filename,
+                                                Py_eval_input, &flags, -1);
+        if (code == NULL) {
+            Py_DECREF(filename);
+            Py_DECREF(result);
+            return NULL;
+        }
+        PyObject *value = PyEval_EvalCode(code, namespace, namespace);
+        Py_DECREF(code);
+        if (value == NULL || PyDict_SetItem(result, key, value) < 0) {
+            Py_XDECREF(value);
+            Py_DECREF(filename);
+            Py_DECREF(result);
+            return NULL;
+        }
+        Py_DECREF(value);
+    }
+
+    Py_DECREF(filename);
     return result;
 }
 
