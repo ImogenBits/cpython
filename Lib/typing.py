@@ -2404,13 +2404,15 @@ def _resolve_ast(expr, namespace, format):
                 eval_annotation_AST(element, namespace, format)
                 for element in elts
             ]
-        case ast.BinOp(left, ast.BitOr, right):
+        case ast.BinOp(left, ast.BitOr(), right):
             return types.UnionType[
                 eval_annotation_AST(left, namespace, format),
                 eval_annotation_AST(right, namespace, format),
             ]
+        case ast.Constant(value):
+            return value
         case _:
-            raise ValueError("invalid type expression")
+            raise ValueError(f"invalid type expression: {expr}")
 
 
 def eval_annotation_AST(expr, namespace, format):
@@ -2429,25 +2431,8 @@ def eval_annotation_AST(expr, namespace, format):
             raise
 
 
-def _get_namespaces(annotate):
-    if annotate.__closure__:
-        locals = {
-            name: cell.cell_contents
-            for name, cell
-            in zip(annotate.__code__.co_freevars, annotate.__closure__)
-        }
-        if "__classdict__" in locals:
-            class_dict = locals["__classdict__"]
-            del locals["__classdict__"]
-            locals = locals | class_dict
-    else:
-        locals = {}
-
-    return ChainMap(annotate.__globals__, locals, __builtins__)
-
-
 def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
-    annotations = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
+    namespace, annotations = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
     if annotations is None:
         return None
     elif not isinstance(annotations, dict):
@@ -2462,7 +2447,6 @@ def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
 
     if format is None:
         format = annotationlib.Format.VALUE
-    namespace = _get_namespaces(annotate)
     annotations = {
         name: eval_annotation_AST(value, namespace=namespace, format=format)
         for name, value in annotations.items()
@@ -3157,7 +3141,7 @@ class NamedTupleMeta(type):
             def annotate(format):
                 annos = annotationlib.call_annotate_function(
                     original_annotate, format)
-                if format != annotationlib.Format.STRING:
+                if format != annotationlib.Format.STRING and format != annotationlib.Format.AST:
                     return {key: _type_check(val, f"field {key} annotation must be a type")
                             for key, val in annos.items()}
                 return annos

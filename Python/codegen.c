@@ -964,7 +964,6 @@ codegen_process_deferred_annotations(compiler *c, location loc)
         PyObject *cond_index = PyList_GET_ITEM(conditional_annotation_indices, i);
         assert(PyLong_CheckExact(cond_index));
         long idx = PyLong_AS_LONG(cond_index);
-        Py_DECREF(cond_index);
         if (idx != -1) {
             found_conditional = 1;
             break;
