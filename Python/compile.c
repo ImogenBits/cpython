@@ -874,10 +874,9 @@ _PyCompile_AnnotationASTAddConst(compiler *c, PyObject *o) {
         if (!c->u->u_ann_ast_consts) {
             return ERROR;
         }
-        _PyCompile_DictAddObj(c->u->u_ann_ast_consts, Py_None);
     }
     Py_ssize_t arg = _PyCompile_DictAddObj(c->u->u_ann_ast_consts, o);
-    return arg;
+    return arg + 1;  // +1 because the first constant is reserved for the AST data
 }
 
 int
@@ -913,7 +912,7 @@ _PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **name
         if (!consts_list) {
             return ERROR;
         }
-        PyList_SetItem(consts_list, 0, data);
+        PyList_Insert(consts_list, 0, data);
         *consts = PyList_AsTuple(consts_list);
         Py_DECREF(consts_list);
         if (!*consts) {
