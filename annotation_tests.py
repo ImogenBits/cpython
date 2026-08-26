@@ -59,6 +59,7 @@ for package in PACKAGES:
     for mod in iter_modules(package):
         pass
 end, _ = tracemalloc.get_traced_memory()
+print(f"Total memory usage: {end - start}")
 
 
 time = 0
@@ -66,10 +67,9 @@ for package in PACKAGES:
     for mod in iter_modules(package):
         for annotate in iter_annotates(mod):
             time_start = timeit.default_timer()
-            eval_annotate_as_types(annotate, format=Format.VALUE)
+            annotate(Format.VALUE)
             time += timeit.default_timer() - time_start
-
-print(f"Total memory usage: {end - start}")
 print(f"Total time taken: {time}")
+
 
 raise SystemExit
