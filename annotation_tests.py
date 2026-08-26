@@ -53,24 +53,23 @@ def iter_annotates(obj: object) -> Iterable[Callable[[int], object]]:
                 yield from iter_annotates(attr_value)
 
 
-annotates = []
-
-
 tracemalloc.start()
 start, _ = tracemalloc.get_traced_memory()
 for package in PACKAGES:
     for mod in iter_modules(package):
-        annotates.extend(iter_annotates(mod))
+        pass
 end, _ = tracemalloc.get_traced_memory()
 
+
 time = 0
-for annotate in annotates:
-    time_start = timeit.default_timer()
-    eval_annotate_as_types(annotate, format=Format.VALUE)
-    time += timeit.default_timer() - time_start
+for package in PACKAGES:
+    for mod in iter_modules(package):
+        for annotate in iter_annotates(mod):
+            time_start = timeit.default_timer()
+            eval_annotate_as_types(annotate, format=Format.VALUE)
+            time += timeit.default_timer() - time_start
 
 print(f"Total memory usage: {end - start}")
 print(f"Total time taken: {time}")
-#print(f"Successful evaluations: {successful} / {len(annotates)}")
 
 raise SystemExit
