@@ -3100,6 +3100,8 @@ def _make_eager_annotate(types):
                 return checked_types
             case annotationlib.Format.STRING:
                 return annotationlib.annotations_to_string(types)
+            case annotationlib.Format.AST:
+                return annotationlib.annotations_to_ast(types)
             case _:
                 raise NotImplementedError(format)
     return annotate
@@ -3345,6 +3347,7 @@ class _TypedDictMeta(type):
         )
 
         def __annotate__(format):
+            namespace = {}
             annos = {}
             for base in bases:
                 if base is Generic:
@@ -3354,11 +3357,17 @@ class _TypedDictMeta(type):
                     continue
                 base_annos = annotationlib.call_annotate_function(
                     base_annotate, format, owner=base)
+                if format == annotationlib.Format.AST:
+                    base_namespace, base_annos = base_annos
+                    namespace.update(base_namespace)
                 annos.update(base_annos)
             if own_annotate is not None:
                 own = annotationlib.call_annotate_function(
                     own_annotate, format, owner=tp_dict)
-                if format != annotationlib.Format.STRING:
+                if format == annotationlib.Format.AST:
+                    own_namespace, own = own
+                    namespace.update(own_namespace)
+                elif format != annotationlib.Format.STRING:
                     own = {
                         n: _type_check(tp, msg, module=tp_dict.__module__)
                         for n, tp in own.items()
@@ -3367,10 +3376,16 @@ class _TypedDictMeta(type):
                 own = annotationlib.annotations_to_string(own_annotations)
             elif format in (annotationlib.Format.FORWARDREF, annotationlib.Format.VALUE):
                 own = own_checked_annotations
+            elif format == annotationlib.Format.AST:
+                own_namespace, own = annotationlib.annotations_to_ast(own_annotations)
+                namespace.update(own_namespace)
             else:
                 raise NotImplementedError(format)
             annos.update(own)
-            return annos
+            if format == annotationlib.Format.AST:
+                return namespace, annos
+            else:
+                return annos
 
         tp_dict.__annotate__ = __annotate__
         tp_dict.__required_keys__ = frozenset(required_keys)

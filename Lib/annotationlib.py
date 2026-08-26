@@ -1000,13 +1000,13 @@ def get_annotations(
         case Format.AST:
             ann = _get_and_call_annotate(obj, format)
             if ann is not None:
-                return dict(ann)
+                return dict(ann[0]), dict(ann[1])
         case _:
             raise ValueError(f"Unsupported format {format!r}")
 
     if ann is None:
         if isinstance(obj, type) or callable(obj):
-            return {}
+            return ({}, {}) if format == Format.AST else {}
         raise TypeError(f"{obj!r} does not have annotations")
 
     if not ann:
@@ -1119,6 +1119,21 @@ def annotations_to_string(annotations):
     }
 
 
+def annotations_to_ast(annotations):
+    """Convert an annotation dict containing values to approximately the AST format.
+
+    Always returns a fresh dictionary.
+    """
+    namespace, annos = {}, {}
+    for name, value in annotations.items():
+        # we need a name that is unique per value and also shouldn't clash with
+        # other namespaces that might be mixed with this
+        value_name = f".annotation_{id(value)}"
+        namespace[value_name] = value
+        annos[name] = ast.Expression(ast.Name(id=value_name))
+    return namespace, annos
+
+
 def _rewrite_star_unpack(arg):
     """If the given argument annotation expression is a star unpack e.g. `'*Ts'`
        rewrite it to a valid expression.
@@ -1137,9 +1152,18 @@ def _get_and_call_annotate(obj, format):
     annotate = getattr(obj, "__annotate__", None)
     if annotate is not None:
         ann = call_annotate_function(annotate, format, owner=obj)
+        if format == Format.AST:
+            if not isinstance(ann, tuple) or len(ann) != 2:
+                raise ValueError(f"{obj!r}.__annotate__ returned an invalid AST format")
+            namespace, ann = ann
+            if not isinstance(namespace, dict):
+                raise ValueError(f"{obj!r}.__annotate__ returned a non-dict namespace")
         if not isinstance(ann, dict):
-            raise ValueError(f"{obj!r}.__annotate__ returned a non-dict")
-        return ann
+            raise ValueError(f"{obj!r}.__annotate__ returned a non-dict annotation mapping")
+        if format == Format.AST:
+            return namespace, ann
+        else:
+            return ann
     return None
 
 
