@@ -958,19 +958,8 @@ codegen_process_deferred_annotations(compiler *c, location loc)
         goto error;
     }
 
-    Py_ssize_t annotations_len = PyList_GET_SIZE(conditional_annotation_indices);
-    int found_conditional = 0;
-    for (Py_ssize_t i = 0; i < annotations_len; i++) {
-        PyObject *cond_index = PyList_GET_ITEM(conditional_annotation_indices, i);
-        assert(PyLong_CheckExact(cond_index));
-        long idx = PyLong_AS_LONG(cond_index);
-        if (idx != -1) {
-            found_conditional = 1;
-            break;
-        }
-    }
     RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, loc,
-        found_conditional ? scope_type : COMPILE_SCOPE_FUNCTION));
+        SYMTABLE_ENTRY(c)->ste_has_conditional_annotations ? scope_type : COMPILE_SCOPE_FUNCTION));
 
     Py_DECREF(deferred_anno);
     Py_DECREF(conditional_annotation_indices);
@@ -1449,7 +1438,9 @@ build_ast_expr(compiler *c, expr_ty expr)
         }
         break;
     case Name_kind:
-        _PyCompile_AnnotationASTAddName(c, expr->v.Name.id);
+        if (expr->v.Name.ctx == Load) {
+            _PyCompile_AnnotationASTAddName(c, expr->v.Name.id);
+        }
         if (build_ast_const(c, expr->v.Name.id)) {
             goto failed;
         }
@@ -1490,7 +1481,12 @@ add_annotation_ast(compiler *c, PyObject *name, expr_ty annotation, long conditi
 {
     RETURN_IF_ERROR(build_ast_const(c, name));
     RETURN_IF_ERROR(build_ast_size_t(c, conditional_index + 1));
-    RETURN_IF_ERROR(build_ast_expr(c, annotation));
+    if (FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Constant_kind));
+        RETURN_IF_ERROR(build_ast_const(c, _PyAST_ExprAsUnicode(annotation)));
+    } else {
+        RETURN_IF_ERROR(build_ast_expr(c, annotation));
+    }
     return SUCCESS;
 }
 
@@ -3722,7 +3718,7 @@ codegen_nameop(compiler *c, location loc,
     }
 
     /* XXX Leave assert here, but handle __doc__ and the like better */
-    //assert(scope || PyUnicode_READ_CHAR(name, 0) == '_');
+    assert(scope || PyUnicode_READ_CHAR(name, 0) == '_');
 
     int op = 0;
     switch (optype) {

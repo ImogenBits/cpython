@@ -321,6 +321,13 @@ build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObje
         Py_DECREF(value);
     }
 
+    if (!PyDict_Contains(namespace, &_Py_ID(__builtins__))) {
+        if (PyDict_SetItem(namespace, &_Py_ID(__builtins__),
+                           PyEval_GetBuiltins()) < 0) {
+            Py_DECREF(code);
+            return NULL;
+        }
+    }
     Py_DECREF(filename);
     return result;
 }
