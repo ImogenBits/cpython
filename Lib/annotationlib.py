@@ -1128,9 +1128,9 @@ def annotations_to_ast(annotations):
     for name, value in annotations.items():
         # we need a name that is unique per value and also shouldn't clash with
         # other namespaces that might be mixed with this
-        value_name = f".annotation_{id(value)}"
+        value_name = f"__annotation_{id(value)}__"
         namespace[value_name] = value
-        annos[name] = ast.Expression(ast.Name(id=value_name))
+        annos[name] = value_name
     return namespace, annos
 
 

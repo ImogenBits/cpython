@@ -8,8 +8,6 @@ from reprlib import recursive_repr
 lazy import copy
 lazy import re
 
-lazy import ast
-
 
 __all__ = ['dataclass',
            'field',
@@ -1744,7 +1742,7 @@ def make_dataclass(cls_name, fields, *, bases=(), namespace=None, init=True,
                     else:
                         from typing import Any
                         namespace = {"Any": Any}
-                    return namespace, ast.Expression(ast.Name(id="Any", ctx=ast.Load()))
+                    return namespace, "Any"
                 case _:
                     raise NotImplementedError
         annos = {

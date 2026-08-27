@@ -2432,13 +2432,15 @@ def eval_annotation_AST(expr, namespace, format):
 
 
 def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
-    annotations, namespace = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
+    namespace, annotations = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
     if annotations is None:
         return None
     elif not isinstance(annotations, dict):
         annotations = {"": annotations}
 
     for name, annotation in annotations.items():
+        if not isinstance(annotation, str):
+            pass
         annotations[name] = ast.parse(annotation, "<annotation>", "eval").body
 
     if format is None:

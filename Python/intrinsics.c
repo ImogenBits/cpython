@@ -279,7 +279,7 @@ build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *consts, PyObje
 }
 
 static PyObject *
-build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObject *namespace)
+build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *namespace, PyObject *asts)
 {
     PyObject *result = PyDict_New();
     if (result == NULL) {
@@ -290,6 +290,15 @@ build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObje
     if (filename == NULL) {
         Py_DECREF(result);
         return NULL;
+    }
+
+    if (!PyDict_Contains(namespace, &_Py_ID(__builtins__))) {
+        if (PyDict_SetItem(namespace, &_Py_ID(__builtins__),
+                           PyEval_GetBuiltins()) < 0) {
+            Py_DECREF(filename);
+            Py_DECREF(result);
+            return NULL;
+        }
     }
 
     PyObject *key, *annotation;
@@ -321,13 +330,6 @@ build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObje
         Py_DECREF(value);
     }
 
-    if (!PyDict_Contains(namespace, &_Py_ID(__builtins__))) {
-        if (PyDict_SetItem(namespace, &_Py_ID(__builtins__),
-                           PyEval_GetBuiltins()) < 0) {
-            Py_DECREF(code);
-            return NULL;
-        }
-    }
     Py_DECREF(filename);
     return result;
 }

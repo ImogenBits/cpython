@@ -789,6 +789,7 @@ codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
         }
         codegen_load_name_into_map(c, loc, name);
     }
+    ADDOP_I(c, loc, SWAP, 2);
     Py_DECREF(name_iter);
     Py_DECREF(ast_names);
     Py_DECREF(ast_data);
