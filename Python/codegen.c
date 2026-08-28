@@ -1169,10 +1169,10 @@ codegen_visit_annexpr(compiler *c, expr_ty annotation)
 static int
 build_ast_size_t(compiler *c, Py_ssize_t value) {
     do {
-        unsigned char byte = value & 0x7F;
-        value >>= 7;
+        unsigned char byte = value & 0x3F;
+        value >>= 6;
         if (value) {
-            byte |= 0x80;
+            byte |= 0x40;
         }
         RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, byte));
     } while (value);

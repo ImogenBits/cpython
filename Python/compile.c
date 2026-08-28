@@ -67,7 +67,7 @@ struct compiler_unit {
 
     instr_sequence *u_instr_sequence; /* codegen output */
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
-    PyBytesWriter *u_ann_ast_data;
+    PyUnicodeWriter *u_ann_ast_data;
 
     int u_nfblocks;
     int u_in_inlined_comp;
@@ -203,7 +203,7 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_static_attributes);
     Py_CLEAR(u->u_deferred_annotations);
     Py_CLEAR(u->u_conditional_annotation_indices);
-    PyBytesWriter_Discard(u->u_ann_ast_data);
+    PyUnicodeWriter_Discard(u->u_ann_ast_data);
     PyMem_Free(u);
 }
 
@@ -853,25 +853,26 @@ _PyCompile_DeferredAnnotations(compiler *c,
 int
 _PyCompile_AnnotationASTAddChar(compiler *c, char data) {
     if (!c->u->u_ann_ast_data) {
-        c->u->u_ann_ast_data = PyBytesWriter_Create(0);
+        c->u->u_ann_ast_data = PyUnicodeWriter_Create(0);
         if (!c->u->u_ann_ast_data) {
             return ERROR;
         }
     }
-    return PyBytesWriter_WriteBytes(c->u->u_ann_ast_data, &data, 1);
+    return PyUnicodeWriter_WriteChar(c->u->u_ann_ast_data, data);
 }
 
 int
 _PyCompile_AnnotationASTFinalize(compiler *c, PyObject **data, PyObject **names) {
     if (!c->u->u_ann_ast_data) {
-        *data = PyBytes_FromString("");
+        *data = PyUnicode_FromString("");
     } else {
-        *data = PyBytesWriter_Finish(c->u->u_ann_ast_data);
+        *data = PyUnicodeWriter_Finish(c->u->u_ann_ast_data);
         c->u->u_ann_ast_data = NULL;
     }
     if (!*data) {
         return ERROR;
     }
+    PyUnicode_InternInPlace(data);
     PyObject *symbols = c->u->u_ste->ste_symbols;
     if (symbols) {
         PyObject *names_raw = PyDict_Keys(symbols);

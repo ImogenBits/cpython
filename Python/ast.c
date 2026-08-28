@@ -1092,38 +1092,37 @@ _PyAST_GetDocString(asdl_stmt_seq *body)
     return NULL;
 }
 
-static char*
-ann_ast_next(Py_buffer *data, Py_ssize_t *pos) {
-    if (*pos >= data->len) {
-        return NULL;
+static Py_UCS1
+ann_ast_next(PyObject *data, Py_ssize_t *pos) {
+    if (*pos >= PyUnicode_GET_LENGTH(data)) {
+        return 0xFF;
     }
-    return (char *) data->buf + (*pos)++;
+    Py_UCS1 *data_ptr = PyUnicode_1BYTE_DATA(data);
+    return data_ptr[(*pos)++];
 }
 
-static char*
-ann_ast_peek(Py_buffer *data, Py_ssize_t *pos) {
-    char *byte = ann_ast_next(data, pos);
-    if (byte) {
-        (*pos)--;
-    }
+static Py_UCS1
+ann_ast_peek(PyObject *data, Py_ssize_t *pos) {
+    Py_UCS1 byte = ann_ast_next(data, pos);
+    (*pos)--;
     return byte;
 }
 
 static int
-ann_ast_size_t(Py_buffer *data, Py_ssize_t *pos, Py_ssize_t *out, PyArena *arena)
+ann_ast_size_t(PyObject *data, Py_ssize_t *pos, Py_ssize_t *out, PyArena *arena)
 {
     Py_ssize_t res = 0;
-    char *curr;
-    size_t read_bytes = 0;
+    Py_UCS1 curr;
+    size_t shift = 0;
     do {
         curr = ann_ast_next(data, pos);
-        if (!curr) {
+        if (curr == 0xFF) {
             return -1;
         }
-        res |= (*curr & 0x7F) << (read_bytes * 7);
-        read_bytes++;
-    } while (*curr & 0x80);
-    if (read_bytes > sizeof(Py_ssize_t)) {
+        res |= (curr & 0x3F) << shift;
+        shift += 6;
+    } while (curr & 0x40);
+    if (shift > 8 * sizeof(Py_ssize_t)) {
         return -1;
     }
     *out = res;
@@ -1131,16 +1130,16 @@ ann_ast_size_t(Py_buffer *data, Py_ssize_t *pos, Py_ssize_t *out, PyArena *arena
 }
 
 static int
-ann_ast_string(Py_buffer *data, Py_ssize_t *pos, PyObject **out, PyArena *arena)
+ann_ast_string(PyObject *data, Py_ssize_t *pos, PyObject **out, PyArena *arena)
 {
     Py_ssize_t len;
     if (ann_ast_size_t(data, pos, &len, arena) < 0) {
         return -1;
     }
-    if (len < 0 || *pos < 0 || *pos > data->len || data->len - *pos < len) {
+    if (len < 0 || *pos < 0 || *pos + len > PyUnicode_GET_LENGTH(data)) {
         return -1;
     }
-    *out = PyUnicode_FromStringAndSize(((char *) data->buf) + *pos, len);
+    *out = PyUnicode_FromStringAndSize((char *)PyUnicode_1BYTE_DATA(data) + *pos, len);
     if (*out == NULL) {
         return -1;
     }
@@ -1149,16 +1148,16 @@ ann_ast_string(Py_buffer *data, Py_ssize_t *pos, PyObject **out, PyArena *arena)
 }
 
 static int
-ann_ast_bytes(Py_buffer *data, Py_ssize_t *pos, PyObject **out, PyArena *arena)
+ann_ast_bytes(PyObject *data, Py_ssize_t *pos, PyObject **out, PyArena *arena)
 {
     Py_ssize_t len;
     if (ann_ast_size_t(data, pos, &len, arena) < 0) {
         return -1;
     }
-    if (len < 0 || *pos < 0 || *pos > data->len || data->len - *pos < len) {
+    if (len < 0 || *pos < 0 || *pos + len > PyUnicode_GET_LENGTH(data)) {
         return -1;
     }
-    *out = PyBytes_FromStringAndSize(((char *) data->buf) + *pos, len);
+    *out = PyBytes_FromStringAndSize((char *)PyUnicode_1BYTE_DATA(data) + *pos, len);
     if (*out == NULL) {
         return -1;
     }
@@ -1167,23 +1166,23 @@ ann_ast_bytes(Py_buffer *data, Py_ssize_t *pos, PyObject **out, PyArena *arena)
 }
 
 static int
-ann_ast_double(Py_buffer *data, Py_ssize_t *pos, double *out, PyArena *arena)
+ann_ast_double(PyObject *data, Py_ssize_t *pos, double *out, PyArena *arena)
 {
-    if (*pos < 0 || *pos > data->len || data->len - *pos < (Py_ssize_t)sizeof(double)) {
+    if (*pos < 0 || *pos + (Py_ssize_t) sizeof(double) >= PyUnicode_GET_LENGTH(data)) {
         return -1;
     }
     for (size_t i = 0; i < sizeof(double); i++) {
-        char *curr = ann_ast_next(data, pos);
-        if (!curr) {
+        Py_UCS1 curr = ann_ast_next(data, pos);
+        if (curr == 0xFF) {
             return -1;
         }
-        ((char *) out)[i] = *curr;
+        ((char *) out)[i] = curr;
     }
     return 0;
 }
 
 static int
-ann_ast_const(Py_buffer *data, Py_ssize_t *pos, char kind, PyObject **out, PyArena *arena)
+ann_ast_const(PyObject *data, Py_ssize_t *pos, char kind, PyObject **out, PyArena *arena)
 {
     switch (kind - Slice_kind - 2) {
         case 0:
@@ -1255,7 +1254,7 @@ ann_ast_const(Py_buffer *data, Py_ssize_t *pos, char kind, PyObject **out, PyAre
 
 #define DEFINE_ANN_AST_SEQ_FUNC(TYPE) \
 static int \
-ann_ast_ ## TYPE ## _seq(Py_buffer *data, Py_ssize_t *pos, \
+ann_ast_ ## TYPE ## _seq(PyObject *data, Py_ssize_t *pos, \
             asdl_ ## TYPE ## _seq **out, PyArena *arena) \
 { \
     Py_ssize_t len; \
@@ -1278,19 +1277,19 @@ ann_ast_ ## TYPE ## _seq(Py_buffer *data, Py_ssize_t *pos, \
 }
 
 static int
-ann_ast_expr(Py_buffer *data, Py_ssize_t *pos,
+ann_ast_expr(PyObject *data, Py_ssize_t *pos,
                 expr_ty *out, PyArena *arena);
 DEFINE_ANN_AST_SEQ_FUNC(expr);
 
+
 static int
-ann_ast_arg(Py_buffer *data, Py_ssize_t *pos,
-            arg_ty *out, PyArena *arena)
+ann_ast_arg(PyObject *data, Py_ssize_t *pos, arg_ty *out, PyArena *arena)
 {
-    char *next = ann_ast_peek(data, pos);
-    if (!next) {
+    Py_UCS1 next = ann_ast_peek(data, pos);
+    if (next == 0xFF) {
         return -1;
     }
-    if (*next == 0) {
+    if (next == 0) {
         *out = NULL;
         return 0;
     }
@@ -1315,8 +1314,7 @@ ann_ast_arg(Py_buffer *data, Py_ssize_t *pos,
 DEFINE_ANN_AST_SEQ_FUNC(arg);
 
 static int
-ann_ast_arguments(Py_buffer *data, Py_ssize_t *pos,
-                arguments_ty *out, PyArena *arena)
+ann_ast_arguments(PyObject *data, Py_ssize_t *pos, arguments_ty *out, PyArena *arena)
 {
     asdl_arg_seq *posonlyargs;
     asdl_arg_seq *args;
@@ -1355,8 +1353,7 @@ ann_ast_arguments(Py_buffer *data, Py_ssize_t *pos,
 }
 
 static int
-ann_ast_comprehension(Py_buffer *data, Py_ssize_t *pos,
-                comprehension_ty *out, PyArena *arena)
+ann_ast_comprehension(PyObject *data, Py_ssize_t *pos, comprehension_ty *out, PyArena *arena)
 {
     expr_ty target;
     expr_ty iter;
@@ -1384,8 +1381,7 @@ DEFINE_ANN_AST_SEQ_FUNC(comprehension);
 
 
 static int
-ann_ast_int_seq(Py_buffer *data, Py_ssize_t *pos,
-            asdl_int_seq **out, PyArena *arena)
+ann_ast_int_seq(PyObject *data, Py_ssize_t *pos, asdl_int_seq **out, PyArena *arena)
 {
     Py_ssize_t len;
     if (ann_ast_size_t(data, pos, &len, arena) < 0) {
@@ -1407,8 +1403,7 @@ ann_ast_int_seq(Py_buffer *data, Py_ssize_t *pos,
 }
 
 static int
-ann_ast_keyword(Py_buffer *data, Py_ssize_t *pos,
-                keyword_ty *out, PyArena *arena)
+ann_ast_keyword(PyObject *data, Py_ssize_t *pos, keyword_ty *out, PyArena *arena)
 {
     identifier arg;
     expr_ty value;
@@ -1427,29 +1422,28 @@ ann_ast_keyword(Py_buffer *data, Py_ssize_t *pos,
 DEFINE_ANN_AST_SEQ_FUNC(keyword);
 
 static int
-ann_ast_expr(Py_buffer *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
+ann_ast_expr(PyObject *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
 {
-    char *next = ann_ast_next(data, pos);
-    if (!next) {
+    Py_UCS1 next = ann_ast_next(data, pos);
+    if (next == 0xFF) {
         *out = NULL;
         return -1;
     }
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return -1;
     }
-    switch (*next) {
+    switch (next) {
     case 0:
         *out = NULL;
         break;
     case BoolOp_kind: {
         next = ann_ast_next(data, pos);
-        if (!next) goto failed;
-        boolop_ty op = *next;
-        Py_ssize_t len;
-        if (ann_ast_size_t(data, pos, &len, arena) < 0) {
+        if (next == 0xFF) {
             goto failed;
         }
-        if (len < 0 ) {
+        boolop_ty op = next;
+        Py_ssize_t len;
+        if (ann_ast_size_t(data, pos, &len, arena) < 0) {
             goto failed;
         }
         Py_ssize_t i;
@@ -1694,11 +1688,11 @@ ann_ast_expr(Py_buffer *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
         if (ann_ast_expr(data, pos, &value, arena) < 0) {
             goto failed;
         }
-        char *curr = ann_ast_next(data, pos);
-        if (!curr) {
+        Py_UCS1 curr = ann_ast_next(data, pos);
+        if (curr == 0xFF) {
             return -1;
         }
-        if (ann_ast_const(data, pos, *curr, &str, arena) < 0 || !str) {
+        if (ann_ast_const(data, pos, curr, &str, arena) < 0 || !str) {
             goto failed;
         }
         if (ann_ast_size_t(data, pos, &conversion, arena) < 0) {
@@ -1841,7 +1835,7 @@ ann_ast_expr(Py_buffer *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
     case Slice_kind + 10:
     case Slice_kind + 11: {
         constant value;
-        if (ann_ast_const(data, pos, *next, &value, arena) < 0) {
+        if (ann_ast_const(data, pos, next, &value, arena) < 0) {
             goto failed;
         }
         *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
@@ -1862,40 +1856,37 @@ ann_ast_expr(Py_buffer *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
 }
 
 PyObject *
-_PyAST_FromAnnotationData(PyObject *data_bytes, PyObject *indices)
+_PyAST_FromAnnotationData(PyObject *data, PyObject *indices)
 {
-    if (!PyBytes_CheckExact(data_bytes)) {
-        PyErr_SetString(PyExc_TypeError, "expected a bytes object for data");
-        return NULL;
-    }
-    Py_buffer data;
-    if (PyObject_GetBuffer(data_bytes, &data, 0) < 0) {
+    if (!data || !PyUnicode_CheckExact(data)) {
+        PyErr_SetString(PyExc_TypeError, "expected a string for data");
         return NULL;
     }
     PyArena *arena = _PyArena_New();
     if (arena == NULL) {
-        PyBuffer_Release(&data);
         return NULL;
     }
     PyObject *out = PyDict_New();
     if (out == NULL) {
         _PyArena_Free(arena);
-        PyBuffer_Release(&data);
         return NULL;
     }
     Py_ssize_t i = 0;
     PyObject *name = NULL, *index = NULL;
-    while (i < data.len) {
+    char *error_msg = NULL;
+    while (i < PyUnicode_GET_LENGTH(data)) {
         Py_ssize_t idx = 0;
-        char const * const start = ann_ast_peek(&data, &i);
-        if (!start) {
+        Py_UCS1 start = ann_ast_peek(data, &i);
+        if (start == 0xFF) {
             goto parsing_err;
         }
         if (start != 0) {
-            if (ann_ast_string(&data, &i, &name, arena) < 0 || !name) {
+            if (ann_ast_string(data, &i, &name, arena) < 0 || !name) {
+                error_msg = "parsing attribute name";
                 goto parsing_err;
             }
-            if (ann_ast_size_t(&data, &i, &idx, arena) < 0) {
+            if (ann_ast_size_t(data, &i, &idx, arena) < 0) {
+                error_msg = "parsing conditional attribute index";
                 goto parsing_err;
             }
             index = PyLong_FromSsize_t(idx - 1);
@@ -1904,7 +1895,8 @@ _PyAST_FromAnnotationData(PyObject *data_bytes, PyObject *indices)
             }
         }
         expr_ty expr_ast;
-        if (ann_ast_expr(&data, &i, &expr_ast, arena) < 0) {
+        if (ann_ast_expr(data, &i, &expr_ast, arena) < 0) {
+            error_msg = "parsing annotation expression";
             goto parsing_err;
         }
         if (idx != 0 && PySet_Check(indices) && !PySet_Contains(indices, index)) {
@@ -1913,10 +1905,12 @@ _PyAST_FromAnnotationData(PyObject *data_bytes, PyObject *indices)
         }
         mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
         if (!mod_ast) {
+            error_msg = "constructing annotation";
             goto parsing_err;
         }
         PyObject *expr_obj = PyAST_mod2obj(mod_ast);
         if (!expr_obj) {
+            error_msg = "constructing annotation object";
             goto parsing_err;
         }
         if (start == 0) {
@@ -1925,6 +1919,7 @@ _PyAST_FromAnnotationData(PyObject *data_bytes, PyObject *indices)
             break;
         } else {
             if (PyDict_SetItem(out, name, expr_obj) < 0) {
+                error_msg = "setting annotation in dictionary";
                 goto parsing_err;
             }
             Py_DECREF(name);
@@ -1933,22 +1928,19 @@ _PyAST_FromAnnotationData(PyObject *data_bytes, PyObject *indices)
         }
     }
     _PyArena_Free(arena);
-    if (i != data.len) {
-        PyBuffer_Release(&data);
+    if (i != PyUnicode_GET_LENGTH(data)) {
         PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
         return NULL;
     }
-    PyBuffer_Release(&data);
     return out;
 parsing_err:
     _PyArena_Free(arena);
-    PyBuffer_Release(&data);
     if (!PyErr_Occurred()) {
-        PyObject *repr = PyObject_Repr(data_bytes);
+        PyObject *repr = PyObject_Repr(data);
         if (!repr) {
-            PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
+            PyErr_Format(PyExc_RuntimeError, "error %s with binary AST data", error_msg);
         } else {
-            PyErr_Format(PyExc_RuntimeError, "error parsing binary AST data: %s", PyUnicode_AsUTF8(repr));
+            PyErr_Format(PyExc_RuntimeError, "error %s with binary AST data: %s", error_msg, PyUnicode_AsUTF8(repr));
             Py_DECREF(repr);
         }
     }
