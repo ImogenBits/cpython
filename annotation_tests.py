@@ -67,7 +67,7 @@ for package in PACKAGES:
     for mod in iter_modules(package):
         for annotate in iter_annotates(mod):
             time_start = timeit.default_timer()
-            annotate(Format.VALUE)
+            eval_annotate_as_types(annotate, format=Format.VALUE)
             time += timeit.default_timer() - time_start
 print(f"Total time taken: {time}")
 
