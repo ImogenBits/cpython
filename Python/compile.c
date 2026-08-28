@@ -67,7 +67,7 @@ struct compiler_unit {
 
     instr_sequence *u_instr_sequence; /* codegen output */
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
-    PyBytesWriter *u_ann_ast_data;
+    PyUnicodeWriter *u_ann_ast_data;
     PyObject *u_ann_ast_consts;
     PyObject *u_ann_ast_names;
 
@@ -205,7 +205,7 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_static_attributes);
     Py_CLEAR(u->u_deferred_annotations);
     Py_CLEAR(u->u_conditional_annotation_indices);
-    PyBytesWriter_Discard(u->u_ann_ast_data);
+    PyUnicodeWriter_Discard(u->u_ann_ast_data);
     Py_CLEAR(u->u_ann_ast_consts);
     Py_CLEAR(u->u_ann_ast_names);
     PyMem_Free(u);
@@ -859,12 +859,12 @@ _PyCompile_DeferredAnnotations(compiler *c,
 int
 _PyCompile_AnnotationASTAddChar(compiler *c, char data) {
     if (!c->u->u_ann_ast_data) {
-        c->u->u_ann_ast_data = PyBytesWriter_Create(0);
+        c->u->u_ann_ast_data = PyUnicodeWriter_Create(0);
         if (!c->u->u_ann_ast_data) {
             return ERROR;
         }
     }
-    return PyBytesWriter_WriteBytes(c->u->u_ann_ast_data, &data, 1);
+    return PyUnicodeWriter_WriteChar(c->u->u_ann_ast_data, data);
 }
 
 Py_ssize_t
@@ -894,14 +894,15 @@ int
 _PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **names) {
     PyObject *data;
     if (!c->u->u_ann_ast_data) {
-        data = PyBytes_FromString("");
+        data = PyUnicode_FromString("");
     } else {
-        data = PyBytesWriter_Finish(c->u->u_ann_ast_data);
+        data = PyUnicodeWriter_Finish(c->u->u_ann_ast_data);
         c->u->u_ann_ast_data = NULL;
     }
     if (!data) {
         return ERROR;
     }
+    PyUnicode_InternInPlace(&data);
     if (!c->u->u_ann_ast_consts) {
         *consts = PyTuple_New(1);
         PyTuple_SET_ITEM(*consts, 0, data);

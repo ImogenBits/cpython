@@ -1092,34 +1092,32 @@ _PyAST_GetDocString(asdl_stmt_seq *body)
     return NULL;
 }
 
-static char*
-ann_ast_next(Py_buffer *data, Py_ssize_t *pos) {
-    if (*pos >= data->len) {
-        return NULL;
+static Py_UCS1
+ann_ast_next(PyObject *data, Py_ssize_t *pos) {
+    if (*pos >= PyUnicode_GET_LENGTH(data)) {
+        return 0;
     }
-    return &((char *) data->buf)[(*pos)++];
+    Py_UCS1 *data_ptr = PyUnicode_1BYTE_DATA(data);
+    return data_ptr[(*pos)++];
 }
 
 static int
-ann_ast_size_t(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_size_t(PyObject *data, PyObject *consts, Py_ssize_t *pos,
                 Py_ssize_t *out, PyArena *arena)
 {
     Py_ssize_t res = 0;
-    char *curr;
+    Py_UCS1 curr;
     do {
         curr = ann_ast_next(data, pos);
-        if (!curr) {
-            return -1;
-        }
-        res = (res << 7) | (*curr & 0x7F);
-    } while (*curr & 0x80);
+        res = (res << 6) | (curr & 0x3F);
+    } while (curr & 0x40);
     *out = res;
     return 0;
 }
 
 #define DEFINE_ANN_AST_SEQ_FUNC(TYPE) \
 static int \
-ann_ast_ ## TYPE ## _seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos, \
+ann_ast_ ## TYPE ## _seq(PyObject *data, PyObject *consts, Py_ssize_t *pos, \
             asdl_ ## TYPE ## _seq **out, PyArena *arena) \
 { \
     Py_ssize_t len; \
@@ -1142,12 +1140,12 @@ ann_ast_ ## TYPE ## _seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos, \
 }
 
 static int
-ann_ast_expr(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_expr(PyObject *data, PyObject *consts, Py_ssize_t *pos,
                 expr_ty *out, PyArena *arena);
 DEFINE_ANN_AST_SEQ_FUNC(expr);
 
 static int
-ann_ast_const(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_const(PyObject *data, PyObject *consts, Py_ssize_t *pos,
                 PyObject **out, PyArena *arena)
 {
     Py_ssize_t i;
@@ -1166,14 +1164,11 @@ ann_ast_const(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
 }
 
 static int
-ann_ast_arg(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_arg(PyObject *data, PyObject *consts, Py_ssize_t *pos,
             arg_ty *out, PyArena *arena)
 {
-    char *next = ann_ast_next(data, pos);
-    if (!next) {
-        return -1;
-    }
-    if (*next == 0) {
+    Py_UCS1 next = ann_ast_next(data, pos);
+    if (next == 0) {
         *out = NULL;
         return 0;
     }
@@ -1199,7 +1194,7 @@ ann_ast_arg(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
 DEFINE_ANN_AST_SEQ_FUNC(arg);
 
 static int
-ann_ast_arguments(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_arguments(PyObject *data, PyObject *consts, Py_ssize_t *pos,
                 arguments_ty *out, PyArena *arena)
 {
     asdl_arg_seq *posonlyargs;
@@ -1239,7 +1234,7 @@ ann_ast_arguments(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
 }
 
 static int
-ann_ast_comprehension(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_comprehension(PyObject *data, PyObject *consts, Py_ssize_t *pos,
                 comprehension_ty *out, PyArena *arena)
 {
     expr_ty target;
@@ -1268,7 +1263,7 @@ DEFINE_ANN_AST_SEQ_FUNC(comprehension);
 
 
 static int
-ann_ast_int_seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_int_seq(PyObject *data, PyObject *consts, Py_ssize_t *pos,
             asdl_int_seq **out, PyArena *arena)
 {
     Py_ssize_t len;
@@ -1291,7 +1286,7 @@ ann_ast_int_seq(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
 }
 
 static int
-ann_ast_keyword(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_keyword(PyObject *data, PyObject *consts, Py_ssize_t *pos,
                 keyword_ty *out, PyArena *arena)
 {
     identifier arg;
@@ -1311,40 +1306,36 @@ ann_ast_keyword(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
 DEFINE_ANN_AST_SEQ_FUNC(keyword);
 
 static int
-ann_ast_expr(Py_buffer *data, PyObject *consts, Py_ssize_t *pos,
+ann_ast_expr(PyObject *data, PyObject *consts, Py_ssize_t *pos,
                 expr_ty *out, PyArena *arena)
 {
-    char *next = ann_ast_next(data, pos);
-    if (!next) {
-        *out = NULL;
-        return -1;
-    }
+    Py_UCS1 next = ann_ast_next(data, pos);
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return -1;
     }
-    switch (*next) {
+    switch (next) {
     case 0:
         *out = NULL;
         break;
     case BoolOp_kind: {
         next = ann_ast_next(data, pos);
         if (!next) goto failed;
-        boolop_ty op = *next;
-                        next = ann_ast_next(data, pos);
-                        if (!next) goto failed;
-                        Py_ssize_t len = *next;
-                        Py_ssize_t i;
-                        asdl_expr_seq *values = _Py_asdl_expr_seq_new(len, arena);
-                        if (!values) {
-                            goto failed;
-                        }
-                        for (i = 0; i < len; i++) {
-                            expr_ty value;
-                            if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
-                                goto failed;
-                            }
-                            asdl_seq_SET(values, i, value);
-                        }
+        boolop_ty op = next;
+        Py_ssize_t len;
+        next = ann_ast_size_t(data, consts, pos, &len, arena);
+        if (!next) goto failed;
+        Py_ssize_t i;
+        asdl_expr_seq *values = _Py_asdl_expr_seq_new(len, arena);
+        if (!values) {
+            goto failed;
+        }
+        for (i = 0; i < len; i++) {
+            expr_ty value;
+            if (ann_ast_expr(data, consts, pos, &value, arena) < 0) {
+                goto failed;
+            }
+            asdl_seq_SET(values, i, value);
+        }
         *out = _PyAST_BoolOp(op, values, 1, 0, 1, 0, arena);
         if (*out == NULL) {
             goto failed;
@@ -1735,37 +1726,40 @@ _PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
         PyErr_SetString(PyExc_TypeError, "expected a tuple for consts");
         return NULL;
     }
-    Py_buffer data;
-    if (PyObject_GetBuffer(PyTuple_GetItem(consts, 0), &data, 0) < 0) {
+    PyObject *data = PyTuple_GetItem(consts, 0);
+    if (!data || !PyUnicode_Check(data)) {
+        PyErr_SetString(PyExc_TypeError, "expected a string for consts[0]");
         return NULL;
     }
     PyArena *arena = _PyArena_New();
     if (arena == NULL) {
-        PyBuffer_Release(&data);
         return NULL;
     }
     PyObject *out = PyDict_New();
     if (out == NULL) {
         _PyArena_Free(arena);
-        PyBuffer_Release(&data);
         return NULL;
     }
     Py_ssize_t i = 0;
     PyObject *name = NULL, *index = NULL;
-    while (i < data.len) {
-        if (ann_ast_const(&data, consts, &i, &name, arena) < 0 || !name) {
+    while (i < PyUnicode_GET_LENGTH(data)) {
+        if (ann_ast_const(data, consts, &i, &name, arena) < 0 || !name) {
+            PyErr_SetString(PyExc_RuntimeError, "error parsing attribute name");
             goto parsing_err;
         }
         Py_ssize_t idx;
-        if (ann_ast_size_t(&data, consts, &i, &idx, arena) < 0) {
+        if (ann_ast_size_t(data, consts, &i, &idx, arena) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "error parsing conditional attribute index");
             goto parsing_err;
         }
         index = PyLong_FromSsize_t(idx - 1);
         if (!index) {
+            PyErr_SetString(PyExc_RuntimeError, "error constructing conditional attribute index");
             goto parsing_err;
         }
         expr_ty expr_ast;
-        if (ann_ast_expr(&data, consts, &i, &expr_ast, arena) < 0) {
+        if (ann_ast_expr(data, consts, &i, &expr_ast, arena) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "error parsing annotation expression");
             goto parsing_err;
         }
         if (idx != 0 && PySet_Check(indices) && !PySet_Contains(indices, index)) {
@@ -1774,13 +1768,16 @@ _PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
         }
         mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
         if (!mod_ast) {
+            PyErr_SetString(PyExc_RuntimeError, "error constructing annotation");
             goto parsing_err;
         }
         PyObject *expr_obj = PyAST_mod2obj(mod_ast);
         if (!expr_obj) {
+            PyErr_SetString(PyExc_RuntimeError, "error constructing annotation object");
             goto parsing_err;
         }
         if (PyDict_SetItem(out, name, expr_obj) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "error setting annotation in dictionary");
             goto parsing_err;
         }
         Py_DECREF(name);
@@ -1788,16 +1785,13 @@ _PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
         Py_DECREF(index);
     }
     _PyArena_Free(arena);
-    if (i != data.len) {
-        PyBuffer_Release(&data);
+    if (i != PyUnicode_GET_LENGTH(data)) {
         PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
         return NULL;
     }
-    PyBuffer_Release(&data);
     return out;
 parsing_err:
     _PyArena_Free(arena);
-    PyBuffer_Release(&data);
     if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
     }
