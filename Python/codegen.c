@@ -792,7 +792,6 @@ codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
         Py_INCREF(Py_None);
         ADDOP_LOAD_CONST_NEW(c, loc, Py_None);
     }
-    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_AST);
 
     PyObject *value_with_fake_globals = PyLong_FromLong(_Py_ANNOTATE_FORMAT_VALUE_WITH_FAKE_GLOBALS);
     if (value_with_fake_globals == NULL) {
@@ -804,10 +803,12 @@ codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
     ADDOP_LOAD_CONST_NEW(c, loc, value_with_fake_globals);
     ADDOP_I(c, loc, COMPARE_OP, (Py_GT << 5) | compare_masks[Py_GT]);
     ADDOP_JUMP(c, loc, POP_JUMP_IF_FALSE, value);
+    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_AST);
     ADDOP_I(c, loc, BUILD_TUPLE, 2);
     ADDOP(c, loc, RETURN_VALUE);
     USE_LABEL(c, value);
-    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_VALUE);
+    ADDOP_I(c, loc, BUILD_TUPLE, 3);
+    ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_BUILD_ANNOTATION_VALUE);
     ADDOP(c, loc, RETURN_VALUE);
     return SUCCESS;
 }

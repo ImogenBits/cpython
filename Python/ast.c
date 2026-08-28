@@ -1720,7 +1720,126 @@ ann_ast_expr(PyObject *data, PyObject *consts, Py_ssize_t *pos,
 }
 
 PyObject *
-_PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
+_PyAST_ResolveAnnotation(expr_ty expr, PyObject *namespace,
+                         PyObject *unpack, PyObject *union_type)
+{
+    switch (expr->kind) {
+    case Attribute_kind: {
+        PyObject *value = _PyAST_ResolveAnnotation(expr->v.Attribute.value,
+                                                   namespace, unpack, union_type);
+        if (value == NULL) {
+            return NULL;
+        }
+        PyObject *result = PyObject_GetAttr(value, expr->v.Attribute.attr);
+        Py_DECREF(value);
+        return result;
+    }
+    case Subscript_kind: {
+        PyObject *value = _PyAST_ResolveAnnotation(expr->v.Subscript.value,
+                                                   namespace, unpack, union_type);
+        if (value == NULL) {
+            return NULL;
+        }
+        PyObject *slice;
+        if (expr->v.Subscript.slice->kind == Tuple_kind) {
+            asdl_expr_seq *elts = expr->v.Subscript.slice->v.Tuple.elts;
+            slice = PyTuple_New(asdl_seq_LEN(elts));
+            if (slice == NULL) {
+                Py_DECREF(value);
+                return NULL;
+            }
+            for (Py_ssize_t i = 0; i < asdl_seq_LEN(elts); i++) {
+                PyObject *item = _PyAST_ResolveAnnotation(asdl_seq_GET(elts, i),
+                                                          namespace, unpack,
+                                                          union_type);
+                if (item == NULL) {
+                    Py_DECREF(value);
+                    Py_DECREF(slice);
+                    return NULL;
+                }
+                PyTuple_SET_ITEM(slice, i, item);
+            }
+        } else {
+            slice = _PyAST_ResolveAnnotation(expr->v.Subscript.slice,
+                                             namespace, unpack, union_type);
+            if (slice == NULL) {
+                Py_DECREF(value);
+                return NULL;
+            }
+        }
+        PyObject *result = PyObject_GetItem(value, slice);
+        Py_DECREF(value);
+        Py_DECREF(slice);
+        return result;
+    }
+    case Starred_kind: {
+        PyObject *value = _PyAST_ResolveAnnotation(expr->v.Starred.value,
+                                                   namespace, unpack, union_type);
+        if (value == NULL) {
+            return NULL;
+        }
+        PyObject *result = PyObject_GetItem(unpack, value);
+        Py_DECREF(value);
+        return result;
+    }
+    case Name_kind:
+        return PyObject_GetItem(namespace, expr->v.Name.id);
+    case List_kind: {
+        asdl_expr_seq *elts = expr->v.List.elts;
+        PyObject *result = PyList_New(asdl_seq_LEN(elts));
+        if (result == NULL) {
+            return NULL;
+        }
+        for (Py_ssize_t i = 0; i < asdl_seq_LEN(elts); i++) {
+            PyObject *item = _PyAST_ResolveAnnotation(asdl_seq_GET(elts, i),
+                                                      namespace, unpack,
+                                                      union_type);
+            if (item == NULL) {
+                Py_DECREF(result);
+                return NULL;
+            }
+            PyList_SET_ITEM(result, i, item);
+        }
+        return result;
+    }
+    case BinOp_kind:
+        if (expr->v.BinOp.op == BitOr) {
+            PyObject *left = _PyAST_ResolveAnnotation(expr->v.BinOp.left,
+                                                      namespace, unpack,
+                                                      union_type);
+            if (left == NULL) {
+                return NULL;
+            }
+            PyObject *right = _PyAST_ResolveAnnotation(expr->v.BinOp.right,
+                                                       namespace, unpack,
+                                                       union_type);
+            if (right == NULL) {
+                Py_DECREF(left);
+                return NULL;
+            }
+            PyObject *items = PyTuple_Pack(2, left, right);
+            Py_DECREF(left);
+            Py_DECREF(right);
+            if (items == NULL) {
+                return NULL;
+            }
+            PyObject *result = PyObject_GetItem(union_type, items);
+            Py_DECREF(items);
+            return result;
+        }
+        break;
+    case Constant_kind:
+        return Py_NewRef(expr->v.Constant.value);
+    default:
+        break;
+    }
+    PyErr_SetString(PyExc_ValueError, "invalid type expression");
+    return NULL;
+}
+
+PyObject *
+_PyAST_FromAnnotationData(PyObject *consts, PyObject *indices, int to_value,
+                            PyObject *namespace, PyObject *unpack, PyObject *union_type)
 {
     if (!PyTuple_Check(consts) || PyTuple_Size(consts) < 1) {
         PyErr_SetString(PyExc_TypeError, "expected a tuple for consts");
@@ -1766,22 +1885,30 @@ _PyAST_FromAnnotationData(PyObject *consts, PyObject *indices)
             Py_DECREF(index);
             continue;
         }
-        mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
-        if (!mod_ast) {
-            PyErr_SetString(PyExc_RuntimeError, "error constructing annotation");
-            goto parsing_err;
+        PyObject *value = NULL;
+        if (to_value) {
+            value = _PyAST_ResolveAnnotation(expr_ast, namespace, unpack, union_type);
+            if (!value) {
+                goto parsing_err;
+            }
+        } else {
+            mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
+            if (!mod_ast) {
+                PyErr_SetString(PyExc_RuntimeError, "error constructing annotation");
+                goto parsing_err;
+            }
+            value = PyAST_mod2obj(mod_ast);
+            if (!value) {
+                PyErr_SetString(PyExc_RuntimeError, "error constructing annotation object");
+                goto parsing_err;
+            }
         }
-        PyObject *expr_obj = PyAST_mod2obj(mod_ast);
-        if (!expr_obj) {
-            PyErr_SetString(PyExc_RuntimeError, "error constructing annotation object");
-            goto parsing_err;
-        }
-        if (PyDict_SetItem(out, name, expr_obj) < 0) {
+        if (PyDict_SetItem(out, name, value) < 0) {
             PyErr_SetString(PyExc_RuntimeError, "error setting annotation in dictionary");
             goto parsing_err;
         }
+        Py_DECREF(value);
         Py_DECREF(name);
-        Py_DECREF(expr_obj);
         Py_DECREF(index);
     }
     _PyArena_Free(arena);
