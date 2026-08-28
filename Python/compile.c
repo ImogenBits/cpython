@@ -69,7 +69,6 @@ struct compiler_unit {
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
     PyUnicodeWriter *u_ann_ast_data;
     PyObject *u_ann_ast_consts;
-    PyObject *u_ann_ast_names;
 
     int u_nfblocks;
     int u_in_inlined_comp;
@@ -207,7 +206,6 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_conditional_annotation_indices);
     PyUnicodeWriter_Discard(u->u_ann_ast_data);
     Py_CLEAR(u->u_ann_ast_consts);
-    Py_CLEAR(u->u_ann_ast_names);
     PyMem_Free(u);
 }
 
@@ -710,7 +708,6 @@ _PyCompile_EnterScope(compiler *c, identifier name, int scope_type,
 
     u->u_ann_ast_data = NULL;
     u->u_ann_ast_consts = NULL;
-    u->u_ann_ast_names = NULL;
 
     u->u_instr_sequence = (instr_sequence*)_PyInstructionSequence_New();
     if (!u->u_instr_sequence) {
@@ -880,17 +877,6 @@ _PyCompile_AnnotationASTAddConst(compiler *c, PyObject *o) {
 }
 
 int
-_PyCompile_AnnotationASTAddName(compiler *c, PyObject *name) {
-    if (!c->u->u_ann_ast_names) {
-        c->u->u_ann_ast_names = PySet_New(NULL);
-        if (!c->u->u_ann_ast_names) {
-            return ERROR;
-        }
-    }
-    return PySet_Add(c->u->u_ann_ast_names, name);
-}
-
-int
 _PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **names) {
     PyObject *data;
     if (!c->u->u_ann_ast_data) {
@@ -920,11 +906,11 @@ _PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **name
             return ERROR;
         }
     }
-    if (c->u->u_ann_ast_names) {
-        *names = c->u->u_ann_ast_names;
-        c->u->u_ann_ast_names = NULL;
+    PyObject *symbols = c->u->u_ste->ste_symbols;
+    if (symbols) {
+        *names = PyDict_Keys(symbols);
     } else {
-        *names = PySet_New(NULL);
+        *names = PyList_New(0);
         if (!*names) {
             Py_DECREF(*consts);
             *consts = NULL;
