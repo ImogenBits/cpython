@@ -1447,9 +1447,6 @@ build_ast_expr(compiler *c, expr_ty expr)
         }
         break;
     case Name_kind:
-        if (expr->v.Name.ctx == Load) {
-            _PyCompile_AnnotationASTAddName(c, expr->v.Name.id);
-        }
         if (build_ast_const(c, expr->v.Name.id)) {
             goto failed;
         }
