@@ -907,7 +907,25 @@ _PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **name
     }
     PyObject *symbols = c->u->u_ste->ste_symbols;
     if (symbols) {
-        *names = PyDict_Keys(symbols);
+        PyObject *names_raw = PyDict_Keys(symbols);
+        _Py_DECLARE_STR(format, ".format");
+        *names = PyList_New(0);
+        if (!*names) {
+            return ERROR;
+        }
+        for (Py_ssize_t i = 0; i < PyList_Size(names_raw); i++) {
+            PyObject *name = PyList_GetItem(names_raw, i);
+            if (!name) {
+                return ERROR;
+            }
+            if (!PyUnicode_Equal(name, &_Py_STR(format))) {
+                if (PyList_Append(*names, name)) {
+                    return ERROR;
+                }
+
+            }
+        }
+        Py_DECREF(names_raw);
     } else {
         *names = PyList_New(0);
         if (!*names) {

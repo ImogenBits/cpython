@@ -770,18 +770,20 @@ codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
 {
     PyObject *ast_data, *ast_names, *name_iter, *name;
     RETURN_IF_ERROR(_PyCompile_AnnotationASTFinalize(c, &ast_data, &ast_names));
-    name_iter = PyObject_GetIter(ast_names);
-    if (!name_iter) {
-        return ERROR;
-    }
     ADDOP_I(c, loc, BUILD_MAP, 0);
-    while (PyIter_NextItem(name_iter, &name)) {
-        if (!name) {
+    if (!(FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS)) {
+        name_iter = PyObject_GetIter(ast_names);
+        if (!name_iter) {
             return ERROR;
         }
-        codegen_load_name_into_map(c, loc, name);
+        while (PyIter_NextItem(name_iter, &name)) {
+            if (!name) {
+                return ERROR;
+            }
+            codegen_load_name_into_map(c, loc, name);
+        }
+        Py_DECREF(name_iter);
     }
-    Py_DECREF(name_iter);
     Py_DECREF(ast_names);
     ADDOP_LOAD_CONST_NEW(c, loc, ast_data);
     if (scope_type == COMPILE_SCOPE_CLASS) {
@@ -3722,6 +3724,9 @@ codegen_nameop(compiler *c, location loc,
     }
 
     /* XXX Leave assert here, but handle __doc__ and the like better */
+    if (!scope && PyUnicode_READ_CHAR(name, 0) != '_') {
+        printf("ASSERT qualname=%s name=%s scope=%d\n", PyUnicode_AsUTF8(SYMTABLE_ENTRY(c)->ste_function_name), PyUnicode_AsUTF8(name), scope);
+    }
     assert(scope || PyUnicode_READ_CHAR(name, 0) == '_');
 
     int op = 0;
