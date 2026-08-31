@@ -1165,13 +1165,50 @@ codegen_visit_annexpr(compiler *c, expr_ty annotation)
     return SUCCESS;
 }
 
+
 static int
 build_ast_size_t(compiler *c, Py_ssize_t value) {
     do {
-        char val = ((value > 127) << 7) | (value & 0x7F);
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, val));
-        value = value >> 7;
+        unsigned char byte = value & 0x7F;
+        value >>= 7;
+        if (value) {
+            byte |= 0x80;
+        }
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, byte));
     } while (value);
+    return SUCCESS;
+}
+
+static int
+build_ast_string(compiler *c, PyObject *value) {
+    Py_ssize_t len;
+    const char *s = NULL;
+    if (PyUnicode_CheckExact(value)) {
+        s = PyUnicode_AsUTF8AndSize(value, &len);
+    } else if (PyBytes_CheckExact(value)) {
+        RETURN_IF_ERROR(PyBytes_AsStringAndSize(value, (char **) &s, &len));
+    } else {
+        PyErr_SetString(PyExc_TypeError, "value must be str or bytes");
+        return ERROR;
+    }
+    if (!s) {
+        return ERROR;
+    }
+    RETURN_IF_ERROR(build_ast_size_t(c, len));
+    for (Py_ssize_t i = 0; i < len; i++) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, s[i]));
+    }
+    return SUCCESS;
+}
+
+static int
+build_ast_double(compiler *c, double value) {
+    if (value == -1.0 && PyErr_Occurred()) {
+        return ERROR;
+    }
+    for (size_t i = 0; i < sizeof(double); i++) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, ((char*) &value)[i]));
+    }
     return SUCCESS;
 }
 
@@ -1180,12 +1217,41 @@ build_ast_const(compiler *c, PyObject *value) {
     if (!value) {
         RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 0));
         return SUCCESS;
-    }
-    Py_ssize_t pos = _PyCompile_AnnotationASTAddConst(c, value);
-    if (pos == ERROR) {
+    } else if (PyUnicode_CheckExact(value)) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 1));
+        RETURN_IF_ERROR(build_ast_string(c, value));
+    } else if (PyBytes_CheckExact(value)) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 2));
+        RETURN_IF_ERROR(build_ast_string(c, value));
+    } else if (PyLong_CheckExact(value)) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 3));
+        Py_ssize_t val = PyLong_AsSsize_t(value);
+        if (val == -1 && PyErr_Occurred()) {
+            return ERROR;
+        }
+        RETURN_IF_ERROR(build_ast_size_t(c, val));
+    } else if (PyFloat_CheckExact(value)) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 4));
+        double val = PyFloat_AsDouble(value);
+        RETURN_IF_ERROR(build_ast_double(c, val));
+    } else if (PyComplex_CheckExact(value)) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 5));
+        double re = PyComplex_RealAsDouble(value);
+        RETURN_IF_ERROR(build_ast_double(c, re));
+        double im = PyComplex_ImagAsDouble(value);
+        RETURN_IF_ERROR(build_ast_double(c, im));
+    } else if (value == Py_False) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 6));
+    } else if (value == Py_True) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 7));
+    } else if (value == Py_None) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 8));
+    } else if (value == Py_Ellipsis) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 9));
+    } else {
+        PyErr_SetString(PyExc_ValueError, "malformed AST");
         return ERROR;
     }
-    RETURN_IF_ERROR(build_ast_size_t(c, pos + 1));
     return SUCCESS;
 }
 
@@ -1216,9 +1282,9 @@ build_ast_arg(compiler *c, arg_ty arg) {
         RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 0));
         return SUCCESS;
     }
-    RETURN_IF_ERROR(build_ast_const(c, arg->arg));
+    RETURN_IF_ERROR(build_ast_string(c, arg->arg));
     RETURN_IF_ERROR(build_ast_expr(c, arg->annotation));
-    RETURN_IF_ERROR(build_ast_const(c, arg->type_comment));
+    RETURN_IF_ERROR(build_ast_string(c, arg->type_comment));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(arg);
@@ -1259,7 +1325,7 @@ build_ast_keyword(compiler *c, keyword_ty keyword)
         PyErr_SetString(PyExc_ValueError, "malformed AST");
         return ERROR;
     }
-    RETURN_IF_ERROR(build_ast_const(c, keyword->arg));
+    RETURN_IF_ERROR(build_ast_string(c, keyword->arg));
     RETURN_IF_ERROR(build_ast_expr(c, keyword->value));
     return SUCCESS;
 }
@@ -1431,7 +1497,7 @@ build_ast_expr(compiler *c, expr_ty expr)
         if (build_ast_expr(c, expr->v.Attribute.value)) {
             goto failed;
         }
-        if (build_ast_const(c, expr->v.Attribute.attr)) {
+        if (build_ast_string(c, expr->v.Attribute.attr)) {
             goto failed;
         }
         break;
@@ -1449,7 +1515,7 @@ build_ast_expr(compiler *c, expr_ty expr)
         }
         break;
     case Name_kind:
-        if (build_ast_const(c, expr->v.Name.id)) {
+        if (build_ast_string(c, expr->v.Name.id)) {
             goto failed;
         }
         break;
@@ -1487,8 +1553,12 @@ failed:
 static int
 add_annotation_ast(compiler *c, PyObject *name, expr_ty annotation, long conditional_index)
 {
-    RETURN_IF_ERROR(build_ast_const(c, name));
-    RETURN_IF_ERROR(build_ast_size_t(c, conditional_index + 1));
+    if (name) {
+        RETURN_IF_ERROR(build_ast_string(c, name));
+        RETURN_IF_ERROR(build_ast_size_t(c, conditional_index + 1));
+    } else {
+        RETURN_IF_ERROR(build_ast_size_t(c, 0));
+    }
     if (FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS) {
         RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Constant_kind));
         RETURN_IF_ERROR(build_ast_const(c, _PyAST_ExprAsUnicode(annotation)));

@@ -943,7 +943,7 @@ extern PyObject* _PyAST_ExprAsUnicode(expr_ty);
    Doesn't set exception. */
 extern PyObject* _PyAST_GetDocString(asdl_stmt_seq *);
 
-extern PyObject * _PyAST_FromAnnotationData(PyObject *data, PyObject *consts);
+extern PyObject * _PyAST_FromAnnotationData(PyObject *data_bytes, PyObject *indices);
 
 #ifdef __cplusplus
 }

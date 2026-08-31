@@ -68,7 +68,6 @@ struct compiler_unit {
     instr_sequence *u_instr_sequence; /* codegen output */
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
     PyBytesWriter *u_ann_ast_data;
-    PyObject *u_ann_ast_consts;
 
     int u_nfblocks;
     int u_in_inlined_comp;
@@ -205,7 +204,6 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_deferred_annotations);
     Py_CLEAR(u->u_conditional_annotation_indices);
     PyBytesWriter_Discard(u->u_ann_ast_data);
-    Py_CLEAR(u->u_ann_ast_consts);
     PyMem_Free(u);
 }
 
@@ -707,7 +705,6 @@ _PyCompile_EnterScope(compiler *c, identifier name, int scope_type,
     }
 
     u->u_ann_ast_data = NULL;
-    u->u_ann_ast_consts = NULL;
 
     u->u_instr_sequence = (instr_sequence*)_PyInstructionSequence_New();
     if (!u->u_instr_sequence) {
@@ -864,46 +861,16 @@ _PyCompile_AnnotationASTAddChar(compiler *c, char data) {
     return PyBytesWriter_WriteBytes(c->u->u_ann_ast_data, &data, 1);
 }
 
-Py_ssize_t
-_PyCompile_AnnotationASTAddConst(compiler *c, PyObject *o) {
-    if (!c->u->u_ann_ast_consts) {
-        c->u->u_ann_ast_consts = PyDict_New();
-        if (!c->u->u_ann_ast_consts) {
-            return ERROR;
-        }
-    }
-    Py_ssize_t arg = _PyCompile_DictAddObj(c->u->u_ann_ast_consts, o);
-    return arg + 1;  // +1 because the first constant is reserved for the AST data
-}
-
 int
-_PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **names) {
-    PyObject *data;
+_PyCompile_AnnotationASTFinalize(compiler *c, PyObject **data, PyObject **names) {
     if (!c->u->u_ann_ast_data) {
-        data = PyBytes_FromString("");
+        *data = PyBytes_FromString("");
     } else {
-        data = PyBytesWriter_Finish(c->u->u_ann_ast_data);
+        *data = PyBytesWriter_Finish(c->u->u_ann_ast_data);
         c->u->u_ann_ast_data = NULL;
     }
-    if (!data) {
+    if (!*data) {
         return ERROR;
-    }
-    if (!c->u->u_ann_ast_consts) {
-        *consts = PyTuple_New(1);
-        PyTuple_SET_ITEM(*consts, 0, data);
-    } else {
-        PyObject *consts_list = consts_dict_keys_inorder(c->u->u_ann_ast_consts);
-        Py_DECREF(c->u->u_ann_ast_consts);
-        c->u->u_ann_ast_consts = NULL;
-        if (!consts_list) {
-            return ERROR;
-        }
-        PyList_Insert(consts_list, 0, data);
-        *consts = PyList_AsTuple(consts_list);
-        Py_DECREF(consts_list);
-        if (!*consts) {
-            return ERROR;
-        }
     }
     PyObject *symbols = c->u->u_ste->ste_symbols;
     if (symbols) {
@@ -929,8 +896,8 @@ _PyCompile_AnnotationASTFinalize(compiler *c, PyObject **consts, PyObject **name
     } else {
         *names = PyList_New(0);
         if (!*names) {
-            Py_DECREF(*consts);
-            *consts = NULL;
+            Py_DECREF(*data);
+            *data = NULL;
             return ERROR;
         }
     }

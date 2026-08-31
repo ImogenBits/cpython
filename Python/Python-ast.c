@@ -18614,6 +18614,14 @@ PyObject *PyAST_AnnotationDictToAST(PyObject *asts) {
     struct ast_state *state = get_ast_state();
     PyTypeObject *tp;
 
+    if (PyObject_IsInstance(asts, state->Expression_type)) {
+        return asts;
+    }
+    if (!PyDict_CheckExact(asts)) {
+        PyErr_Format(PyExc_TypeError, "Only 'Expression' objects or dicts containing them can be converted to AST data");
+        return NULL;
+    }
+
     tp = (PyTypeObject *)state->Expression_type;
     PyObject *expr = PyType_GenericNew(tp, NULL, NULL);
     if (!expr) {
