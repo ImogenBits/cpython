@@ -1215,39 +1215,39 @@ build_ast_double(compiler *c, double value) {
 static int
 build_ast_const(compiler *c, PyObject *value) {
     if (!value) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 0));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 2));
         return SUCCESS;
     } else if (PyUnicode_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 1));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 3));
         RETURN_IF_ERROR(build_ast_string(c, value));
     } else if (PyBytes_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 2));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 4));
         RETURN_IF_ERROR(build_ast_string(c, value));
     } else if (PyLong_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 3));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 5));
         Py_ssize_t val = PyLong_AsSsize_t(value);
         if (val == -1 && PyErr_Occurred()) {
             return ERROR;
         }
         RETURN_IF_ERROR(build_ast_size_t(c, val));
     } else if (PyFloat_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 4));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 6));
         double val = PyFloat_AsDouble(value);
         RETURN_IF_ERROR(build_ast_double(c, val));
     } else if (PyComplex_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 5));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 7));
         double re = PyComplex_RealAsDouble(value);
         RETURN_IF_ERROR(build_ast_double(c, re));
         double im = PyComplex_ImagAsDouble(value);
         RETURN_IF_ERROR(build_ast_double(c, im));
     } else if (value == Py_False) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 6));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 8));
     } else if (value == Py_True) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 7));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 9));
     } else if (value == Py_None) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 8));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 10));
     } else if (value == Py_Ellipsis) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 9));
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 11));
     } else {
         PyErr_SetString(PyExc_ValueError, "malformed AST");
         return ERROR;
@@ -1341,7 +1341,9 @@ build_ast_expr(compiler *c, expr_ty expr)
     if (Py_EnterRecursiveCall(" during compilation")) {
         return ERROR;
     }
-    RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, expr->kind));
+    if (expr->kind != Constant_kind) {
+        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, expr->kind));
+    }
     switch (expr->kind) {
     case BoolOp_kind:
         RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, expr->v.BoolOp.op));
@@ -1560,7 +1562,6 @@ add_annotation_ast(compiler *c, PyObject *name, expr_ty annotation, long conditi
         RETURN_IF_ERROR(build_ast_size_t(c, 0));
     }
     if (FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Constant_kind));
         RETURN_IF_ERROR(build_ast_const(c, _PyAST_ExprAsUnicode(annotation)));
     } else {
         RETURN_IF_ERROR(build_ast_expr(c, annotation));

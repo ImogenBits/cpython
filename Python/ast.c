@@ -1183,14 +1183,9 @@ ann_ast_double(Py_buffer *data, Py_ssize_t *pos, double *out, PyArena *arena)
 }
 
 static int
-ann_ast_const(Py_buffer *data, Py_ssize_t *pos,
-                PyObject **out, PyArena *arena)
+ann_ast_const(Py_buffer *data, Py_ssize_t *pos, char kind, PyObject **out, PyArena *arena)
 {
-    char *curr = ann_ast_next(data, pos);
-    if (!curr) {
-        return -1;
-    }
-    switch (*curr) {
+    switch (kind - Slice_kind - 2) {
         case 0:
             *out = NULL;
             break;
@@ -1699,7 +1694,11 @@ ann_ast_expr(Py_buffer *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
         if (ann_ast_expr(data, pos, &value, arena) < 0) {
             goto failed;
         }
-        if (ann_ast_const(data, pos, &str, arena) < 0 || !str) {
+        char *curr = ann_ast_next(data, pos);
+        if (!curr) {
+            return -1;
+        }
+        if (ann_ast_const(data, pos, *curr, &str, arena) < 0 || !str) {
             goto failed;
         }
         if (ann_ast_size_t(data, pos, &conversion, arena) < 0) {
@@ -1732,17 +1731,6 @@ ann_ast_expr(Py_buffer *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
             goto failed;
         }
         *out = _PyAST_TemplateStr(values, 1, 0, 1, 0, arena);
-        if (*out == NULL) {
-            goto failed;
-        }
-        break;
-    }
-    case Constant_kind: {
-        constant value;
-        if (ann_ast_const(data, pos, &value, arena) < 0) {
-            goto failed;
-        }
-        *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
         if (*out == NULL) {
             goto failed;
         }
@@ -1836,6 +1824,27 @@ ann_ast_expr(Py_buffer *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
             goto failed;
         }
         *out = _PyAST_Slice(lower, upper, step, 1, 0, 1, 0, arena);
+        if (*out == NULL) {
+            goto failed;
+        }
+        break;
+    }
+    // these are the cases for Constant nodes
+    case Slice_kind + 2:
+    case Slice_kind + 3:
+    case Slice_kind + 4:
+    case Slice_kind + 5:
+    case Slice_kind + 6:
+    case Slice_kind + 7:
+    case Slice_kind + 8:
+    case Slice_kind + 9:
+    case Slice_kind + 10:
+    case Slice_kind + 11: {
+        constant value;
+        if (ann_ast_const(data, pos, *next, &value, arena) < 0) {
+            goto failed;
+        }
+        *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
         if (*out == NULL) {
             goto failed;
         }
@@ -1935,7 +1944,13 @@ parsing_err:
     _PyArena_Free(arena);
     PyBuffer_Release(&data);
     if (!PyErr_Occurred()) {
-        PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
+        PyObject *repr = PyObject_Repr(data_bytes);
+        if (!repr) {
+            PyErr_SetString(PyExc_RuntimeError, "error parsing binary AST data");
+        } else {
+            PyErr_Format(PyExc_RuntimeError, "error parsing binary AST data: %s", PyUnicode_AsUTF8(repr));
+            Py_DECREF(repr);
+        }
     }
     Py_XDECREF(name);
     Py_XDECREF(out);
