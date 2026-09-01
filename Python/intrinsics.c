@@ -217,6 +217,13 @@ make_frozenset(PyThreadState* Py_UNUSED(ignored), PyObject *set)
     return _PySet_Freeze(set);
 }
 
+static PyObject *
+build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *data)
+{
+    assert(PyDict_CheckExact(data) || PyUnicode_CheckExact(data));
+    return _PyAST_FromAnnotationData(data);
+}
+
 
 #define INTRINSIC_FUNC_ENTRY(N, F) \
     [N] = {F, #N},
@@ -236,6 +243,7 @@ _PyIntrinsics_UnaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SUBSCRIPT_GENERIC, _Py_subscript_generic)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEALIAS, _Py_make_typealias)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_FROZENSET, make_frozenset)
+    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_AST, build_annotation_ast)
 };
 
 
@@ -272,14 +280,7 @@ make_typevar_with_constraints(PyThreadState* Py_UNUSED(ignored), PyObject *name,
 }
 
 static PyObject *
-build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *data, PyObject *indices)
-{
-    assert(PyBytes_CheckExact(data));
-    return _PyAST_FromAnnotationData(data, indices);
-}
-
-static PyObject *
-build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *namespace, PyObject *asts)
+build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObject *namespace)
 {
     PyObject *expr = PyAST_AnnotationDictToAST(asts);
     if (expr == NULL) {
@@ -332,7 +333,6 @@ _PyIntrinsics_BinaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEVAR_WITH_CONSTRAINTS, make_typevar_with_constraints)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_FUNCTION_TYPE_PARAMS, _Py_set_function_type_params)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_TYPEPARAM_DEFAULT, _Py_set_typeparam_default)
-    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_AST, build_annotation_ast)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_VALUE, build_annotation_value)
 };
 

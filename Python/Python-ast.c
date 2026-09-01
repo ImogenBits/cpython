@@ -18618,7 +18618,13 @@ PyObject *PyAST_AnnotationDictToAST(PyObject *asts) {
         return asts;
     }
     if (!PyDict_CheckExact(asts)) {
-        PyErr_Format(PyExc_TypeError, "Only 'Expression' objects or dicts containing them can be converted to AST data");
+        PyObject *repr = PyObject_Repr(asts);
+        if (!repr) {
+            PyErr_SetString(PyExc_TypeError, "Expected a dict or Expression object");
+        } else {
+            PyErr_Format(PyExc_TypeError, "Expected a dict or Expression object, got %s", PyUnicode_AsUTF8(repr));
+            Py_DECREF(repr);
+        }
         return NULL;
     }
 

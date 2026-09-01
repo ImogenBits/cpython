@@ -541,7 +541,7 @@ def _make_annotate_function(__class__, method_name, annotation_fields, return_ty
                 for base in reversed(__class__.__mro__):
                     base_annotations = annotationlib.get_annotations(base, format=format)
                     if format == Format.AST:
-                        base_namespace, base_annotations = base_annotations
+                        base_annotations, base_namespace = base_annotations
                         cls_namspace.update(base_namespace)
                     cls_annotations.update(base_annotations)
 
@@ -558,14 +558,14 @@ def _make_annotate_function(__class__, method_name, annotation_fields, return_ty
                     if format == Format.STRING:
                         new_annotations["return"] = annotationlib.type_repr(return_type)
                     elif format == Format.AST:
-                        ret_namespace, ret_annotation = annotationlib.annotations_to_ast({"return": return_type})
+                        ret_annotation, ret_namespace = annotationlib.annotations_to_ast({"return": return_type})
                         cls_namspace.update(ret_namespace)
                         new_annotations["return"] = ret_annotation["return"]
                     else:
                         new_annotations["return"] = return_type
 
                 if format == Format.AST:
-                    return cls_namspace, new_annotations
+                    return new_annotations, cls_namspace
                 else:
                     return new_annotations
 

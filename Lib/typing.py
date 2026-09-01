@@ -2432,7 +2432,7 @@ def eval_annotation_AST(expr, namespace, format):
 
 
 def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
-    namespace, annotations = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
+    annotations, namespace = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
     if annotations is None:
         return None
     elif not isinstance(annotations, dict):
@@ -3358,14 +3358,14 @@ class _TypedDictMeta(type):
                 base_annos = annotationlib.call_annotate_function(
                     base_annotate, format, owner=base)
                 if format == annotationlib.Format.AST:
-                    base_namespace, base_annos = base_annos
+                    base_annos, base_namespace = base_annos
                     namespace.update(base_namespace)
                 annos.update(base_annos)
             if own_annotate is not None:
                 own = annotationlib.call_annotate_function(
                     own_annotate, format, owner=tp_dict)
                 if format == annotationlib.Format.AST:
-                    own_namespace, own = own
+                    own, own_namespace = own
                     namespace.update(own_namespace)
                 elif format != annotationlib.Format.STRING:
                     own = {
@@ -3377,13 +3377,13 @@ class _TypedDictMeta(type):
             elif format in (annotationlib.Format.FORWARDREF, annotationlib.Format.VALUE):
                 own = own_checked_annotations
             elif format == annotationlib.Format.AST:
-                own_namespace, own = annotationlib.annotations_to_ast(own_annotations)
+                own, own_namespace = annotationlib.annotations_to_ast(own_annotations)
                 namespace.update(own_namespace)
             else:
                 raise NotImplementedError(format)
             annos.update(own)
             if format == annotationlib.Format.AST:
-                return namespace, annos
+                return annos, namespace
             else:
                 return annos
 

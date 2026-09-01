@@ -1124,14 +1124,14 @@ def annotations_to_ast(annotations):
 
     Always returns a fresh dictionary.
     """
-    namespace, annos = {}, {}
+    annos, namespace = {}, {}
     for name, value in annotations.items():
         # we need a name that is unique per value and also shouldn't clash with
         # other namespaces that might be mixed with this
-        value_name = f".annotation_{id(value)}"
+        value_name = f"__annotation_{id(value)}__"
         namespace[value_name] = value
         annos[name] = ast.Expression(ast.Name(id=value_name))
-    return namespace, annos
+    return annos, namespace
 
 
 def _rewrite_star_unpack(arg):
@@ -1155,13 +1155,13 @@ def _get_and_call_annotate(obj, format):
         if format == Format.AST:
             if not isinstance(ann, tuple) or len(ann) != 2:
                 raise ValueError(f"{obj!r}.__annotate__ returned an invalid AST format")
-            namespace, ann = ann
+            ann, namespace = ann
             if not isinstance(namespace, dict):
                 raise ValueError(f"{obj!r}.__annotate__ returned a non-dict namespace")
         if not isinstance(ann, dict):
             raise ValueError(f"{obj!r}.__annotate__ returned a non-dict annotation mapping")
         if format == Format.AST:
-            return namespace, ann
+            return ann, namespace
         else:
             return ann
     return None

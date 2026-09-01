@@ -302,8 +302,8 @@ codegen_addop_load_const(compiler *c, location loc, PyObject *o)
     ADDOP_I(c, loc, LOAD_CONST, arg);
     return SUCCESS;
 }
-static int
-add_annotation_ast(compiler *c, PyObject *name, expr_ty annotation, long conditional_index);
+static PyObject *
+get_annotation_ast(compiler *c, expr_ty annotation);
 
 #define ADDOP_LOAD_CONST(C, LOC, O) \
     RETURN_IF_ERROR(codegen_addop_load_const((C), (LOC), (O)))
@@ -768,16 +768,24 @@ codegen_load_name_into_map(compiler *c, location loc, PyObject *name)
 static int
 codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
 {
-    PyObject *ast_data, *ast_names, *name_iter, *name;
-    RETURN_IF_ERROR(_PyCompile_AnnotationASTFinalize(c, &ast_data, &ast_names));
+    ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_BUILD_ANNOTATION_AST);
+
+    PyObject *ast_names, *name_iter, *name;
+    ast_names = _PyCompile_AnnotationASTNames(c);
+    if (!ast_names) {
+        return ERROR;
+    }
     ADDOP_I(c, loc, BUILD_MAP, 0);
     if (!(FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS)) {
         name_iter = PyObject_GetIter(ast_names);
         if (!name_iter) {
+            Py_DECREF(ast_names);
             return ERROR;
         }
         while (PyIter_NextItem(name_iter, &name)) {
             if (!name) {
+                Py_DECREF(name_iter);
+                Py_DECREF(ast_names);
                 return ERROR;
             }
             codegen_load_name_into_map(c, loc, name);
@@ -785,16 +793,6 @@ codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
         Py_DECREF(name_iter);
     }
     Py_DECREF(ast_names);
-    ADDOP_LOAD_CONST_NEW(c, loc, ast_data);
-    if (scope_type == COMPILE_SCOPE_CLASS) {
-        ADDOP_NAME(c, loc, LOAD_DEREF, &_Py_ID(__conditional_annotations__), freevars);
-    } else if (scope_type == COMPILE_SCOPE_MODULE) {
-        ADDOP_NAME(c, loc, LOAD_GLOBAL, &_Py_ID(__conditional_annotations__), names);
-    } else {
-        Py_INCREF(Py_None);
-        ADDOP_LOAD_CONST_NEW(c, loc, Py_None);
-    }
-    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_AST);
 
     PyObject *value_with_fake_globals = PyLong_FromLong(_Py_ANNOTATE_FORMAT_VALUE_WITH_FAKE_GLOBALS);
     if (value_with_fake_globals == NULL) {
@@ -874,7 +872,7 @@ codegen_deferred_annotations_body(compiler *c, location loc,
     assert(PyList_CheckExact(conditional_annotation_indices));
     assert(annotations_len == PyList_Size(conditional_annotation_indices));
 
-    //ADDOP_I(c, loc, BUILD_MAP, 0); // stack now contains <annos>
+    ADDOP_I(c, loc, BUILD_MAP, 0); // stack now contains <annos>
 
     for (Py_ssize_t i = 0; i < annotations_len; i++) {
         PyObject *ptr = PyList_GET_ITEM(deferred_anno, i);
@@ -892,7 +890,7 @@ codegen_deferred_annotations_body(compiler *c, location loc,
         PyObject *cond_index = PyList_GET_ITEM(conditional_annotation_indices, i);
         assert(PyLong_CheckExact(cond_index));
         long idx = PyLong_AS_LONG(cond_index);
-        /*NEW_JUMP_TARGET_LABEL(c, not_set);
+        NEW_JUMP_TARGET_LABEL(c, not_set);
 
         if (idx != -1) {
             ADDOP_LOAD_CONST(c, LOC(st), cond_index);
@@ -907,11 +905,13 @@ codegen_deferred_annotations_body(compiler *c, location loc,
 
             ADDOP_I(c, LOC(st), CONTAINS_OP, 0);
             ADDOP_JUMP(c, LOC(st), POP_JUMP_IF_FALSE, not_set);
-        }*/
+        }
 
-        add_annotation_ast(c, mangled, st->v.AnnAssign.annotation, idx);
-        /*
-        VISIT(c, expr, st->v.AnnAssign.annotation);
+        PyObject *annotation_ast = get_annotation_ast(c, st->v.AnnAssign.annotation);
+        if (!annotation_ast) {
+            return ERROR;
+        }
+        ADDOP_LOAD_CONST_NEW(c, LOC(st), annotation_ast);
         ADDOP_I(c, LOC(st), COPY, 2);
         ADDOP_LOAD_CONST_NEW(c, LOC(st), mangled);
         // stack now contains <annos> <name> <annos> <value>
@@ -919,7 +919,6 @@ codegen_deferred_annotations_body(compiler *c, location loc,
         // stack now contains <annos>
 
         USE_LABEL(c, not_set);
-        */
     }
     return SUCCESS;
 }
@@ -1167,20 +1166,20 @@ codegen_visit_annexpr(compiler *c, expr_ty annotation)
 
 
 static int
-build_ast_size_t(compiler *c, Py_ssize_t value) {
+build_ast_size_t(PyUnicodeWriter *data, Py_ssize_t value) {
     do {
         unsigned char byte = value & 0x3F;
         value >>= 6;
         if (value) {
             byte |= 0x40;
         }
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, byte));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, byte));
     } while (value);
     return SUCCESS;
 }
 
 static int
-build_ast_string(compiler *c, PyObject *value) {
+build_ast_string(PyUnicodeWriter *data, PyObject *value) {
     Py_ssize_t len;
     const char *s = NULL;
     if (PyUnicode_CheckExact(value)) {
@@ -1194,60 +1193,60 @@ build_ast_string(compiler *c, PyObject *value) {
     if (!s) {
         return ERROR;
     }
-    RETURN_IF_ERROR(build_ast_size_t(c, len));
-    for (Py_ssize_t i = 0; i < len; i++) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, s[i]));
-    }
+    RETURN_IF_ERROR(build_ast_size_t(data, len));
+    PyUnicodeWriter_WriteUTF8(data, s, len);
     return SUCCESS;
 }
 
 static int
-build_ast_double(compiler *c, double value) {
+build_ast_double(PyUnicodeWriter *data, double value) {
     if (value == -1.0 && PyErr_Occurred()) {
         return ERROR;
     }
-    for (size_t i = 0; i < sizeof(double); i++) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, ((char*) &value)[i]));
+    unsigned long long bytes = (unsigned long long) value;
+    for (size_t i = 0; i < 10; i++) {
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, bytes & 0x7F));
+        bytes >>= 7;
     }
     return SUCCESS;
 }
 
 static int
-build_ast_const(compiler *c, PyObject *value) {
+build_ast_const(PyUnicodeWriter *data, PyObject *value) {
     if (!value) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 2));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 2));
         return SUCCESS;
     } else if (PyUnicode_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 3));
-        RETURN_IF_ERROR(build_ast_string(c, value));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 3));
+        RETURN_IF_ERROR(build_ast_string(data, value));
     } else if (PyBytes_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 4));
-        RETURN_IF_ERROR(build_ast_string(c, value));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 4));
+        RETURN_IF_ERROR(build_ast_string(data, value));
     } else if (PyLong_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 5));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 5));
         Py_ssize_t val = PyLong_AsSsize_t(value);
         if (val == -1 && PyErr_Occurred()) {
             return ERROR;
         }
-        RETURN_IF_ERROR(build_ast_size_t(c, val));
+        RETURN_IF_ERROR(build_ast_size_t(data, val));
     } else if (PyFloat_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 6));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 6));
         double val = PyFloat_AsDouble(value);
-        RETURN_IF_ERROR(build_ast_double(c, val));
+        RETURN_IF_ERROR(build_ast_double(data, val));
     } else if (PyComplex_CheckExact(value)) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 7));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 7));
         double re = PyComplex_RealAsDouble(value);
-        RETURN_IF_ERROR(build_ast_double(c, re));
+        RETURN_IF_ERROR(build_ast_double(data, re));
         double im = PyComplex_ImagAsDouble(value);
-        RETURN_IF_ERROR(build_ast_double(c, im));
+        RETURN_IF_ERROR(build_ast_double(data, im));
     } else if (value == Py_False) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 8));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 8));
     } else if (value == Py_True) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 9));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 9));
     } else if (value == Py_None) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 10));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 10));
     } else if (value == Py_Ellipsis) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, Slice_kind + 11));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, Slice_kind + 11));
     } else {
         PyErr_SetString(PyExc_ValueError, "malformed AST");
         return ERROR;
@@ -1257,288 +1256,288 @@ build_ast_const(compiler *c, PyObject *value) {
 
 #define DEFINE_AST_SEQ_BUILDER(TYPE)                                        \
 static int                                                                  \
-build_ast_ ## TYPE ## _seq(compiler *c, asdl_ ## TYPE ## _seq *seq)         \
+build_ast_ ## TYPE ## _seq(PyUnicodeWriter *data, asdl_ ## TYPE ## _seq *seq) \
 {                                                                           \
     if (!seq) {                                                             \
-        RETURN_IF_ERROR(build_ast_size_t(c, 0));                            \
+        RETURN_IF_ERROR(build_ast_size_t(data, 0));                         \
         return SUCCESS;                                                     \
     }                                                                       \
     Py_ssize_t i, n = asdl_seq_LEN(seq);                                    \
-    RETURN_IF_ERROR(build_ast_size_t(c, n));                                \
+    RETURN_IF_ERROR(build_ast_size_t(data, n));                             \
     for (i = 0; i < n; i++) {                                               \
         RETURN_IF_ERROR(                                                    \
-            build_ast_ ## TYPE (c, asdl_seq_GET(seq, i))                    \
+            build_ast_ ## TYPE (data, asdl_seq_GET(seq, i))                 \
         );                                                                  \
     }                                                                       \
     return SUCCESS;                                                         \
 }                                                                           \
 
-static int build_ast_expr(compiler *c, expr_ty expr);
+static int build_ast_expr(PyUnicodeWriter *data, expr_ty expr);
 DEFINE_AST_SEQ_BUILDER(expr);
 
 static int
-build_ast_arg(compiler *c, arg_ty arg) {
+build_ast_arg(PyUnicodeWriter *data, arg_ty arg) {
     if (!arg) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 0));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, 0));
         return SUCCESS;
     }
-    RETURN_IF_ERROR(build_ast_string(c, arg->arg));
-    RETURN_IF_ERROR(build_ast_expr(c, arg->annotation));
-    RETURN_IF_ERROR(build_ast_string(c, arg->type_comment));
+    RETURN_IF_ERROR(build_ast_string(data, arg->arg));
+    RETURN_IF_ERROR(build_ast_expr(data, arg->annotation));
+    RETURN_IF_ERROR(build_ast_string(data, arg->type_comment));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(arg);
 
 static int
-build_ast_args(compiler *c, arguments_ty args) {
-    RETURN_IF_ERROR(build_ast_arg_seq(c, args->posonlyargs));
-    RETURN_IF_ERROR(build_ast_arg_seq(c, args->args));
-    RETURN_IF_ERROR(build_ast_arg(c, args->vararg));
-    RETURN_IF_ERROR(build_ast_arg_seq(c, args->kwonlyargs));
-    RETURN_IF_ERROR(build_ast_expr_seq(c, args->kw_defaults));
-    RETURN_IF_ERROR(build_ast_arg(c, args->kwarg));
-    RETURN_IF_ERROR(build_ast_expr_seq(c, args->defaults));
+build_ast_args(PyUnicodeWriter *data, arguments_ty args) {
+    RETURN_IF_ERROR(build_ast_arg_seq(data, args->posonlyargs));
+    RETURN_IF_ERROR(build_ast_arg_seq(data, args->args));
+    RETURN_IF_ERROR(build_ast_arg(data, args->vararg));
+    RETURN_IF_ERROR(build_ast_arg_seq(data, args->kwonlyargs));
+    RETURN_IF_ERROR(build_ast_expr_seq(data, args->kw_defaults));
+    RETURN_IF_ERROR(build_ast_arg(data, args->kwarg));
+    RETURN_IF_ERROR(build_ast_expr_seq(data, args->defaults));
     return SUCCESS;
 }
 
 static int
-build_ast_comprehension(compiler *c, comprehension_ty comp) {
-    RETURN_IF_ERROR(build_ast_expr(c, comp->target));
-    RETURN_IF_ERROR(build_ast_expr(c, comp->iter));
-    RETURN_IF_ERROR(build_ast_expr_seq(c, comp->ifs));
-    RETURN_IF_ERROR(build_ast_size_t(c, comp->is_async));
+build_ast_comprehension(PyUnicodeWriter *data, comprehension_ty comp) {
+    RETURN_IF_ERROR(build_ast_expr(data, comp->target));
+    RETURN_IF_ERROR(build_ast_expr(data, comp->iter));
+    RETURN_IF_ERROR(build_ast_expr_seq(data, comp->ifs));
+    RETURN_IF_ERROR(build_ast_size_t(data, comp->is_async));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(comprehension);
 
 static int
-build_ast_int(compiler *c, cmpop_ty op)
+build_ast_int(PyUnicodeWriter *data, cmpop_ty op)
 {
-    return build_ast_size_t(c, op);
+    return build_ast_size_t(data, op);
 }
 DEFINE_AST_SEQ_BUILDER(int);
 
 static int
-build_ast_keyword(compiler *c, keyword_ty keyword)
+build_ast_keyword(PyUnicodeWriter *data, keyword_ty keyword)
 {
     if (!keyword) {
         PyErr_SetString(PyExc_ValueError, "malformed AST");
         return ERROR;
     }
-    RETURN_IF_ERROR(build_ast_string(c, keyword->arg));
-    RETURN_IF_ERROR(build_ast_expr(c, keyword->value));
+    RETURN_IF_ERROR(build_ast_string(data, keyword->arg));
+    RETURN_IF_ERROR(build_ast_expr(data, keyword->value));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(keyword);
 
 static int
-build_ast_expr(compiler *c, expr_ty expr)
+build_ast_expr(PyUnicodeWriter *data, expr_ty expr)
 {
     if (!expr) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, 0));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, 0));
         return SUCCESS;
     }
     if (Py_EnterRecursiveCall(" during compilation")) {
         return ERROR;
     }
     if (expr->kind != Constant_kind) {
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, expr->kind));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, expr->kind));
     }
     switch (expr->kind) {
     case BoolOp_kind:
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, expr->v.BoolOp.op));
-        if (build_ast_expr_seq(c, expr->v.BoolOp.values)) {
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, expr->v.BoolOp.op));
+        if (build_ast_expr_seq(data, expr->v.BoolOp.values)) {
             goto failed;
         }
         break;
     case BinOp_kind:
-        if (build_ast_expr(c, expr->v.BinOp.left)) {
+        if (build_ast_expr(data, expr->v.BinOp.left)) {
             goto failed;
         }
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, expr->v.BinOp.op));
-        if (build_ast_expr(c, expr->v.BinOp.right)) {
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, expr->v.BinOp.op));
+        if (build_ast_expr(data, expr->v.BinOp.right)) {
             goto failed;
         }
         break;
     case UnaryOp_kind:
-        RETURN_IF_ERROR(_PyCompile_AnnotationASTAddChar(c, expr->v.UnaryOp.op));
-        if (build_ast_expr(c, expr->v.UnaryOp.operand)) {
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(data, expr->v.UnaryOp.op));
+        if (build_ast_expr(data, expr->v.UnaryOp.operand)) {
             goto failed;
         }
         break;
     case Lambda_kind:
-        if (build_ast_args(c, expr->v.Lambda.args)) {
+        if (build_ast_args(data, expr->v.Lambda.args)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.Lambda.body)) {
+        if (build_ast_expr(data, expr->v.Lambda.body)) {
             goto failed;
         }
         break;
     case IfExp_kind:
-        if (build_ast_expr(c, expr->v.IfExp.test)) {
+        if (build_ast_expr(data, expr->v.IfExp.test)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.IfExp.body)) {
+        if (build_ast_expr(data, expr->v.IfExp.body)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.IfExp.orelse)) {
+        if (build_ast_expr(data, expr->v.IfExp.orelse)) {
             goto failed;
         }
         break;
     case Dict_kind:
-        if (build_ast_expr_seq(c, expr->v.Dict.keys)) {
+        if (build_ast_expr_seq(data, expr->v.Dict.keys)) {
             goto failed;
         }
-        if (build_ast_expr_seq(c, expr->v.Dict.values)) {
+        if (build_ast_expr_seq(data, expr->v.Dict.values)) {
             goto failed;
         }
         break;
     case Set_kind:
-        if (build_ast_expr_seq(c, expr->v.Set.elts)) {
+        if (build_ast_expr_seq(data, expr->v.Set.elts)) {
             goto failed;
         }
         break;
     case ListComp_kind:
-        if (build_ast_expr(c, expr->v.ListComp.elt)) {
+        if (build_ast_expr(data, expr->v.ListComp.elt)) {
             goto failed;
         }
-        if (build_ast_comprehension_seq(c, expr->v.ListComp.generators)) {
+        if (build_ast_comprehension_seq(data, expr->v.ListComp.generators)) {
             goto failed;
         }
         break;
     case SetComp_kind:
-        if (build_ast_expr(c, expr->v.SetComp.elt)) {
+        if (build_ast_expr(data, expr->v.SetComp.elt)) {
             goto failed;
         }
-        if (build_ast_comprehension_seq(c, expr->v.SetComp.generators)) {
+        if (build_ast_comprehension_seq(data, expr->v.SetComp.generators)) {
             goto failed;
         }
         break;
     case DictComp_kind:
-        if (build_ast_expr(c, expr->v.DictComp.key)) {
+        if (build_ast_expr(data, expr->v.DictComp.key)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.DictComp.value)) {
+        if (build_ast_expr(data, expr->v.DictComp.value)) {
             goto failed;
         }
-        if (build_ast_comprehension_seq(c, expr->v.DictComp.generators)) {
+        if (build_ast_comprehension_seq(data, expr->v.DictComp.generators)) {
             goto failed;
         }
         break;
     case GeneratorExp_kind:
-        if (build_ast_expr(c, expr->v.GeneratorExp.elt)) {
+        if (build_ast_expr(data, expr->v.GeneratorExp.elt)) {
             goto failed;
         }
-        if (build_ast_comprehension_seq(c, expr->v.GeneratorExp.generators)) {
+        if (build_ast_comprehension_seq(data, expr->v.GeneratorExp.generators)) {
             goto failed;
         }
         break;
     case Compare_kind:
-        if (build_ast_expr(c, expr->v.Compare.left)) {
+        if (build_ast_expr(data, expr->v.Compare.left)) {
             goto failed;
         }
-        if (build_ast_int_seq(c, expr->v.Compare.ops)) {
+        if (build_ast_int_seq(data, expr->v.Compare.ops)) {
             goto failed;
         }
-        if (build_ast_expr_seq(c, expr->v.Compare.comparators)) {
+        if (build_ast_expr_seq(data, expr->v.Compare.comparators)) {
             goto failed;
         }
         break;
     case Call_kind:
-        if (build_ast_expr(c, expr->v.Call.func)) {
+        if (build_ast_expr(data, expr->v.Call.func)) {
             goto failed;
         }
-        if (build_ast_expr_seq(c, expr->v.Call.args)) {
+        if (build_ast_expr_seq(data, expr->v.Call.args)) {
             goto failed;
         }
-        if (build_ast_keyword_seq(c, expr->v.Call.keywords)) {
+        if (build_ast_keyword_seq(data, expr->v.Call.keywords)) {
             goto failed;
         }
         break;
     case FormattedValue_kind:
-        if (build_ast_expr(c, expr->v.FormattedValue.value)) {
+        if (build_ast_expr(data, expr->v.FormattedValue.value)) {
             goto failed;
         }
-        if (build_ast_size_t(c, expr->v.FormattedValue.conversion)) {
+        if (build_ast_size_t(data, expr->v.FormattedValue.conversion)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.FormattedValue.format_spec)) {
+        if (build_ast_expr(data, expr->v.FormattedValue.format_spec)) {
             goto failed;
         }
         break;
     case Interpolation_kind:
-        if (build_ast_expr(c, expr->v.Interpolation.value)) {
+        if (build_ast_expr(data, expr->v.Interpolation.value)) {
             goto failed;
         }
-        if (build_ast_const(c, expr->v.Interpolation.str)) {
+        if (build_ast_const(data, expr->v.Interpolation.str)) {
             goto failed;
         }
-        if (build_ast_size_t(c, expr->v.Interpolation.conversion)) {
+        if (build_ast_size_t(data, expr->v.Interpolation.conversion)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.Interpolation.format_spec)) {
+        if (build_ast_expr(data, expr->v.Interpolation.format_spec)) {
             goto failed;
         }
         break;
     case JoinedStr_kind:
-        if (build_ast_expr_seq(c, expr->v.JoinedStr.values)) {
+        if (build_ast_expr_seq(data, expr->v.JoinedStr.values)) {
             goto failed;
         }
         break;
     case TemplateStr_kind:
-        if (build_ast_expr_seq(c, expr->v.TemplateStr.values)) {
+        if (build_ast_expr_seq(data, expr->v.TemplateStr.values)) {
             goto failed;
         }
         break;
     case Constant_kind:
-        if (build_ast_const(c, expr->v.Constant.value)) {
+        if (build_ast_const(data, expr->v.Constant.value)) {
             goto failed;
         }
         break;
     case Attribute_kind:
-        if (build_ast_expr(c, expr->v.Attribute.value)) {
+        if (build_ast_expr(data, expr->v.Attribute.value)) {
             goto failed;
         }
-        if (build_ast_string(c, expr->v.Attribute.attr)) {
+        if (build_ast_string(data, expr->v.Attribute.attr)) {
             goto failed;
         }
         break;
     case Subscript_kind:
-        if (build_ast_expr(c, expr->v.Subscript.value)) {
+        if (build_ast_expr(data, expr->v.Subscript.value)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.Subscript.slice)) {
+        if (build_ast_expr(data, expr->v.Subscript.slice)) {
             goto failed;
         }
         break;
     case Starred_kind:
-        if (build_ast_expr(c, expr->v.Starred.value)) {
+        if (build_ast_expr(data, expr->v.Starred.value)) {
             goto failed;
         }
         break;
     case Name_kind:
-        if (build_ast_string(c, expr->v.Name.id)) {
+        if (build_ast_string(data, expr->v.Name.id)) {
             goto failed;
         }
         break;
     case List_kind:
-        if (build_ast_expr_seq(c, expr->v.List.elts)) {
+        if (build_ast_expr_seq(data, expr->v.List.elts)) {
             goto failed;
         }
         break;
     case Tuple_kind:
-        if (build_ast_expr_seq(c, expr->v.Tuple.elts)) {
+        if (build_ast_expr_seq(data, expr->v.Tuple.elts)) {
             goto failed;
         }
         break;
     case Slice_kind:
-        if (build_ast_expr(c, expr->v.Slice.lower)) {
+        if (build_ast_expr(data, expr->v.Slice.lower)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.Slice.upper)) {
+        if (build_ast_expr(data, expr->v.Slice.upper)) {
             goto failed;
         }
-        if (build_ast_expr(c, expr->v.Slice.step)) {
+        if (build_ast_expr(data, expr->v.Slice.step)) {
             goto failed;
         }
         break;
@@ -1552,21 +1551,26 @@ failed:
     return ERROR;
 }
 
-static int
-add_annotation_ast(compiler *c, PyObject *name, expr_ty annotation, long conditional_index)
+PyObject *
+get_annotation_ast(compiler *c, expr_ty annotation)
 {
-    if (name) {
-        RETURN_IF_ERROR(build_ast_string(c, name));
-        RETURN_IF_ERROR(build_ast_size_t(c, conditional_index + 1));
-    } else {
-        RETURN_IF_ERROR(build_ast_size_t(c, 0));
-    }
+    PyUnicodeWriter *data = PyUnicodeWriter_Create(0);
+    int err = 0;
     if (FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS) {
-        RETURN_IF_ERROR(build_ast_const(c, _PyAST_ExprAsUnicode(annotation)));
+        err = build_ast_const(data, _PyAST_ExprAsUnicode(annotation));
     } else {
-        RETURN_IF_ERROR(build_ast_expr(c, annotation));
+        err = build_ast_expr(data, annotation);
     }
-    return SUCCESS;
+    if (err == ERROR){
+        PyUnicodeWriter_Discard(data);
+        return NULL;
+    }
+    PyObject *result = PyUnicodeWriter_Finish(data);
+    if (!result) {
+        return NULL;
+    }
+    PyUnicode_InternInPlace(&result);
+    return result;
 }
 
 static int
@@ -1580,8 +1584,13 @@ codegen_argannotation(compiler *c, identifier id,
     if (!mangled) {
         return ERROR;
     }
-    //ADDOP_LOAD_CONST(c, loc, mangled);
-    RETURN_IF_ERROR(add_annotation_ast(c, mangled, annotation, -1));
+    ADDOP_LOAD_CONST(c, loc, mangled);
+    PyObject *annotation_ast = get_annotation_ast(c, annotation);
+    if (!annotation_ast) {
+        Py_DECREF(mangled);
+        return ERROR;
+    }
+    ADDOP_LOAD_CONST_NEW(c, loc, annotation_ast);
     Py_DECREF(mangled);
     *annotations_len += 1;
     return SUCCESS;
@@ -1659,7 +1668,7 @@ codegen_function_annotations(compiler *c, location loc,
         RETURN_IF_ERROR_IN_SCOPE(
             c, codegen_annotations_in_scope(c, loc, args, returns, &annotations_len)
         );
-        //ADDOP_I(c, loc, BUILD_MAP, annotations_len);
+        ADDOP_I(c, loc, BUILD_MAP, annotations_len);
         RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, loc, COMPILE_SCOPE_ANNOTATIONS));
         RETURN_IF_ERROR(codegen_leave_annotations_scope(c, loc));
         return MAKE_FUNCTION_ANNOTATE;
@@ -1745,7 +1754,11 @@ codegen_type_param_bound_or_default(compiler *c, expr_ty e,
     else {
         VISIT_IN_SCOPE(c, expr, e);
     }*/
-    RETURN_IF_ERROR_IN_SCOPE(c, add_annotation_ast(c, NULL, e, -1));
+    PyObject *annotation_ast = get_annotation_ast(c, e);
+    if (!annotation_ast) {
+        return ERROR;
+    }
+    ADDOP_LOAD_CONST_NEW(c, LOC(e), annotation_ast);
     RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, LOC(e), COMPILE_SCOPE_ANNOTATIONS));
     PyCodeObject *co = _PyCompile_OptimizeAndAssemble(c, 1);
     _PyCompile_ExitScope(c);
@@ -2250,8 +2263,11 @@ codegen_typealias_body(compiler *c, stmt_ty s)
         codegen_setup_annotations_scope(c, LOC(s), s, name));
 
     assert(!SYMTABLE_ENTRY(c)->ste_has_docstring);
-    VISIT_IN_SCOPE(c, expr, s->v.TypeAlias.value);
-    RETURN_IF_ERROR_IN_SCOPE(c, add_annotation_ast(c, NULL, s->v.TypeAlias.value, -1));
+    PyObject *annotation_ast = get_annotation_ast(c, s->v.TypeAlias.value);
+    if (!annotation_ast) {
+        return ERROR;
+    }
+    ADDOP_LOAD_CONST_NEW(c, LOC(s), annotation_ast);
     RETURN_IF_ERROR_IN_SCOPE(c, codegen_finalize_annotations_scope(c, LOC(s), COMPILE_SCOPE_ANNOTATIONS));
     PyCodeObject *co = _PyCompile_OptimizeAndAssemble(c, 0);
     _PyCompile_ExitScope(c);

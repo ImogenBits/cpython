@@ -1168,16 +1168,18 @@ ann_ast_bytes(PyObject *data, Py_ssize_t *pos, PyObject **out, PyArena *arena)
 static int
 ann_ast_double(PyObject *data, Py_ssize_t *pos, double *out, PyArena *arena)
 {
-    if (*pos < 0 || *pos + (Py_ssize_t) sizeof(double) >= PyUnicode_GET_LENGTH(data)) {
+    if (*pos < 0 || *pos < 0 || *pos + 12 > PyUnicode_GET_LENGTH(data)) {
         return -1;
     }
-    for (size_t i = 0; i < sizeof(double); i++) {
+    unsigned long long bits = 0;
+    for (size_t i = 0; i < 10; i++) {
         Py_UCS1 curr = ann_ast_next(data, pos);
         if (curr == 0xFF) {
             return -1;
         }
-        ((char *) out)[i] = curr;
+        bits |= (curr & 0x7F) << (6 * i);
     }
+    *out = *(double *) &bits;
     return 0;
 }
 
@@ -1856,96 +1858,87 @@ ann_ast_expr(PyObject *data, Py_ssize_t *pos, expr_ty *out, PyArena *arena)
 }
 
 PyObject *
-_PyAST_FromAnnotationData(PyObject *data, PyObject *indices)
+_PyAST_FromAnnotationString(PyArena *arena, PyObject *data)
 {
     if (!data || !PyUnicode_CheckExact(data)) {
         PyErr_SetString(PyExc_TypeError, "expected a string for data");
         return NULL;
     }
-    PyArena *arena = _PyArena_New();
-    if (arena == NULL) {
-        return NULL;
-    }
-    PyObject *out = PyDict_New();
-    if (out == NULL) {
-        _PyArena_Free(arena);
-        return NULL;
-    }
+    PyObject *out = NULL;
     Py_ssize_t i = 0;
-    PyObject *name = NULL, *index = NULL;
     char *error_msg = NULL;
-    while (i < PyUnicode_GET_LENGTH(data)) {
-        Py_ssize_t idx = 0;
-        Py_UCS1 start = ann_ast_peek(data, &i);
-        if (start == 0xFF) {
-            goto parsing_err;
-        }
-        if (start != 0) {
-            if (ann_ast_string(data, &i, &name, arena) < 0 || !name) {
-                error_msg = "parsing attribute name";
-                goto parsing_err;
-            }
-            if (ann_ast_size_t(data, &i, &idx, arena) < 0) {
-                error_msg = "parsing conditional attribute index";
-                goto parsing_err;
-            }
-            index = PyLong_FromSsize_t(idx - 1);
-            if (!index) {
-                goto parsing_err;
-            }
-        }
-        expr_ty expr_ast;
-        if (ann_ast_expr(data, &i, &expr_ast, arena) < 0) {
-            error_msg = "parsing annotation expression";
-            goto parsing_err;
-        }
-        if (idx != 0 && PySet_Check(indices) && !PySet_Contains(indices, index)) {
-            Py_DECREF(index);
-            continue;
-        }
-        mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
-        if (!mod_ast) {
-            error_msg = "constructing annotation";
-            goto parsing_err;
-        }
-        PyObject *expr_obj = PyAST_mod2obj(mod_ast);
-        if (!expr_obj) {
-            error_msg = "constructing annotation object";
-            goto parsing_err;
-        }
-        if (start == 0) {
-            Py_DECREF(out);
-            out = expr_obj;
-            break;
-        } else {
-            if (PyDict_SetItem(out, name, expr_obj) < 0) {
-                error_msg = "setting annotation in dictionary";
-                goto parsing_err;
-            }
-            Py_DECREF(name);
-            Py_DECREF(expr_obj);
-            Py_DECREF(index);
-        }
+    expr_ty expr_ast;
+    if (ann_ast_expr(data, &i, &expr_ast, arena) < 0) {
+        error_msg = "parsing annotation expression";
+        goto parsing_err;
     }
-    _PyArena_Free(arena);
+    mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
+    if (!mod_ast) {
+        error_msg = "constructing annotation";
+        goto parsing_err;
+    }
+    out = PyAST_mod2obj(mod_ast);
+    if (!out) {
+        error_msg = "constructing annotation object";
+        goto parsing_err;
+    }
     if (i != PyUnicode_GET_LENGTH(data)) {
         PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
         return NULL;
     }
     return out;
 parsing_err:
-    _PyArena_Free(arena);
     if (!PyErr_Occurred()) {
         PyObject *repr = PyObject_Repr(data);
         if (!repr) {
-            PyErr_Format(PyExc_RuntimeError, "error %s with binary AST data", error_msg);
+            PyErr_Format(PyExc_RuntimeError, "error %s binary AST data", error_msg);
         } else {
-            PyErr_Format(PyExc_RuntimeError, "error %s with binary AST data: %s", error_msg, PyUnicode_AsUTF8(repr));
+            PyErr_Format(PyExc_RuntimeError, "error %s binary AST data: %s", error_msg, PyUnicode_AsUTF8(repr));
             Py_DECREF(repr);
         }
     }
-    Py_XDECREF(name);
+    return NULL;
+}
+
+PyObject *
+_PyAST_FromAnnotationData(PyObject *data)
+{
+    if (!data || !(PyDict_CheckExact(data) || PyUnicode_CheckExact(data))) {
+        PyErr_SetString(PyExc_TypeError, "expected a dictionary or string for data");
+        return NULL;
+    }
+    PyArena *arena = _PyArena_New();
+    if (arena == NULL) {
+        return NULL;
+    }
+
+    if (PyUnicode_CheckExact(data)) {
+        PyObject *out = _PyAST_FromAnnotationString(arena, data);
+        _PyArena_Free(arena);
+        return out;
+    }
+    PyObject *out = PyDict_New();
+    if (out == NULL) {
+        goto parsing_err;
+    }
+    PyObject *name, *data_string;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(data, &pos, &name, &data_string)) {
+        PyObject *expr_obj = _PyAST_FromAnnotationString(arena, data_string);
+        if (!expr_obj) {
+            goto parsing_err;
+        }
+        if (PyDict_SetItem(out, name, expr_obj) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "error setting annotation in dictionary");
+            Py_DECREF(expr_obj);
+            goto parsing_err;
+        }
+        Py_DECREF(expr_obj);
+    }
+    _PyArena_Free(arena);
+    return out;
+parsing_err:
+    _PyArena_Free(arena);
     Py_XDECREF(out);
-    Py_XDECREF(index);
     return NULL;
 }

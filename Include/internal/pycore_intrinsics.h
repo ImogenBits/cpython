@@ -19,8 +19,9 @@
 #define INTRINSIC_SUBSCRIPT_GENERIC             10
 #define INTRINSIC_TYPEALIAS                     11
 #define INTRINSIC_BUILD_FROZENSET               12
+#define INTRINSIC_BUILD_ANNOTATION_AST          13
 
-#define MAX_INTRINSIC_1                         12
+#define MAX_INTRINSIC_1                         13
 
 
 /* Binary Functions: */
@@ -30,10 +31,9 @@
 #define INTRINSIC_TYPEVAR_WITH_CONSTRAINTS       3
 #define INTRINSIC_SET_FUNCTION_TYPE_PARAMS       4
 #define INTRINSIC_SET_TYPEPARAM_DEFAULT          5
-#define INTRINSIC_BUILD_ANNOTATION_AST           6
-#define INTRINSIC_BUILD_ANNOTATION_VALUE         7
+#define INTRINSIC_BUILD_ANNOTATION_VALUE         6
 
-#define MAX_INTRINSIC_2                          7
+#define MAX_INTRINSIC_2                          6
 
 typedef PyObject *(*intrinsic_func1)(PyThreadState* tstate, PyObject *value);
 typedef PyObject *(*intrinsic_func2)(PyThreadState* tstate, PyObject *value1, PyObject *value2);

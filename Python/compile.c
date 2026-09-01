@@ -67,7 +67,6 @@ struct compiler_unit {
 
     instr_sequence *u_instr_sequence; /* codegen output */
     instr_sequence *u_stashed_instr_sequence; /* temporarily stashed parent instruction sequence */
-    PyUnicodeWriter *u_ann_ast_data;
 
     int u_nfblocks;
     int u_in_inlined_comp;
@@ -203,7 +202,6 @@ compiler_unit_free(struct compiler_unit *u)
     Py_CLEAR(u->u_static_attributes);
     Py_CLEAR(u->u_deferred_annotations);
     Py_CLEAR(u->u_conditional_annotation_indices);
-    PyUnicodeWriter_Discard(u->u_ann_ast_data);
     PyMem_Free(u);
 }
 
@@ -704,8 +702,6 @@ _PyCompile_EnterScope(compiler *c, identifier name, int scope_type,
         u->u_static_attributes = NULL;
     }
 
-    u->u_ann_ast_data = NULL;
-
     u->u_instr_sequence = (instr_sequence*)_PyInstructionSequence_New();
     if (!u->u_instr_sequence) {
         compiler_unit_free(u);
@@ -850,59 +846,33 @@ _PyCompile_DeferredAnnotations(compiler *c,
     *conditional_annotation_indices = Py_XNewRef(c->u->u_conditional_annotation_indices);
 }
 
-int
-_PyCompile_AnnotationASTAddChar(compiler *c, char data) {
-    if (!c->u->u_ann_ast_data) {
-        c->u->u_ann_ast_data = PyUnicodeWriter_Create(0);
-        if (!c->u->u_ann_ast_data) {
-            return ERROR;
-        }
+PyObject *
+_PyCompile_AnnotationASTNames(compiler *c) {
+    PyObject *names = PyList_New(0);
+    if (!names) {
+        return NULL;
     }
-    return PyUnicodeWriter_WriteChar(c->u->u_ann_ast_data, data);
-}
-
-int
-_PyCompile_AnnotationASTFinalize(compiler *c, PyObject **data, PyObject **names) {
-    if (!c->u->u_ann_ast_data) {
-        *data = PyUnicode_FromString("");
-    } else {
-        *data = PyUnicodeWriter_Finish(c->u->u_ann_ast_data);
-        c->u->u_ann_ast_data = NULL;
-    }
-    if (!*data) {
-        return ERROR;
-    }
-    PyUnicode_InternInPlace(data);
     PyObject *symbols = c->u->u_ste->ste_symbols;
     if (symbols) {
         PyObject *names_raw = PyDict_Keys(symbols);
         _Py_DECLARE_STR(format, ".format");
-        *names = PyList_New(0);
-        if (!*names) {
-            return ERROR;
-        }
         for (Py_ssize_t i = 0; i < PyList_Size(names_raw); i++) {
             PyObject *name = PyList_GetItem(names_raw, i);
             if (!name) {
-                return ERROR;
+                Py_DECREF(names);
+                return NULL;
             }
             if (!PyUnicode_Equal(name, &_Py_STR(format))) {
-                if (PyList_Append(*names, name)) {
-                    return ERROR;
+                if (PyList_Append(names, name)) {
+                    Py_DECREF(names);
+                    return NULL;
                 }
 
             }
         }
         Py_DECREF(names_raw);
-    } else {
-        *names = PyList_New(0);
-        if (!*names) {
-            Py_DECREF(*data);
-            *data = NULL;
-            return ERROR;
-        }
     }
-    return SUCCESS;
+    return names;
 }
 
 static location
