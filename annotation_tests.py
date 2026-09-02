@@ -6,8 +6,8 @@ import pkgutil
 import tracemalloc
 from annotationlib import Format
 import timeit
-from typing import eval_annotate_as_types
 from pathlib import Path
+from typing import eval_annotate_as_types
 
 import subprocess
 
@@ -21,11 +21,11 @@ import pkgutil
 import tracemalloc
 from annotationlib import Format
 import timeit
-from typing import eval_annotate_as_types
 from pathlib import Path
 from contextlib import redirect_stdout
+from typing import eval_annotate_as_types
 
-VENV_PATH = Path("/workspaces/cpython/.venv/Lib/site-packages")
+VENV_PATH = Path() / ".venv/Lib/site-packages"
 sys.path.insert(0, str(VENV_PATH))
 PACKAGES = [
     "urllib3",
@@ -94,18 +94,22 @@ for package in PACKAGES:
 print(time)
 """
 
-
-results = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.split() for _ in range(5)]
+procs = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True) for _ in range(5)]
 import_time, memory, pyc, exec_time = 0, 0, 0, 0
-for result in results:
-    import_time += float(result[0])
-    memory += int(result[1])
-    pyc += int(result[2])
-    exec_time += float(result[3])
-import_time /= len(results)
-memory /= len(results)
-pyc /= len(results)
-exec_time /= len(results)
+for proc in procs:
+    if proc.stderr:
+        print(proc.stderr)
+        raise SystemExit
+    i, m, p, e = (float(x) / len(procs) for x in proc.stdout.split())
+    import_time += i
+    memory += m
+    pyc += p
+    exec_time += e
 
 
-print(f"Import time: {import_time}\nMemory: {memory}\nPyc size: {pyc}\nExec time: {exec_time}")
+print(
+    f"Import time: {import_time:.2f}s\n"
+    f"Memory: {memory / 1_000_000:.3f} MB\n"
+    f"Pyc size: {pyc / 1_000_000:.3f} MB\n"
+    f"Exec time: {exec_time:.4f}s"
+)
