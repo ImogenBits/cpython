@@ -19,13 +19,12 @@ from types import ModuleType
 from importlib import import_module
 import pkgutil
 import tracemalloc
-from annotationlib import Format
+from annotationlib import Format, call_annotate_function
 import timeit
-from typing import eval_annotate_as_types
 from pathlib import Path
 from contextlib import redirect_stdout
 
-VENV_PATH = Path("/workspaces/cpython/.venv/Lib/site-packages")
+VENV_PATH = Path() / ".venv/Lib/site-packages"
 sys.path.insert(0, str(VENV_PATH))
 PACKAGES = [
     "urllib3",
@@ -111,4 +110,9 @@ pyc /= len(results)
 exec_time /= len(results)
 
 
-print(f"Import time: {import_time}\nMemory: {memory}\nPyc size: {pyc}\nExec time: {exec_time}")
+print(
+    f"Import time: {import_time:.2f}s\n"
+    f"Memory: {memory / 1_000_000:.3f} MB\n"
+    f"Pyc size: {pyc / 1_000_000:.3f} MB\n"
+    f"Exec time: {exec_time:.4f}s"
+)
