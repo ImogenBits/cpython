@@ -6,9 +6,11 @@ import pkgutil
 import tracemalloc
 from annotationlib import Format, call_annotate_function
 import timeit
+from pathlib import Path
 
 
-sys.path.insert(0, "/workspaces/cpython/.venv/Lib/site-packages")
+VENV_PATH = Path("/workspaces/cpython/.venv/Lib/site-packages")
+sys.path.insert(0, str(VENV_PATH))
 PACKAGES = [
     "urllib3",
     "certifi",
@@ -54,12 +56,19 @@ def iter_annotates(obj: object) -> Iterable[Callable[[int], object]]:
 
 tracemalloc.start()
 start, _ = tracemalloc.get_traced_memory()
+time = timeit.default_timer()
 for package in PACKAGES:
     for mod in iter_modules(package):
         pass
+print(f"Import time: {timeit.default_timer() - time}")
+
 end, _ = tracemalloc.get_traced_memory()
 print(f"Total memory usage: {end - start}")
 
+pyc_size = 0
+for path in VENV_PATH.glob("**/*.pyc"):
+    pyc_size += path.stat().st_size
+print(f"Total .pyc size: {pyc_size}")
 
 time = 0
 for package in PACKAGES:
@@ -68,7 +77,7 @@ for package in PACKAGES:
             time_start = timeit.default_timer()
             call_annotate_function(annotate, format=Format.VALUE)
             time += timeit.default_timer() - time_start
-print(f"Total time taken: {time}")
+print(f"Execution time: {time}")
 
 
 raise SystemExit
