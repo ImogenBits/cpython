@@ -44,7 +44,6 @@ from _typing import (
 )
 import ast
 
-from annotationlib import Format
 
 # Please keep __all__ alphabetized within each category.
 __all__ = [
