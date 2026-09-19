@@ -7,7 +7,6 @@ import tracemalloc
 from annotationlib import Format
 import timeit
 from pathlib import Path
-from typing import eval_annotate_as_types
 
 import subprocess
 
