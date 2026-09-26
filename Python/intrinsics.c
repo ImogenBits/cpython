@@ -2,6 +2,7 @@
 #define _PY_INTERPRETER
 
 #include "Python.h"
+#include "pycore_annotateobject.h" // _PyAnnotate_New()
 #include "pycore_compile.h"       // _PyCompile_GetUnaryIntrinsicName
 #include "pycore_function.h"      // _Py_set_function_type_params()
 #include "pycore_genobject.h"     // _PyAsyncGenValueWrapperNew
@@ -217,13 +218,6 @@ make_frozenset(PyThreadState* Py_UNUSED(ignored), PyObject *set)
     return _PySet_Freeze(set);
 }
 
-static PyObject *
-build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *data)
-{
-    assert(PyDict_CheckExact(data) || PyUnicode_CheckExact(data));
-    return _PyAST_FromAnnotationData(data);
-}
-
 
 #define INTRINSIC_FUNC_ENTRY(N, F) \
     [N] = {F, #N},
@@ -243,7 +237,6 @@ _PyIntrinsics_UnaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SUBSCRIPT_GENERIC, _Py_subscript_generic)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEALIAS, _Py_make_typealias)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_FROZENSET, make_frozenset)
-    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_AST, build_annotation_ast)
 };
 
 
@@ -280,8 +273,13 @@ make_typevar_with_constraints(PyThreadState* Py_UNUSED(ignored), PyObject *name,
 }
 
 static PyObject *
-build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObject *namespace)
+build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObject *data)
 {
+    assert(PyTuple_Check(data));
+    _PyInterpreterFrame *frame = tstate->current_frame;
+    assert(frame != NULL);
+    return _PyAnnotate_New(payload, frame->f_globals, data);
+
     PyObject *expr = PyAST_AnnotationDictToAST(asts);
     if (expr == NULL) {
         return NULL;
@@ -333,7 +331,7 @@ _PyIntrinsics_BinaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEVAR_WITH_CONSTRAINTS, make_typevar_with_constraints)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_FUNCTION_TYPE_PARAMS, _Py_set_function_type_params)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_TYPEPARAM_DEFAULT, _Py_set_typeparam_default)
-    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_VALUE, build_annotation_value)
+    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATE, build_annotate)
 };
 
 #undef INTRINSIC_FUNC_ENTRY

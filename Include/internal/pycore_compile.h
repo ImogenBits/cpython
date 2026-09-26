@@ -142,10 +142,7 @@ _PyInstructionSequence *_PyCompile_InstrSequence(struct _PyCompiler *c);
 int _PyCompile_StartAnnotationSetup(struct _PyCompiler *c);
 int _PyCompile_EndAnnotationSetup(struct _PyCompiler *c);
 int _PyCompile_FutureFeatures(struct _PyCompiler *c);
-void _PyCompile_DeferredAnnotations(
-    struct _PyCompiler *c, PyObject **deferred_annotations,
-    PyObject **conditional_annotation_indices);
-PyObject *_PyCompile_AnnotationASTNames(struct _PyCompiler *c);
+bool _PyCompile_HasDeferredAnnotations(struct _PyCompiler *c);
 PyObject *_PyCompile_Mangle(struct _PyCompiler *c, PyObject *name);
 PyObject *_PyCompile_MaybeMangle(struct _PyCompiler *c, PyObject *name);
 int _PyCompile_MaybeAddStaticAttributeToClass(struct _PyCompiler *c, expr_ty e);
@@ -160,6 +157,7 @@ int _PyCompile_ScopeType(struct _PyCompiler *c);
 int _PyCompile_OptimizationLevel(struct _PyCompiler *c);
 int _PyCompile_LookupArg(struct _PyCompiler *c, PyCodeObject *co, PyObject *name);
 PyObject *_PyCompile_Qualname(struct _PyCompiler *c);
+PyObject *_PyCompile_Private(struct _PyCompiler *c);
 _PyCompile_CodeUnitMetadata *_PyCompile_Metadata(struct _PyCompiler *c);
 PyObject *_PyCompile_StaticAttributesAsTuple(struct _PyCompiler *c);
 
@@ -189,10 +187,7 @@ int _PyCompile_TweakInlinedComprehensionScopes(struct _PyCompiler *c, _Py_Source
                                                _PyCompile_InlinedComprehensionState *state);
 int _PyCompile_RevertInlinedComprehensionScopes(struct _PyCompiler *c, _Py_SourceLocation loc,
                                                 _PyCompile_InlinedComprehensionState *state);
-int _PyCompile_AddDeferredAnnotation(struct _PyCompiler *c, stmt_ty s,
-                                     PyObject **conditional_annotation_index);
-void _PyCompile_EnterConditionalBlock(struct _PyCompiler *c);
-void _PyCompile_LeaveConditionalBlock(struct _PyCompiler *c);
+void _PyCompile_AddDeferredAnnotation(struct _PyCompiler *c);
 
 int _PyCodegen_AddReturnAtEnd(struct _PyCompiler *c, int addNone);
 int _PyCodegen_EnterAnonymousScope(struct _PyCompiler* c, mod_ty mod);

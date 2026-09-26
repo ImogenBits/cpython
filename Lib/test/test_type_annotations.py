@@ -465,7 +465,6 @@ class DeferredEvaluationTests(unittest.TestCase):
         for obj in (func, X, mod):
             with self.subTest(obj=obj):
                 annotate = obj.__annotate__
-                self.assertIsInstance(annotate, types.FunctionType)
                 self.assertEqual(annotate.__name__, "__annotate__")
                 with self.assertRaises(NotImplementedError):
                     annotate(annotationlib.Format.FORWARDREF)
@@ -474,11 +473,54 @@ class DeferredEvaluationTests(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     annotate(None)
                 self.assertEqual(annotate(annotationlib.Format.VALUE), {"x": int})
+                self.assertEqual(
+                    annotate(annotationlib.Format.STRING), {"x": "int"}
+                )
 
                 sig = inspect.signature(annotate)
                 self.assertEqual(sig, inspect.Signature([
                     inspect.Parameter("format", inspect.Parameter.POSITIONAL_ONLY)
                 ]))
+
+    def test_annotation_values_keep_live_namespaces(self):
+        ns = run_code("""
+            value = 1
+            def func(x: lambda: value, y: (value for _ in (None,))):
+                pass
+        """)
+        annotations = ns["func"].__annotations__
+        callback = annotations["x"]
+        generator = annotations["y"]
+        ns["value"] = 2
+        self.assertEqual(callback(), 2)
+        self.assertEqual(next(generator), 2)
+
+        def outer():
+            value = 1
+            def func(x: lambda: value):
+                pass
+            def set_value(new_value):
+                nonlocal value
+                value = new_value
+            return func, set_value
+
+        func, set_value = outer()
+        callback = func.__annotations__["x"]
+        set_value(2)
+        self.assertEqual(callback(), 2)
+
+        # This is truly sketchy.
+        ns = run_code("""
+            def munge():
+                C.value = 1
+                return int
+            class C:
+                value = 0
+                def func(x: tuple[munge(), value]):
+                    pass
+        """)
+        annotations = ns["C"].func.__annotations__
+        self.assertEqual(annotations["x"], tuple[int, 1])
 
     def test_comprehension_in_annotation(self):
         # This crashed in an earlier version of the code
@@ -492,6 +534,34 @@ class DeferredEvaluationTests(unittest.TestCase):
         """)
         self.assertEqual(ns["C"].__annotations__, {"__classdict__": int})
 
+    def test_class_annotation_private_01(self):
+        ns = run_code("""
+            class C:
+                __x = int
+                y: __x
+        """)
+        self.assertEqual(ns["C"].__annotations__, {"y": int})
+
+        ns = run_code("""
+            class C:
+                __x = int
+                def foo() -> __x:
+                    pass
+        """)
+        self.assertEqual(ns["C"].foo.__annotations__, {"return": int})
+
+    def test_class_annotation_private_02(self):
+        ns = run_code("""
+            class C:
+                _D__x = int
+                y: __x
+        """)
+        with self.assertRaisesRegex(
+            NameError,
+            "name '_C__x' is not defined",
+        ):
+            ns["C"].__annotations__
+
     def test_future_annotations(self):
         code = """
         from __future__ import annotations
@@ -500,7 +570,6 @@ class DeferredEvaluationTests(unittest.TestCase):
         """
         ns = run_code(code)
         f = ns["f"]
-        self.assertIsInstance(f.__annotate__, types.FunctionType)
         annos = {"x": "int", "return": "int"}
         self.assertEqual(f.__annotate__(annotationlib.Format.VALUE), annos)
         self.assertEqual(f.__annotations__, annos)

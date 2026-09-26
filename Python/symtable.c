@@ -140,8 +140,6 @@ ste_new(struct symtable *st, identifier name, _Py_block_ty block,
     ste->ste_can_see_class_scope = 0;
     ste->ste_comp_iter_expr = 0;
     ste->ste_needs_classdict = 0;
-    ste->ste_has_conditional_annotations = 0;
-    ste->ste_in_conditional_block = 0;
     ste->ste_in_try_block = 0;
     ste->ste_in_unevaluated_annotation = 0;
     ste->ste_annotation_block = NULL;
@@ -979,9 +977,6 @@ drop_class_free(PySTEntryObject *ste, PyObject *free)
     res = PySet_Discard(free, &_Py_ID(__conditional_annotations__));
     if (res < 0)
         return 0;
-    if (res) {
-        ste->ste_has_conditional_annotations = 1;
-    }
     return 1;
 }
 
@@ -1408,6 +1403,11 @@ symtable_analyze(struct symtable *st)
 static int
 symtable_exit_block(struct symtable *st)
 {
+    if ((st->st_cur->ste_type == ClassBlock || st->st_cur->ste_type == ModuleBlock)) {
+        if (!symtable_add_def(st, &_Py_ID(__conditional_annotations__), USE, NULL)) {
+            return 0;
+        }
+    }
     Py_ssize_t size;
 
     st->st_cur = NULL;
@@ -1470,16 +1470,6 @@ symtable_enter_block(struct symtable *st, identifier name, _Py_block_ty block,
         return 0;
     int result = symtable_enter_existing_block(st, ste, /* add_to_children */true);
     Py_DECREF(ste);
-    if (block == AnnotationBlock || block == TypeVariableBlock || block == TypeAliasBlock) {
-        _Py_DECLARE_STR(format, ".format");
-        // We need to insert code that reads this "parameter" to the function.
-        if (!symtable_add_def(st, &_Py_STR(format), DEF_PARAM, loc)) {
-            return 0;
-        }
-        if (!symtable_add_def(st, &_Py_STR(format), USE, loc)) {
-            return 0;
-        }
-    }
     return result;
 }
 
@@ -1767,13 +1757,6 @@ symtable_enter_type_param_block(struct symtable *st, identifier name,
                 return 0;             \
         } \
     } while(0)
-
-#define ENTER_CONDITIONAL_BLOCK(ST) \
-    int in_conditional_block = (ST)->st_cur->ste_in_conditional_block; \
-    (ST)->st_cur->ste_in_conditional_block = 1;
-
-#define LEAVE_CONDITIONAL_BLOCK(ST) \
-    (ST)->st_cur->ste_in_conditional_block = in_conditional_block;
 
 #define ENTER_TRY_BLOCK(ST) \
     int in_try_block = (ST)->st_cur->ste_in_try_block; \
@@ -2100,37 +2083,29 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
     case For_kind: {
         VISIT(st, expr, s->v.For.target);
         VISIT(st, expr, s->v.For.iter);
-        ENTER_CONDITIONAL_BLOCK(st);
         VISIT_SEQ(st, stmt, s->v.For.body);
         if (s->v.For.orelse)
             VISIT_SEQ(st, stmt, s->v.For.orelse);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case While_kind: {
         VISIT(st, expr, s->v.While.test);
-        ENTER_CONDITIONAL_BLOCK(st);
         VISIT_SEQ(st, stmt, s->v.While.body);
         if (s->v.While.orelse)
             VISIT_SEQ(st, stmt, s->v.While.orelse);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case If_kind: {
         /* XXX if 0: and lookup_yield() hacks */
         VISIT(st, expr, s->v.If.test);
-        ENTER_CONDITIONAL_BLOCK(st);
         VISIT_SEQ(st, stmt, s->v.If.body);
         if (s->v.If.orelse)
             VISIT_SEQ(st, stmt, s->v.If.orelse);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case Match_kind: {
         VISIT(st, expr, s->v.Match.subject);
-        ENTER_CONDITIONAL_BLOCK(st);
         VISIT_SEQ(st, match_case, s->v.Match.cases);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case Raise_kind:
@@ -2142,25 +2117,21 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         }
         break;
     case Try_kind: {
-        ENTER_CONDITIONAL_BLOCK(st);
         ENTER_TRY_BLOCK(st);
         VISIT_SEQ(st, stmt, s->v.Try.body);
         VISIT_SEQ(st, excepthandler, s->v.Try.handlers);
         VISIT_SEQ(st, stmt, s->v.Try.orelse);
         VISIT_SEQ(st, stmt, s->v.Try.finalbody);
         LEAVE_TRY_BLOCK(st);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case TryStar_kind: {
-        ENTER_CONDITIONAL_BLOCK(st);
         ENTER_TRY_BLOCK(st);
         VISIT_SEQ(st, stmt, s->v.TryStar.body);
         VISIT_SEQ(st, excepthandler, s->v.TryStar.handlers);
         VISIT_SEQ(st, stmt, s->v.TryStar.orelse);
         VISIT_SEQ(st, stmt, s->v.TryStar.finalbody);
         LEAVE_TRY_BLOCK(st);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case Assert_kind:
@@ -2274,10 +2245,8 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         /* nothing to do here */
         break;
     case With_kind: {
-        ENTER_CONDITIONAL_BLOCK(st);
         VISIT_SEQ(st, withitem, s->v.With.items);
         VISIT_SEQ(st, stmt, s->v.With.body);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case AsyncFunctionDef_kind: {
@@ -2340,10 +2309,8 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         if (!symtable_raise_if_not_coroutine(st, ASYNC_WITH_OUTSIDE_ASYNC_FUNC, LOCATION(s))) {
             return 0;
         }
-        ENTER_CONDITIONAL_BLOCK(st);
         VISIT_SEQ(st, withitem, s->v.AsyncWith.items);
         VISIT_SEQ(st, stmt, s->v.AsyncWith.body);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     case AsyncFor_kind: {
@@ -2353,11 +2320,9 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         }
         VISIT(st, expr, s->v.AsyncFor.target);
         VISIT(st, expr, s->v.AsyncFor.iter);
-        ENTER_CONDITIONAL_BLOCK(st);
         VISIT_SEQ(st, stmt, s->v.AsyncFor.body);
         if (s->v.AsyncFor.orelse)
             VISIT_SEQ(st, stmt, s->v.AsyncFor.orelse);
-        LEAVE_CONDITIONAL_BLOCK(st);
         break;
     }
     }
@@ -2851,18 +2816,6 @@ symtable_visit_annotation(struct symtable *st, expr_ty annotation, void *key)
 {
     // Annotations in local scopes are not executed and should not affect the symtable
     bool is_unevaluated = st->st_cur->ste_type == FunctionBlock;
-
-    // Module-level annotations are always considered conditional because the module
-    // may be partially executed.
-    if ((((st->st_cur->ste_type == ClassBlock && st->st_cur->ste_in_conditional_block)
-            || st->st_cur->ste_type == ModuleBlock))
-            && !st->st_cur->ste_has_conditional_annotations)
-    {
-        st->st_cur->ste_has_conditional_annotations = 1;
-        if (!symtable_add_def(st, &_Py_ID(__conditional_annotations__), USE, LOCATION(annotation))) {
-            return 0;
-        }
-    }
     struct _symtable_entry *parent_ste = st->st_cur;
     if (parent_ste->ste_annotation_block == NULL) {
         _Py_block_ty current_type = parent_ste->ste_type;

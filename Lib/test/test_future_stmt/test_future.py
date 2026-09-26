@@ -1,6 +1,7 @@
 # Test various flavors of legal and illegal future statements
 
 import __future__
+import annotationlib
 import ast
 import unittest
 from test.support import import_helper
@@ -225,13 +226,21 @@ class AnnotationsFutureTestCase(unittest.TestCase):
 
     def getActual(self, annotation):
         scope = {}
-        exec(self.template.format(ann=annotation), {}, scope)
+        # XXX: TODO: DESLOP
+        # A single namespace, as a module has: __annotate__ resolves
+        # __conditional_annotations__ through its __globals__.
+        exec(self.template.format(ann=annotation), scope)
         func_ret_ann = scope['f'].__annotations__['return']
         func_arg_ann = scope['g'].__annotations__['arg']
         async_func_ret_ann = scope['f2'].__annotations__['return']
         async_func_arg_ann = scope['g2'].__annotations__['arg']
-        var_ann1 = scope['__annotations__']['var']
-        var_ann2 = scope['__annotations__']['var2']
+        # XXX: TODO: DESLOP
+        # Module annotations are deferred into __annotate__ even under PEP 563,
+        # so a bare exec namespace has no eager __annotations__ dict.
+        module_anns = annotationlib.call_annotate_function(
+            scope['__annotate__'], annotationlib.Format.VALUE)
+        var_ann1 = module_anns['var']
+        var_ann2 = module_anns['var2']
         self.assertEqual(func_ret_ann, func_arg_ann)
         self.assertEqual(func_ret_ann, async_func_ret_ann)
         self.assertEqual(func_ret_ann, async_func_arg_ann)

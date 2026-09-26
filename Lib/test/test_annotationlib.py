@@ -384,8 +384,7 @@ class TestStringFormat(unittest.TestCase):
             "y": "list[t'{a}']",
             "z": "t'{a:b} {c!r} {d!s:t}'",
             "a": "t'a{b}c{d}e{f}g'",
-            # interpolations in the format spec are eagerly evaluated so we can't recover the source
-            "b": "t'{a:1}'",
+            "b": "t'{a:{1}}'",
             "c": "t'{a | b * c}'",
             "gh138558": "t'{ 0}'",
         })
@@ -455,7 +454,7 @@ class TestStringFormat(unittest.TestCase):
             {
                 "a": "1",
                 "b": "1.0",
-                "c": 'hello',
+                "c": "'hello'",
                 "d": "b'hello'",
                 "e": "True",
                 "f": "None",
@@ -519,30 +518,35 @@ class TestStringFormat(unittest.TestCase):
             },
         )
 
-    def test_unsupported_operations(self):
-        format_msg = "Cannot stringify annotation containing string formatting"
-
+    def test_fstrings(self):
+        # XXX: TODO: DESLOP
+        # Since __annotate__ returns the source of the annotations, f-strings
+        # can be stringified faithfully.
         def f(fstring: f"{a}"):
             pass
 
-        with self.assertRaisesRegex(TypeError, format_msg):
-            get_annotations(f, format=Format.STRING)
+        self.assertEqual(
+            get_annotations(f, format=Format.STRING), {"fstring": "f'{a}'"}
+        )
 
         def f(fstring_format: f"{a:02d}"):
             pass
 
-        with self.assertRaisesRegex(TypeError, format_msg):
-            get_annotations(f, format=Format.STRING)
+        self.assertEqual(
+            get_annotations(f, format=Format.STRING),
+            {"fstring_format": "f'{a:02d}'"},
+        )
 
     def test_shenanigans(self):
-        # In cases like this we can't reconstruct the source; test that we do something
-        # halfway reasonable.
+        # XXX: TODO: DESLOP
+        # Since __annotate__ returns the source of the annotations, even
+        # annotations that perform runtime shenanigans stringify faithfully.
         def f(x: x | (1).__class__, y: (1).__class__):
             pass
 
         self.assertEqual(
             get_annotations(f, format=Format.STRING),
-            {"x": "x | <class 'int'>", "y": "<class 'int'>"},
+            {"x": "x | 1 .__class__", "y": "1 .__class__"},
         )
 
 
@@ -786,11 +790,11 @@ class TestGetAnnotations(unittest.TestCase):
         )
         self.assertEqual(
             get_annotations(isa.function2, format=Format.STRING),
-            {"a": "int", "b": "str", "c": "MyClass", "return": "MyClass"},
+            {"a": "int", "b": "'str'", "c": "MyClass", "return": "MyClass"},
         )
         self.assertEqual(
             get_annotations(isa.function3, format=Format.STRING),
-            {"a": "int", "b": "str", "c": "MyClass"},
+            {"a": "'int'", "b": "'str'", "c": "'MyClass'"},
         )
         self.assertEqual(
             get_annotations(annotationlib, format=Format.STRING),
@@ -1420,27 +1424,49 @@ class TestGetAnnotations(unittest.TestCase):
 class TestCallEvaluateFunction(unittest.TestCase):
     def test_evaluation(self):
         def evaluate(format, exc=NotImplementedError):
-            if format > 2:
+            if format > 1:
                 raise exc
             return undefined
 
+        # XXX: TODO: DESLOP
+        # The evaluate function supports only the VALUE format, so
+        # every format ends up evaluating the value and raising NameError.
         with self.assertRaises(NameError):
             annotationlib.call_evaluate_function(evaluate, Format.VALUE)
+        with self.assertRaises(NameError):
+            annotationlib.call_evaluate_function(evaluate, Format.FORWARDREF)
+        with self.assertRaises(NameError):
+            annotationlib.call_evaluate_function(evaluate, Format.STRING)
+
+        # XXX: TODO: DESLOP
+        # Evaluate functions that support the STRING format (like
+        # compiler-generated ones) provide STRING directly and FORWARDREF
+        # by evaluation of the string.
+        def evaluate_string(format):
+            if format == Format.VALUE:
+                return undefined
+            if format == Format.STRING:
+                return "undefined"
+            raise NotImplementedError(format)
+
+        with self.assertRaises(NameError):
+            annotationlib.call_evaluate_function(evaluate_string, Format.VALUE)
         self.assertEqual(
-            annotationlib.call_evaluate_function(evaluate, Format.FORWARDREF),
+            annotationlib.call_evaluate_function(evaluate_string, Format.FORWARDREF),
             support.EqualToForwardRef("undefined"),
         )
         self.assertEqual(
-            annotationlib.call_evaluate_function(evaluate, Format.STRING),
+            annotationlib.call_evaluate_function(evaluate_string, Format.STRING),
             "undefined",
         )
 
-    def test_fake_global_evaluation(self):
-        # This will raise an AttributeError
+    def test_string_evaluation(self):
+        # XXX: TODO: DESLOP
+        # Evaluating the string would raise an AttributeError, so the
+        # FORWARDREF format returns a ForwardRef.
         def evaluate_union(format, exc=NotImplementedError):
-            if format == Format.VALUE_WITH_FAKE_GLOBALS:
-                # Return a ForwardRef
-                return builtins.undefined | list[int]
+            if format == Format.STRING:
+                return "builtins.undefined | list[int]"
             raise exc
 
         self.assertEqual(
@@ -1448,27 +1474,9 @@ class TestCallEvaluateFunction(unittest.TestCase):
             support.EqualToForwardRef("builtins.undefined | list[int]"),
         )
 
-        # This will raise an AttributeError
-        def evaluate_intermediate(format, exc=NotImplementedError):
-            if format == Format.VALUE_WITH_FAKE_GLOBALS:
-                intermediate = builtins.undefined
-                # Return a literal
-                return intermediate is None
-            raise exc
-
-        self.assertIs(
-            annotationlib.call_evaluate_function(evaluate_intermediate, Format.FORWARDREF),
-            False,
-        )
-
 
 class TestCallAnnotateFunction(unittest.TestCase):
     # Tests for user defined annotate functions.
-
-    # Format and NotImplementedError are provided as arguments so they exist in
-    # the fake globals namespace.
-    # This avoids non-matching conditions passing by being converted to stringifiers.
-    # See: https://github.com/python/cpython/issues/138764
 
     def test_user_annotate_value(self):
         def annotate(format, /):
@@ -1503,16 +1511,17 @@ class TestCallAnnotateFunction(unittest.TestCase):
 
         self.assertEqual(annotations, {"x": float})
 
-    def test_user_annotate_forwardref_fakeglobals(self):
-        # If Format.FORWARDREF is not supported, use Format.VALUE_WITH_FAKE_GLOBALS
-        # before falling back to Format.VALUE
-        def annotate(format, /, __Format=Format, __NotImplementedError=NotImplementedError):
-            if format == __Format.VALUE:
+    def test_user_annotate_forwardref_string(self):
+        # XXX: TODO: DESLOP
+        # If Format.FORWARDREF is not supported, evaluate the STRING format
+        # output before falling back to Format.VALUE
+        def annotate(format, /):
+            if format == Format.VALUE:
                 return {'x': str}
-            elif format == __Format.VALUE_WITH_FAKE_GLOBALS:
-                return {'x': int}
+            elif format == Format.STRING:
+                return {'x': "int"}
             else:
-                raise __NotImplementedError(format)
+                raise NotImplementedError(format)
 
         annotations = annotationlib.call_annotate_function(
             annotate,
@@ -1556,23 +1565,22 @@ class TestCallAnnotateFunction(unittest.TestCase):
 
         self.assertEqual(annotations, {"x": "float"})
 
-    def test_user_annotate_string_fakeglobals(self):
-        # If Format.STRING is not supported but Format.VALUE_WITH_FAKE_GLOBALS is
-        # prefer that over Format.VALUE
-        def annotate(format, /, __Format=Format, __NotImplementedError=NotImplementedError):
-            if format == __Format.VALUE:
+    def test_user_annotate_fake_globals_never_called(self):
+        # XXX: TODO: DESLOP
+        # annotationlib never calls annotate functions with the legacy
+        # VALUE_WITH_FAKE_GLOBALS format.
+        called_formats = []
+
+        def annotate(format, /):
+            called_formats.append(format)
+            if format == Format.VALUE:
                 return {'x': str}
-            elif format == __Format.VALUE_WITH_FAKE_GLOBALS:
-                return {'x': int}
             else:
-                raise __NotImplementedError(format)
+                raise NotImplementedError(format)
 
-        annotations = annotationlib.call_annotate_function(
-            annotate,
-            Format.STRING,
-        )
-
-        self.assertEqual(annotations, {"x": "int"})
+        for format in (Format.VALUE, Format.FORWARDREF, Format.STRING):
+            annotationlib.call_annotate_function(annotate, format)
+        self.assertNotIn(Format.VALUE_WITH_FAKE_GLOBALS, called_formats)
 
     def test_user_annotate_string_value_fallback(self):
         # If Format.STRING and Format.VALUE_WITH_FAKE_GLOBALS are not
@@ -1638,13 +1646,13 @@ class TestCallAnnotateFunction(unittest.TestCase):
         annotations = annotationlib.call_annotate_function(Annotate(), Format.STRING)
         self.assertEqual(annotations, {"x": "float"})
 
-        with self.assertRaises(AttributeError) as cm:
-            annotations = annotationlib.call_annotate_function(
-                Annotate(), Format.FORWARDREF
-            )
-
-        self.assertEqual(cm.exception.name, "__builtins__")
-        self.assertIsInstance(cm.exception.obj, Annotate)
+        # XXX: TODO: DESLOP
+        # FORWARDREF works by evaluating the STRING format output, even
+        # though the callable has no __globals__ or __closure__.
+        annotations = annotationlib.call_annotate_function(
+            Annotate(), Format.FORWARDREF
+        )
+        self.assertEqual(annotations, {"x": float})
 
     def test_full_non_function_annotate(self):
         def outer():
@@ -1683,19 +1691,21 @@ class TestCallAnnotateFunction(unittest.TestCase):
         )
         self.assertEqual(annotate.called_formats[-1], Format.VALUE)
 
+        # STRING is not supported, so the VALUE output is stringified.
         self.assertEqual(
             annotationlib.call_annotate_function(annotate, Format.STRING),
-            {"w": "unknown", "x": "MyClass", "y": "int", "z": "local"}
+            {"x": f"{__name__}.MyClass", "y": "int", "z": "str"}
         )
         self.assertIn(Format.STRING, annotate.called_formats)
-        self.assertEqual(annotate.called_formats[-1], Format.VALUE_WITH_FAKE_GLOBALS)
+        self.assertEqual(annotate.called_formats[-1], Format.VALUE)
 
+        # Neither FORWARDREF nor STRING is supported, so fall back to VALUE.
         self.assertEqual(
             annotationlib.call_annotate_function(annotate, Format.FORWARDREF),
-            {"w": support.EqualToForwardRef("unknown"), "x": MyClass, "y": int, "z": str}
+            {"x": MyClass, "y": int, "z": str}
         )
         self.assertIn(Format.FORWARDREF, annotate.called_formats)
-        self.assertEqual(annotate.called_formats[-1], Format.VALUE_WITH_FAKE_GLOBALS)
+        self.assertEqual(annotate.called_formats[-1], Format.VALUE)
 
     def test_error_from_value_raised(self):
         # Test that the error from format.VALUE is raised
@@ -1827,7 +1837,10 @@ class TestGetAnnotateFromClassNamespace(unittest.TestCase):
             from __future__ import annotations
 
             class HasFutureAnnotations(metaclass=Meta):
-                expected_annotate = False
+                # XXX: TODO: DESLOP
+                # Classes get an __annotate__ under PEP 563 too; it returns
+                # the annotation strings for every format.
+                expected_annotate = True
                 a: int
         """
         exec(textwrap.dedent(code), {"Meta": Meta})
@@ -2361,6 +2374,31 @@ class TestForwardRefClass(unittest.TestCase):
 
 
 class TestAnnotationLib(unittest.TestCase):
+    def test_mangle_private_attributes(self):
+        namespace = types.SimpleNamespace(
+            **{
+                "_C__value": int,
+                "_C__nested": types.SimpleNamespace(_C__value=str),
+            }
+        )
+
+        class C:
+            value: namespace.__value
+            nested: namespace.__nested.__value
+
+        self.assertEqual(C.__annotations__, {"value": int, "nested": str})
+
+    def test_mangle_private_name(self):
+        mangle = annotationlib._mangle_private_name
+        self.assertEqual(mangle("Foo", "__bar"), "_Foo__bar")
+        self.assertEqual(mangle("_Foo", "__bar"), "_Foo__bar")
+        self.assertEqual(mangle("__Foo", "__bar"), "_Foo__bar")
+        self.assertEqual(mangle("___", "__bar"), "__bar")
+        self.assertEqual(mangle("Foo", "bar"), "bar")
+        self.assertEqual(mangle("Foo", "__bar__"), "__bar__")
+        self.assertEqual(mangle("Foo", "__bar.baz"), "__bar.baz")
+        self.assertEqual(mangle(None, "__bar"), "__bar")
+
     def test__all__(self):
         support.check__all__(self, annotationlib)
 

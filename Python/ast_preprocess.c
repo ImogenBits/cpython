@@ -661,22 +661,8 @@ astfold_comprehension(comprehension_ty node_, PyArena *ctx_, _PyASTPreprocessSta
 static int
 astfold_arguments(arguments_ty node_, PyArena *ctx_, _PyASTPreprocessState *state)
 {
-    CALL_SEQ(astfold_arg, arg, node_->posonlyargs);
-    CALL_SEQ(astfold_arg, arg, node_->args);
-    CALL_OPT(astfold_arg, arg_ty, node_->vararg);
-    CALL_SEQ(astfold_arg, arg, node_->kwonlyargs);
     CALL_SEQ(astfold_expr, expr, node_->kw_defaults);
-    CALL_OPT(astfold_arg, arg_ty, node_->kwarg);
     CALL_SEQ(astfold_expr, expr, node_->defaults);
-    return 1;
-}
-
-static int
-astfold_arg(arg_ty node_, PyArena *ctx_, _PyASTPreprocessState *state)
-{
-    if (!(state->ff_features & CO_FUTURE_ANNOTATIONS)) {
-        CALL_OPT(astfold_expr, expr_ty, node_->annotation);
-    }
     return 1;
 }
 
@@ -692,9 +678,6 @@ astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTPreprocessState *state)
         CALL(astfold_body, asdl_seq, node_->v.FunctionDef.body);
         AFTER_FUNC_BODY(state);
         CALL_SEQ(astfold_expr, expr, node_->v.FunctionDef.decorator_list);
-        if (!(state->ff_features & CO_FUTURE_ANNOTATIONS)) {
-            CALL_OPT(astfold_expr, expr_ty, node_->v.FunctionDef.returns);
-        }
         break;
     }
     case AsyncFunctionDef_kind: {
@@ -704,9 +687,6 @@ astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTPreprocessState *state)
         CALL(astfold_body, asdl_seq, node_->v.AsyncFunctionDef.body);
         AFTER_FUNC_BODY(state);
         CALL_SEQ(astfold_expr, expr, node_->v.AsyncFunctionDef.decorator_list);
-        if (!(state->ff_features & CO_FUTURE_ANNOTATIONS)) {
-            CALL_OPT(astfold_expr, expr_ty, node_->v.AsyncFunctionDef.returns);
-        }
         break;
     }
     case ClassDef_kind:
@@ -733,9 +713,6 @@ astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTPreprocessState *state)
         break;
     case AnnAssign_kind:
         CALL(astfold_expr, expr_ty, node_->v.AnnAssign.target);
-        if (!(state->ff_features & CO_FUTURE_ANNOTATIONS)) {
-            CALL(astfold_expr, expr_ty, node_->v.AnnAssign.annotation);
-        }
         CALL_OPT(astfold_expr, expr_ty, node_->v.AnnAssign.value);
         break;
     case TypeAlias_kind:
