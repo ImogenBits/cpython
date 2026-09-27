@@ -1403,7 +1403,9 @@ symtable_analyze(struct symtable *st)
 static int
 symtable_exit_block(struct symtable *st)
 {
-    if ((st->st_cur->ste_type == ClassBlock || st->st_cur->ste_type == ModuleBlock)) {
+    if (st->st_cur->st_annotations_used && (
+        st->st_cur->ste_type == ClassBlock || st->st_cur->ste_type == ModuleBlock
+    )) {
         if (!symtable_add_def(st, &_Py_ID(__conditional_annotations__), USE, NULL)) {
             return 0;
         }

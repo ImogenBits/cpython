@@ -273,8 +273,12 @@ make_typevar_with_constraints(PyThreadState* Py_UNUSED(ignored), PyObject *name,
 }
 
 static PyObject *
-build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObject *data)
+build_annotate(PyThreadState* tstate, PyObject *asts, PyObject *data)
 {
+    _PyInterpreterFrame *frame = tstate->current_frame;
+    assert(frame != NULL);
+    return _PyAnnotate_New(asts, data, frame->f_globals);
+
     assert(PyTuple_Check(data));
     _PyInterpreterFrame *frame = tstate->current_frame;
     assert(frame != NULL);

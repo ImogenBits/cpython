@@ -705,162 +705,38 @@ codegen_enter_scope(compiler *c, identifier name, int scope_type,
 }
 
 static int
-codegen_setup_annotations_scope(compiler *c, location loc, void *key, PyObject *name)
-{
-    _PyCompile_CodeUnitMetadata umd = {
-        .u_posonlyargcount = 1,
-    };
+codegen_annotate(compiler *c, location loc, void *key, PyObject *name) {
     RETURN_IF_ERROR(
         codegen_enter_scope(c, name, COMPILE_SCOPE_ANNOTATIONS,
                             key, loc.lineno, NULL, &umd));
-
-    // if .format > VALUE_WITH_FAKE_GLOBALS: raise NotImplementedError
-    PyObject *value_with_fake_globals = PyLong_FromLong(_Py_ANNOTATE_FORMAT_VALUE_WITH_FAKE_GLOBALS);
-    if (value_with_fake_globals == NULL) {
-        return ERROR;
-    }
-    PyObject *ast_repr = PyLong_FromLong(_Py_ANNOTATE_FORMAT_AST);
-    if (ast_repr == NULL) {
-        return ERROR;
-    }
-    NEW_JUMP_TARGET_LABEL(c, body);
     assert(!SYMTABLE_ENTRY(c)->ste_has_docstring);
-    _Py_DECLARE_STR(format, ".format");
-    ADDOP_I(c, loc, LOAD_FAST, 0);
-    ADDOP_LOAD_CONST_NEW(c, loc, value_with_fake_globals);
-    ADDOP_I(c, loc, COMPARE_OP, (Py_GT << 5) | compare_masks[Py_GT]);
-    ADDOP_JUMP(c, loc, POP_JUMP_IF_FALSE, body);
-    ADDOP_I(c, loc, LOAD_FAST, 0);
-    ADDOP_LOAD_CONST(c, loc, ast_repr);
-    ADDOP_I(c, loc, COMPARE_OP, (Py_EQ << 5) | compare_masks[Py_EQ]);
-    ADDOP_JUMP(c, loc, POP_JUMP_IF_TRUE, body);
-    ADDOP_I(c, loc, LOAD_COMMON_CONSTANT, CONSTANT_NOTIMPLEMENTEDERROR);
-    ADDOP_I(c, loc, RAISE_VARARGS, 1);
-    USE_LABEL(c, body);
-    return SUCCESS;
-}
-
-static int
-codegen_load_name_into_map(compiler *c, location loc, PyObject *name)
-{
-    NEW_JUMP_TARGET_LABEL(c, body);
-    NEW_JUMP_TARGET_LABEL(c, end);
-    NEW_JUMP_TARGET_LABEL(c, except);
-
-    ADDOP_JUMP(c, loc, SETUP_FINALLY, except);
-    USE_LABEL(c, body);
-    RETURN_IF_ERROR(
-        _PyCompile_PushFBlock(c, loc, COMPILE_FBLOCK_TRY_EXCEPT, body, NO_LABEL, NULL));
-    ADDOP_LOAD_CONST(c, loc, name);
-    RETURN_IF_ERROR(codegen_nameop(c, loc, name, Load));
-    ADDOP_I(c, loc, MAP_ADD, 1);
-    _PyCompile_PopFBlock(c, COMPILE_FBLOCK_TRY_EXCEPT, body);
-    ADDOP(c, loc, POP_BLOCK);
-    ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, end);
-
-    USE_LABEL(c, except);
-    ADDOP(c, loc, POP_TOP);
-
-    USE_LABEL(c, end);
-    return SUCCESS;
-}
-
-static int
-codegen_finalize_annotations_scope(compiler *c, location loc, int scope_type)
-{
-    ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_BUILD_ANNOTATION_AST);
-
-    PyObject *ast_names, *name_iter, *name;
-    ast_names = _PyCompile_AnnotationASTNames(c);
-    if (!ast_names) {
-        return ERROR;
-    }
-    ADDOP_I(c, loc, BUILD_MAP, 0);
-    if (!(FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS)) {
-        name_iter = PyObject_GetIter(ast_names);
-        if (!name_iter) {
-            Py_DECREF(ast_names);
-            return ERROR;
-        }
-        while (PyIter_NextItem(name_iter, &name)) {
-            if (!name) {
-                Py_DECREF(name_iter);
-                Py_DECREF(ast_names);
-                return ERROR;
-            }
-            codegen_load_name_into_map(c, loc, name);
-        }
-        Py_DECREF(name_iter);
-    }
-    Py_DECREF(ast_names);
-
-    PyObject *value_with_fake_globals = PyLong_FromLong(_Py_ANNOTATE_FORMAT_VALUE_WITH_FAKE_GLOBALS);
-    if (value_with_fake_globals == NULL) {
-        return ERROR;
-    }
-    _Py_DECLARE_STR(format, ".format");
-    NEW_JUMP_TARGET_LABEL(c, value);
-    ADDOP_I(c, loc, LOAD_FAST, 0);
-    ADDOP_LOAD_CONST_NEW(c, loc, value_with_fake_globals);
-    ADDOP_I(c, loc, COMPARE_OP, (Py_GT << 5) | compare_masks[Py_GT]);
-    ADDOP_JUMP(c, loc, POP_JUMP_IF_FALSE, value);
-    ADDOP_I(c, loc, BUILD_TUPLE, 2);
-    ADDOP(c, loc, RETURN_VALUE);
-    USE_LABEL(c, value);
-    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_BUILD_ANNOTATION_VALUE);
-    ADDOP(c, loc, RETURN_VALUE);
-    return SUCCESS;
-}
-
-static int
-codegen_rename_annotations_format_param(PyCodeObject *co)
-{
-    // We want the parameter to __annotate__ to be named "format" in the
-    // signature  shown by inspect.signature(), but we need to use a
-    // different name (.format) in the symtable; if the name
-    // "format" appears in the annotations, it doesn't get clobbered
-    // by this name.  This code is essentially:
-    // co->co_localsplusnames = ("format", *co->co_localsplusnames[1:])
-    const Py_ssize_t size = PyObject_Size(co->co_localsplusnames);
-    if (size == -1) {
-        return ERROR;
-    }
-    PyObject *new_names = PyTuple_New(size);
-    if (new_names == NULL) {
-        return ERROR;
-    }
-    PyTuple_SET_ITEM(new_names, 0, Py_NewRef(&_Py_ID(format)));
-    for (int i = 1; i < size; i++) {
-        PyObject *item = PyTuple_GetItem(co->co_localsplusnames, i);
-        if (item == NULL) {
-            Py_DECREF(new_names);
-            return ERROR;
-        }
-        Py_INCREF(item);
-        PyTuple_SET_ITEM(new_names, i, item);
-    }
-    Py_SETREF(co->co_localsplusnames, new_names);
-    return SUCCESS;
-}
-
-static int
-codegen_leave_annotations_scope(compiler *c, location loc)
-{
-    PyCodeObject *co = _PyCompile_OptimizeAndAssemble(c, 1);
-    if (co == NULL) {
-        return ERROR;
-    }
-
-    if (codegen_rename_annotations_format_param(co) < 0) {
-        Py_DECREF(co);
-        return ERROR;
-    }
-
+    PyObject *name_data = _PyCompile_AnnotateNameData(c);
     _PyCompile_ExitScope(c);
-    int ret = codegen_make_closure(c, loc, co, 0);
-    Py_DECREF(co);
-    RETURN_IF_ERROR(ret);
-    return SUCCESS;
+    if (!name_data) {
+        return ERROR;
+    }
+
+    if (name_data == Py_None) {
+        ADDOP_LOAD_CONST(c, loc, Py_None);
+    } else {
+        if (PyTuple_GetItem(name_data, 0) == Py_None) {
+            ADDOP_LOAD_CONST(c, loc, Py_None);
+        } else {
+            PyObject *freevars = PyTuple_GetItem(name_data, 0);
+            Py_ssize_t n = PyTuple_GetSize(freevars);
+            for (Py_ssize_t i = 0; i < n; i++) {
+                int arg = _PyCompile_LookupArg(c, NULL, PyTuple_GET_ITEM(freevars, i));
+                RETURN_IF_ERROR(arg);
+                ADDOP_I(c, loc, LOAD_CLOSURE, arg);
+            }
+            ADDOP_I(c, loc, BUILD_TUPLE, n);
+        }
+        ADDOP_I(c, loc, BUILD_LIST, 1);
+        ADDOP_LOAD_CONST(c, loc, name_data);
+        ADDOP_I(c, loc, LIST_EXTEND, 1);
+        ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_LIST_TO_TUPLE);
+    }
+    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_MAKE_ANNOTATE);
 }
 
 static int

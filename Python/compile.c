@@ -1056,12 +1056,11 @@ _PyCompile_ResolveNameop(compiler *c, PyObject *mangled, int scope,
 }
 
 PyObject *
-_PyCompile_AnnotateNameData(PySTEntryObject *ste) {
+_PyCompile_AnnotateNameData(compiler *c) {
     PyObject *globals = PyList_New(0);
     if (!globals) {
         return NULL;
     }
-
     PyObject *symbols = c->u->u_ste->ste_symbols;
     if (symbols) {
         PyObject *name, *flag;
@@ -1075,13 +1074,7 @@ _PyCompile_AnnotateNameData(PySTEntryObject *ste) {
             }
         }
     }
-    PyObject *mangled_set = c->u->u_ste->mangled_names;
-    if (PySet_Size(mangled_set) == 0 && PyList_Size(globals) == 0) {
-        Py_DECREF(globals);
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-    PyObject *global_tuple = Py_None;
+    PyObject *global_tuple = NULL;
     if (PyList_Size(globals) != 0) {
         global_tuple = PyList_AsTuple(globals);
         Py_DECREF(globals);
@@ -1089,23 +1082,77 @@ _PyCompile_AnnotateNameData(PySTEntryObject *ste) {
             return NULL;
         }
     } else {
+        global_tuple = Py_None;
         Py_INCREF(Py_None);
     }
-    PyObject *mangled = Py_None, *private_name = Py_None;
-    if (PySet_Size(mangled_set) != 0) {
+
+    PyObject *mangled_set = c->u->u_ste->mangled_names;
+    if (!mangled_set && PyList_Size(globals) == 0) {
+        Py_DECREF(globals);
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    PyObject *mangled = NULL, *private_name = NULL;
+    if (mangled_set) {
         mangled = PyFrozenSet_New(mangled_set);
+        if (!mangled) {
+            Py_DECREF(global_tuple);
+            return NULL;
+        }
         private_name = c->u->u_private;
         Py_INCREF(private_name);
     } else {
+        mangled = Py_None;
+        private_name = Py_None;
         Py_INCREF(Py_None);
         Py_INCREF(Py_None);
     }
 
-    PyObject *result = PyTuple_Pack(3, global_tuple, private_name, mangled);
-    Py_DECREF(global_tuple);
-    Py_DECREF(mangled);
-    Py_DECREF(private_name);
-    return result;
+    _PyCompile_CodeUnitMetadata *umd = c->u_metadata;
+    Py_ssize_t base = PyDict_GET_SIZE(umd->u_cellvars);
+    Py_ssize_t n = PyDict_GET_SIZE(umd->u_freevars);
+    PyObject *freevars = NULL;
+    if (n != 0) {
+        freevars = PyTuple_New(n);
+        if (freevars == NULL) {
+            Py_DECREF(global_tuple);
+            Py_DECREF(mangled_set);
+            Py_DECREF(private_name);
+            return NULL;
+        }
+        PyObject *name, *index;
+        Py_ssize_t pos = 0;
+        while (PyDict_Next(umd->u_freevars, &pos, &name, &index)) {
+            Py_ssize_t i = PyLong_AsSsize_t(index);
+            if (i == -1 && PyErr_Occurred()) {
+                Py_DECREF(global_tuple);
+                Py_DECREF(mangled_set);
+                Py_DECREF(private_name);
+                Py_DECREF(freevars);
+                return NULL;
+            }
+            i -= base;
+            assert(0 <= i && i < n);
+            PyTuple_SET_ITEM(freevars, i, Py_NewRef(name));
+        }
+    } else {
+        freevars = Py_None;
+        Py_INCREF(Py_None);
+    }
+
+    if (freevars == Py_None && mangled_set == Py_None && global_tuple == Py_None) {
+        Py_DECREF(Py_None);
+        Py_DECREF(Py_None);
+        Py_DECREF(Py_None);
+        return Py_None;
+    } else {
+        PyObject *result = PyTuple_Pack(4, freevars, global_tuple, private_name, mangled_set);
+        Py_DECREF(freevars);
+        Py_DECREF(global_tuple);
+        Py_DECREF(mangled);
+        Py_DECREF(private_name);
+        return result;
+    }
 }
 
 int
