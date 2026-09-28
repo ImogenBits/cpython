@@ -1116,7 +1116,7 @@ _PyCompile_AnnotateNameData(compiler *c) {
         freevars = PyTuple_New(n);
         if (freevars == NULL) {
             Py_DECREF(global_tuple);
-            Py_DECREF(mangled_set);
+            Py_DECREF(mangled);
             Py_DECREF(private_name);
             return NULL;
         }
@@ -1126,7 +1126,7 @@ _PyCompile_AnnotateNameData(compiler *c) {
             Py_ssize_t i = PyLong_AsSsize_t(index);
             if (i == -1 && PyErr_Occurred()) {
                 Py_DECREF(global_tuple);
-                Py_DECREF(mangled_set);
+                Py_DECREF(mangled);
                 Py_DECREF(private_name);
                 Py_DECREF(freevars);
                 return NULL;
@@ -1140,7 +1140,7 @@ _PyCompile_AnnotateNameData(compiler *c) {
         Py_INCREF(Py_None);
     }
 
-    if (freevars == Py_None && mangled_set == Py_None && global_tuple == Py_None) {
+    if (freevars == Py_None && mangled == Py_None && global_tuple == Py_None) {
         Py_DECREF(Py_None);
         Py_DECREF(Py_None);
         Py_DECREF(Py_None);
