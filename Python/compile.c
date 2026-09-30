@@ -1087,11 +1087,6 @@ _PyCompile_AnnotateNameData(compiler *c) {
     }
 
     PyObject *mangled_set = c->u->u_ste->mangled_names;
-    if (!mangled_set && PyList_Size(globals) == 0) {
-        Py_DECREF(globals);
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
     PyObject *mangled = NULL, *private_name = NULL;
     if (mangled_set) {
         mangled = PyFrozenSet_New(mangled_set);
@@ -1140,13 +1135,15 @@ _PyCompile_AnnotateNameData(compiler *c) {
         Py_INCREF(Py_None);
     }
 
+    assert(c->u->u_metadata.u_qualname);
     if (freevars == Py_None && mangled == Py_None && global_tuple == Py_None) {
         Py_DECREF(Py_None);
         Py_DECREF(Py_None);
         Py_DECREF(Py_None);
-        return Py_None;
+        return c->u->u_metadata.u_qualname;
     } else {
-        PyObject *result = PyTuple_Pack(4, freevars, global_tuple, private_name, mangled_set);
+        PyObject *result = PyTuple_Pack(
+            5, freevars, global_tuple, private_name, mangled_set, c->u->u_metadata.u_qualname);
         Py_DECREF(freevars);
         Py_DECREF(global_tuple);
         Py_DECREF(mangled);

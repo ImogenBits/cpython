@@ -277,12 +277,7 @@ build_annotate(PyThreadState* tstate, PyObject *asts, PyObject *data)
 {
     _PyInterpreterFrame *frame = tstate->current_frame;
     assert(frame != NULL);
-    return _PyAnnotate_New(asts, data, frame->f_globals);
-
-    assert(PyTuple_Check(data));
-    _PyInterpreterFrame *frame = tstate->current_frame;
-    assert(frame != NULL);
-    return _PyAnnotate_New(payload, frame->f_globals, data);
+    return _PyAnnotate_New(asts, frame->f_globals, data);
 
     PyObject *expr = PyAST_AnnotationDictToAST(asts);
     if (expr == NULL) {

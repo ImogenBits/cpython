@@ -11,87 +11,91 @@
 
 #define PyAnnotateObject_CAST(op)  ((PyAnnotateObject *)(op))
 
-// unpack the static metadata for an annotation. it is either just the
-// qualname a tuple of (qualname, freevars, flags, maybe scope metadata).
+// unpack the static metadata for an annotation
 static int
-unpack_payload(PyObject *payload, PyAnnotateObject *self)
+unpack_data(PyObject *data, PyAnnotateObject *self)
 {
-    if (PyUnicode_Check(payload)) {
-        PyObject *empty = PyTuple_New(0);
-        if (empty == NULL) {
-            return -1;
-        }
-        self->ann_qualname = Py_NewRef(payload);
-        self->ann_freevars = empty;
-        self->ann_flags = 0;
-        self->ann_metadata = NULL;
+    PyObject *empty = PyTuple_New(0);
+    if (empty == NULL) {
+        return -1;
+    }
+    if (PyUnicode_Check(data)) {
+        self->ann_qualname = Py_NewRef(data);
+        self->ann_closure = Py_NewRef(empty);
+        self->ann_freevars = Py_NewRef(empty);
+        self->ann_explicit_globals = Py_NewRef(empty);
+        self->ann_private_name = Py_NewRef(Py_None);
+        self->ann_mangled_names = PyFrozenSet_New();
+        Py_DECREF(empty);
         return 0;
     }
-    if (!PyTuple_Check(payload)
-        || PyTuple_GET_SIZE(payload) < 3
-        || PyTuple_GET_SIZE(payload) > 4)
+    if (!PyTuple_Check(data) || PyTuple_GET_SIZE(data) != 6) {
+        PyErr_Format(PyExc_SystemError,
+                     "malformed annotation function data: %R", data);
+        Py_DECREF(empty);
+        return -1;
+    }
+    PyObject *cells = PyTuple_GET_ITEM(data, 0);
+    if (cells == Py_None) {
+        cells = empty;
+    }
+    PyObject *freevars = PyTuple_GET_ITEM(data, 1);
+    if (freevars == Py_None) {
+        freevars = empty;
+    }
+    PyObject *explicit_globals = PyTuple_GET_ITEM(data, 2);
+    if (explicit_globals == Py_None) {
+        explicit_globals = empty;
+    }
+    PyObject *private_name = PyTuple_GET_ITEM(data, 3);
+    PyObject *mangled_names = PyTuple_GET_ITEM(data, 4);
+    if (mangled_names == Py_None) {
+        mangled_names = PyFrozenSet_New();
+    } else {
+        Py_INCREF(Py_None);
+    }
+    PyObject *qualname = PyTuple_GET_ITEM(data, 3)
+
+    if (!PyTuple_Check(cells) || !PyTuple_Check(freevars)
+        || !PyTuple_Check(explicit_globals)
+        || !(private_name == Py_None || PyUnicode_Check(private_name))
+        || !PyFrozenSet_Check(mangled_names) || !PyUnicode_Check(qualname))
     {
         PyErr_Format(PyExc_SystemError,
                      "malformed annotation function payload: %R", payload);
+        Py_DECREF(empty);
         return -1;
     }
-    PyObject *qualname = PyTuple_GET_ITEM(payload, 0);
-    PyObject *freevars = PyTuple_GET_ITEM(payload, 1);
-    PyObject *flags = PyTuple_GET_ITEM(payload, 2);
-    if (!PyUnicode_Check(qualname) || !PyTuple_Check(freevars)
-        || !PyLong_Check(flags))
-    {
-        PyErr_Format(PyExc_SystemError,
-                     "malformed annotation function payload: %R", payload);
-        return -1;
-    }
-    int f = PyLong_AsInt(flags);
-    if (f == -1 && PyErr_Occurred()) {
-        return -1;
-    }
-    self->ann_qualname = Py_NewRef(qualname);
+    assert(PyTuple_GET_SIZE(cells) == PyTuple_GET_SIZE(freevars));
+    self->ann_closure = Py_NewRef(cells);
     self->ann_freevars = Py_NewRef(freevars);
-    self->ann_flags = f;
-    self->ann_metadata = PyTuple_GET_SIZE(payload) == 4
-                         ? Py_NewRef(PyTuple_GET_ITEM(payload, 3))
-                         : NULL;
+    self->ann_explicit_globals = Py_NewRef(explicit_globals);
+    self->ann_private_name = Py_NewRef(private_name);
+    self->ann_mangled_names = mangled_names;
+    self->ann_qualname = Py_NewRef(qualname);
+    Py_DECREF(empty);
     return 0;
 }
 
 // annotate arguments are:
-// * payload: static metadata; see unpack_payload above
-// * closure: tuple of cells for freevars
+// * asts: a single AST string or a dict mapping variable names to them
 // * globals: globals dict
+// * data: either the qualname or a tuple of (cells, freevars, explicit_globals, private_name, qualname)
 PyObject *
-_PyAnnotate_New(PyObject *payload, PyObject *closure, PyObject *globals)
+_PyAnnotate_New(PyObject *asts, PyObject *globals, PyObject *data)
 {
     PyAnnotateObject *self = PyObject_GC_New(PyAnnotateObject, &PyAnnotate_Type);
     if (self == NULL) {
         return NULL;
     }
-    if (unpack_payload(payload, self) < 0) {
+    if (unpack_data(data, self) < 0) {
         PyObject_GC_Del(self);
         return NULL;
     }
-    assert(closure == NULL
-           || PyTuple_GET_SIZE(closure) == PyTuple_GET_SIZE(self->ann_freevars));
-    self->ann_closure = Py_XNewRef(closure);
+    self->ann_asts = Py_NewRef(asts);
     self->ann_globals = Py_XNewRef(globals);
-    self->ann_strings = NULL;
     _PyObject_GC_TRACK(self);
     return (PyObject *)self;
-}
-
-// setting the strings is its own operation because currently we only
-// support up to two argument intrinsics
-int
-_PyAnnotate_SetStrings(PyObject *op, PyObject *strings)
-{
-    assert(PyAnnotate_CheckExact(op));
-    PyAnnotateObject *self = PyAnnotateObject_CAST(op);
-    assert(self->ann_strings == NULL);
-    self->ann_strings = Py_NewRef(strings);
-    return 0;
 }
 
 static int
@@ -102,8 +106,10 @@ annotate_traverse(PyObject *op, visitproc visit, void *arg)
     Py_VISIT(self->ann_freevars);
     Py_VISIT(self->ann_closure);
     Py_VISIT(self->ann_globals);
-    Py_VISIT(self->ann_strings);
-    Py_VISIT(self->ann_metadata);
+    Py_VISIT(self->ann_asts);
+    Py_VISIT(self->ann_explicit_globals);
+    Py_VISIT(self->ann_private_name);
+    Py_VISIT(self->ann_mangled_names);
     return 0;
 }
 
@@ -115,8 +121,10 @@ annotate_clear(PyObject *op)
     Py_CLEAR(self->ann_freevars);
     Py_CLEAR(self->ann_closure);
     Py_CLEAR(self->ann_globals);
-    Py_CLEAR(self->ann_strings);
-    Py_CLEAR(self->ann_metadata);
+    Py_CLEAR(self->ann_asts);
+    Py_CLEAR(self->ann_explicit_globals);
+    Py_CLEAR(self->ann_private_name);
+    Py_CLEAR(self->ann_mangled_names);
     return 0;
 }
 
@@ -134,8 +142,8 @@ annotate_repr(PyObject *op)
     PyAnnotateObject *self = PyAnnotateObject_CAST(op);
     return PyUnicode_FromFormat(
         "<%s %U at %p>",
-        (self->ann_flags & ANNOTATE_EVALUATE) ? "evaluate function"
-                                              : "annotate function",
+        (PyUnicode_Check(self->ann_asts)) ? "evaluate function"
+                                          : "annotate function",
         self->ann_qualname, op);
 }
 
@@ -293,8 +301,10 @@ static PyMemberDef annotate_memberlist[] = {
     {"__globals__", _Py_T_OBJECT, ANN_OFF(ann_globals), Py_READONLY},
     {"__closure__", _Py_T_OBJECT, ANN_OFF(ann_closure), Py_READONLY},
     {"__freevars__", _Py_T_OBJECT, ANN_OFF(ann_freevars), Py_READONLY},
-    {"_string_annotations", _Py_T_OBJECT, ANN_OFF(ann_strings), Py_READONLY},
-    {"_annotate_metadata", _Py_T_OBJECT, ANN_OFF(ann_metadata), Py_READONLY},
+    {"_asts", _Py_T_OBJECT, ANN_OFF(ann_asts), Py_READONLY},
+    {"_explicit_globals", _Py_T_OBJECT, ANN_OFF(ann_explicit_globals), Py_READONLY},
+    {"_private_name", _Py_T_OBJECT, ANN_OFF(ann_private_name), Py_READONLY},
+    {"_mangled_names", _Py_T_OBJECT, ANN_OFF(ann_mangled_names), Py_READONLY},
     {NULL}
 };
 

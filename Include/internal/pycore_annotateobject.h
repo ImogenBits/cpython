@@ -22,15 +22,15 @@ typedef struct {
     PyObject *ann_globals;      // dict of the defining frame
     PyObject *ann_asts;         // the annotation AST data: a dict for an __annotate__,
                                 // a single str for an evaluate function.
-    PyObject *explicit_globals; // names that aren't looked up in the containing
-                                // class, but always the global namespce. Or NULL.
-    PyObject *private_name;     // the private name of the containing class, or NULL
-    PyObject *mangled_names;    // frozenset of names that should be mangled, or NULL
+    PyObject *ann_explicit_globals; // names that aren't looked up in the containing
+                                // class, but always the global namespce.
+    PyObject *ann_private_name;     // the private name of the containing class.
+    PyObject *ann_mangled_names;    // frozenset of names that should be mangled.
     int ann_flags;
 } PyAnnotateObject;
 
 // Steals nothing
-extern PyObject *_PyAnnotate_New(PyObject *asts, PyObject *data, PyObject *globals);
+extern PyObject *_PyAnnotate_New(PyObject *qualname, PyObject *asts, PyObject *globals, PyObject *data);
 
 #ifdef __cplusplus
 }

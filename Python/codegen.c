@@ -716,8 +716,8 @@ codegen_annotate(compiler *c, location loc, void *key, PyObject *name) {
         return ERROR;
     }
 
-    if (name_data == Py_None) {
-        ADDOP_LOAD_CONST(c, loc, Py_None);
+    if (PyUnicode_CheckExact(name_data)) {
+        ADDOP_LOAD_CONST(c, loc, name_data);
     } else {
         if (PyTuple_GetItem(name_data, 0) == Py_None) {
             ADDOP_LOAD_CONST(c, loc, Py_None);

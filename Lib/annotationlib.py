@@ -2,6 +2,8 @@
 
 import ast
 import builtins
+import collections
+import collections.abc
 import enum
 import keyword
 import sys
@@ -1304,3 +1306,127 @@ class _ExtraNameFixer(ast.NodeTransformer):
         if (new_name := self.extra_names.get(node.id, _sentinel)) is not _sentinel:
             node = ast.Name(id=type_repr(new_name))
         return node
+
+
+_ANNOTATION_AST_SKIP_CLASS = "__annotation_ast_skip_class__"
+
+
+class _AnnotationASTTransformer(ast.NodeTransformer):
+    """Reproduces name mangling and class scopes for annotations."""
+
+    def __init__(self, explicit_globals, private_name, mangled_names)
+        self.explicit_globals = explicit_globals
+        if not private_name.lstrip("_"):
+            private_name = None
+        self.private_name = private_name
+        self.mangled_names = mangled_names
+        self.scope = 0
+        super().__init__()
+
+    def maybe_mangle(self, name):
+        if self.private_name is None or name not in self.mangled_names:
+            return name
+        return self.private_name + name
+
+    def visit_Name(self, node):
+        node.id = self.maybe_mangle(name)
+        if scope > 0 or node.id in self.explicit_globals:
+            new = ast.Subscript(
+                ast.Name(_ANNOTATION_AST_SKIP_CLASS),
+                node,
+            )
+            return ast.copy_location(new, node)
+        return node
+
+    def visit_Attribute(self, node):
+        self.generic_visit(node)
+        node.attr = self.maybe_mangle(node.attr)
+        return node
+
+    def visit_Lambda(self, node):
+        node.args = self.visit(node.args)
+        self.scope += 1
+        body = self.visit(node.body)
+        node.self.scope -= 1
+        return node
+
+    def _visit_comprehension(self, node):
+        if node.generators:
+            node.generators[0] = self.visit(node.generators[0])
+        self.scope += 1
+        node.generators[1:] = [self.visit(inner) for inner in node.generators[1:]]
+        for key in ("elt", "key", "value"):
+            attr = getattr(node, key, None)
+            if attr:
+                setattr(node, key, self.visit(attr))
+        self.scope -= 1
+        return node
+
+    visit_ListComp = _visit_comprehension
+    visit_SetComp = _visit_comprehension
+    visit_DictComp = _visit_comprehension
+    visit_GeneratorExp = _visit_comprehension
+
+
+class _CellMapping(collections.abc.Mapping):
+    """A mapping that holds cells and dereferences them on access."""
+
+    __slots__ = ("closure",)
+
+    def __init__(self, freevars, closure):
+        self.closure = dict(zip(freevars, closure, strict=True))
+
+    def __getitem__(self, key):
+        cell = self.closure[key]
+        try:
+            return cell.cell_contents
+        except ValueError:
+            raise NameError(
+                f"cannot access free variable {key!r} where it is not "
+                "associated with a value in enclosing scope",
+                name=key,
+            )
+
+    def __iter__(self):
+        return iter(self.closure)
+
+    def __len__(self):
+        return len(self.closure)
+
+
+class AnnotationAST:
+    __slots__ = ("ast", "globals", "locals")
+
+    def __init__(self, ast, globals=None, locals=None):
+        super().__init__()
+        self.ast = ast
+        if globals is None:
+            globals = {}
+        self.globals = globals
+        if locals is None:
+            locals = {}
+        self.locals = locals()
+
+    @classmethod
+    def _from_annotate_data(
+        cls, ast, freevars, closure, globals, explicit_globals, private_name, mangled_names
+    ):
+        cells = _CellMapping(freevars, closure)
+        try:
+            classdict = cells.get("__classdict__", None)
+        except NameError:
+            classdict = None
+        if classdict is None:
+            self.locals = cells
+        else:
+            self.locals = ChainMap(classdict, cells)
+        self.globals = globals
+
+        ast = cls._parse_ast(ast)
+        transformer = _AnnotationASTTransformer(
+            explicit_globals, private_name, mangled_names
+        )
+        self.ast = transformer.visit(ast)
+
+    @classmethod
+    def _parse_ast(self, ast): ...
