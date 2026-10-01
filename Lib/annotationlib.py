@@ -1314,12 +1314,12 @@ _ANNOTATION_AST_SKIP_CLASS = "__annotation_ast_skip_class__"
 class _AnnotationASTTransformer(ast.NodeTransformer):
     """Reproduces name mangling and class scopes for annotations."""
 
-    def __init__(self, explicit_globals, private_name, mangled_names)
-        self.explicit_globals = explicit_globals
+    def __init__(self, explicit_globals, private_name, mangled_names):
+        self.explicit_globals = explicit_globals ()
         if not private_name.lstrip("_"):
             private_name = None
         self.private_name = private_name
-        self.mangled_names = mangled_names
+        self.mangled_names = mangled_names or ()
         self.scope = 0
         super().__init__()
 
@@ -1329,8 +1329,8 @@ class _AnnotationASTTransformer(ast.NodeTransformer):
         return self.private_name + name
 
     def visit_Name(self, node):
-        node.id = self.maybe_mangle(name)
-        if scope > 0 or node.id in self.explicit_globals:
+        node.id = self.maybe_mangle(node.id)
+        if self.scope > 0 or node.id in self.explicit_globals:
             new = ast.Subscript(
                 ast.Name(_ANNOTATION_AST_SKIP_CLASS),
                 node,
@@ -1394,39 +1394,73 @@ class _CellMapping(collections.abc.Mapping):
         return len(self.closure)
 
 
-class AnnotationAST:
-    __slots__ = ("ast", "globals", "locals")
+def _namespace_from_annotate(annotate):
+    """Constructs the namespaces an annotation can be evaluated in.
 
-    def __init__(self, ast, globals=None, locals=None):
-        super().__init__()
-        self.ast = ast
-        if globals is None:
-            globals = {}
-        self.globals = globals
-        if locals is None:
-            locals = {}
-        self.locals = locals()
-
-    @classmethod
-    def _from_annotate_data(
-        cls, ast, freevars, closure, globals, explicit_globals, private_name, mangled_names
-    ):
+    Returns a namespace that combines the globals, closure and classdict of the
+    annotate function. If the annotate is defined in a class scope, it also
+    contains an inner namespace at `_ANNOTATION_AST_SKIP_CLASS` that can be used
+    to evaluate inner scopes (comprehensions and lambdas) where the enclosing
+    classdict is not visible.
+    """
+    globals = getattr(annotate, "__globals__", None)
+    closure = getattr(annotate, "__closure__", None)
+    freevars = getattr(annotate, "__freevars__", None)
+    if freevars is None:
+        code = getattr(annotate, "__code__", None)
+        if code is not None:
+            freevars = getattr(code, "co_freevars", None)
+    if closure is not None and freevars is not None:
         cells = _CellMapping(freevars, closure)
         try:
             classdict = cells.get("__classdict__", None)
         except NameError:
             classdict = None
-        if classdict is None:
-            self.locals = cells
+    else:
+        cells = None
+        classdict = None
+    namespace = collections.ChainMap()
+    if classdict:
+        namespace.maps.append(classdict)
+    if cells:
+        namespace.maps.append(cells)
+    if globals:
+        namespace.maps.append(globals)
+    if classdict:
+        inner = namespace.parents
+        namespace.maps.insert(0, { _ANNOTATION_AST_SKIP_CLASS: inner })
+    return namespace
+
+
+class AnnotationAST:
+    __slots__ = ("ast", "namespace", "explicit_globals", "private_name", "mangled_names")
+
+    def __init__(
+        self,
+        ast,
+        namespace=None,
+        explicit_globals=None,
+        private_name=None,
+        mangled_names=None,
+    ):
+        super().__init__()
+        self.ast = ast
+        self.namespace = namespace if namespace is not None else {}
+        self.explicit_globals = explicit_globals
+        self.private_name = private_name
+        self.mangled_names = mangled_names
+
+    def evaluate(self, format):
+        if format == Format.AST:
+            return self
+        if format not in (Format.VALUE, Format.VALUE_WITH_FAKE_GLOBALS):
+            raise NotImplementedError(f"AnnotationAST does not support format {format!r}")
+        if _ANNOTATION_AST_SKIP_CLASS in self.namespace:
+            transformer = _AnnotationASTTransformer(
+                self.explicit_globals, self.private_name, self.mangled_names
+            )
+            ast = transformer.visit(self, self.ast)
         else:
-            self.locals = ChainMap(classdict, cells)
-        self.globals = globals
-
-        ast = cls._parse_ast(ast)
-        transformer = _AnnotationASTTransformer(
-            explicit_globals, private_name, mangled_names
-        )
-        self.ast = transformer.visit(ast)
-
-    @classmethod
-    def _parse_ast(self, ast): ...
+            ast = self.ast
+        globals = {"__builtins__": self.namespace.get("__builtins__", builtins.__dict__)}
+        return eval(compile(ast, "<annotation>", "eval"), globals=globals, locals=self.namespace)

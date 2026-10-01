@@ -140,6 +140,7 @@ ste_new(struct symtable *st, identifier name, _Py_block_ty block,
     ste->ste_can_see_class_scope = 0;
     ste->ste_comp_iter_expr = 0;
     ste->ste_needs_classdict = 0;
+    ste->ste_has_conditional_annotations = 0;
     ste->ste_in_try_block = 0;
     ste->ste_in_unevaluated_annotation = 0;
     ste->ste_annotation_block = NULL;
@@ -977,6 +978,9 @@ drop_class_free(PySTEntryObject *ste, PyObject *free)
     res = PySet_Discard(free, &_Py_ID(__conditional_annotations__));
     if (res < 0)
         return 0;
+    if (res) {
+        ste->ste_has_conditional_annotations = 1;
+    }
     return 1;
 }
 
@@ -1403,13 +1407,6 @@ symtable_analyze(struct symtable *st)
 static int
 symtable_exit_block(struct symtable *st)
 {
-    if (st->st_cur->st_annotations_used && (
-        st->st_cur->ste_type == ClassBlock || st->st_cur->ste_type == ModuleBlock
-    )) {
-        if (!symtable_add_def(st, &_Py_ID(__conditional_annotations__), USE, NULL)) {
-            return 0;
-        }
-    }
     Py_ssize_t size;
 
     st->st_cur = NULL;
@@ -2061,6 +2058,14 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             else {
                 if (s->v.AnnAssign.value
                     && !symtable_add_def(st, e_name->v.Name.id, DEF_LOCAL, LOCATION(e_name))) {
+                    return 0;
+                }
+            }
+            if (s->v.AnnAssign.simple && !st->st_cur->ste_has_conditional_annotations
+                && (st->st_cur->ste_type == ClassBlock || st->st_cur->ste_type == ModuleBlock))
+            {
+                st->st_cur->ste_has_conditional_annotations = 1;
+                if (!symtable_add_def(st, &_Py_ID(__conditional_annotations__), USE, LOCATION(s))) {
                     return 0;
                 }
             }

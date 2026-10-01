@@ -1903,8 +1903,8 @@ parsing_err:
 PyObject *
 _PyAST_FromAnnotationData(PyObject *data)
 {
-    if (!data || !(PyDict_CheckExact(data) || PyUnicode_CheckExact(data))) {
-        PyErr_SetString(PyExc_TypeError, "expected a dictionary or string for data");
+    if (!data || !(PyAnyDict_CheckExact(data) || PyUnicode_CheckExact(data))) {
+        PyErr_Format(PyExc_TypeError, "expected a dictionary or string for data, got %R", data);
         return NULL;
     }
     PyArena *arena = _PyArena_New();

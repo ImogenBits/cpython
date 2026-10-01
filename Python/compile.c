@@ -1086,7 +1086,7 @@ _PyCompile_AnnotateNameData(compiler *c) {
         Py_INCREF(Py_None);
     }
 
-    PyObject *mangled_set = c->u->u_ste->mangled_names;
+    PyObject *mangled_set = c->u->u_ste->ste_mangled_names;
     PyObject *mangled = NULL, *private_name = NULL;
     if (mangled_set) {
         mangled = PyFrozenSet_New(mangled_set);
@@ -1103,7 +1103,7 @@ _PyCompile_AnnotateNameData(compiler *c) {
         Py_INCREF(Py_None);
     }
 
-    _PyCompile_CodeUnitMetadata *umd = c->u_metadata;
+    _PyCompile_CodeUnitMetadata *umd = &c->u->u_metadata;
     Py_ssize_t base = PyDict_GET_SIZE(umd->u_cellvars);
     Py_ssize_t n = PyDict_GET_SIZE(umd->u_freevars);
     PyObject *freevars = NULL;
@@ -1140,10 +1140,10 @@ _PyCompile_AnnotateNameData(compiler *c) {
         Py_DECREF(Py_None);
         Py_DECREF(Py_None);
         Py_DECREF(Py_None);
-        return c->u->u_metadata.u_qualname;
+        return Py_NewRef(c->u->u_metadata.u_qualname);
     } else {
         PyObject *result = PyTuple_Pack(
-            5, freevars, global_tuple, private_name, mangled_set, c->u->u_metadata.u_qualname);
+            5, freevars, global_tuple, private_name, mangled, c->u->u_metadata.u_qualname);
         Py_DECREF(freevars);
         Py_DECREF(global_tuple);
         Py_DECREF(mangled);

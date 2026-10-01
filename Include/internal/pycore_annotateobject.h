@@ -30,7 +30,7 @@ typedef struct {
 } PyAnnotateObject;
 
 // Steals nothing
-extern PyObject *_PyAnnotate_New(PyObject *qualname, PyObject *asts, PyObject *globals, PyObject *data);
+extern PyObject *_PyAnnotate_New(PyObject *asts, PyObject *globals, PyObject *data);
 
 #ifdef __cplusplus
 }

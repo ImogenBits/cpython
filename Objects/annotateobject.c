@@ -6,6 +6,7 @@
 #include "pycore_modsupport.h"    // _PyArg_NoKeywords()
 #include "pycore_object.h"        // _Py_ANNOTATE_FORMAT_VALUE
 #include "pycore_runtime.h"       // _Py_ID()
+#include "pycore_ast.h"            // _PyAST_FromAnnotationData()
 
 #include <stddef.h>               // offsetof()
 
@@ -15,55 +16,36 @@
 static int
 unpack_data(PyObject *data, PyAnnotateObject *self)
 {
-    PyObject *empty = PyTuple_New(0);
-    if (empty == NULL) {
-        return -1;
-    }
     if (PyUnicode_Check(data)) {
         self->ann_qualname = Py_NewRef(data);
-        self->ann_closure = Py_NewRef(empty);
-        self->ann_freevars = Py_NewRef(empty);
-        self->ann_explicit_globals = Py_NewRef(empty);
-        self->ann_private_name = Py_NewRef(Py_None);
-        self->ann_mangled_names = PyFrozenSet_New();
-        Py_DECREF(empty);
+        self->ann_closure = NULL;
+        self->ann_freevars = NULL;
+        self->ann_explicit_globals = NULL;
+        self->ann_private_name = NULL;
+        self->ann_mangled_names = NULL;
         return 0;
     }
     if (!PyTuple_Check(data) || PyTuple_GET_SIZE(data) != 6) {
         PyErr_Format(PyExc_SystemError,
                      "malformed annotation function data: %R", data);
-        Py_DECREF(empty);
         return -1;
     }
     PyObject *cells = PyTuple_GET_ITEM(data, 0);
-    if (cells == Py_None) {
-        cells = empty;
-    }
     PyObject *freevars = PyTuple_GET_ITEM(data, 1);
-    if (freevars == Py_None) {
-        freevars = empty;
-    }
     PyObject *explicit_globals = PyTuple_GET_ITEM(data, 2);
-    if (explicit_globals == Py_None) {
-        explicit_globals = empty;
-    }
     PyObject *private_name = PyTuple_GET_ITEM(data, 3);
     PyObject *mangled_names = PyTuple_GET_ITEM(data, 4);
-    if (mangled_names == Py_None) {
-        mangled_names = PyFrozenSet_New();
-    } else {
-        Py_INCREF(Py_None);
-    }
-    PyObject *qualname = PyTuple_GET_ITEM(data, 3)
+    PyObject *qualname = PyTuple_GET_ITEM(data, 5);
 
-    if (!PyTuple_Check(cells) || !PyTuple_Check(freevars)
-        || !PyTuple_Check(explicit_globals)
+    if (   !(cells == Py_None || PyTuple_Check(cells))
+        || !(freevars == Py_None || PyTuple_Check(freevars))
+        || !(explicit_globals == Py_None || PyTuple_Check(explicit_globals))
         || !(private_name == Py_None || PyUnicode_Check(private_name))
-        || !PyFrozenSet_Check(mangled_names) || !PyUnicode_Check(qualname))
+        || !(mangled_names == Py_None || PyFrozenSet_Check(mangled_names))
+        || !(PyUnicode_Check(qualname)))
     {
         PyErr_Format(PyExc_SystemError,
-                     "malformed annotation function payload: %R", payload);
-        Py_DECREF(empty);
+                     "malformed annotation function data: %R", data);
         return -1;
     }
     assert(PyTuple_GET_SIZE(cells) == PyTuple_GET_SIZE(freevars));
@@ -71,9 +53,8 @@ unpack_data(PyObject *data, PyAnnotateObject *self)
     self->ann_freevars = Py_NewRef(freevars);
     self->ann_explicit_globals = Py_NewRef(explicit_globals);
     self->ann_private_name = Py_NewRef(private_name);
-    self->ann_mangled_names = mangled_names;
+    self->ann_mangled_names = Py_NewRef(mangled_names);
     self->ann_qualname = Py_NewRef(qualname);
-    Py_DECREF(empty);
     return 0;
 }
 
@@ -147,37 +128,32 @@ annotate_repr(PyObject *op)
         self->ann_qualname, op);
 }
 
-static int
-format_equals(PyObject *format, long expected)
+PyObject *
+_eval_ast(PyObject *ann_ast_class, PyObject *format, PyObject *ast, PyObject *namespace,
+    PyObject *explicit_globals, PyObject *private_name, PyObject *mangled_names)
 {
-    // Do a rich comparision so that behavior matches even when format
-    // is an enum or something else weird.
-    PyObject *o = PyLong_FromLong(expected);
-    if (o == NULL) {
-        return -1;
+    PyObject *ann_ast = PyObject_CallFunctionObjArgs(
+        ann_ast_class, ast, namespace, explicit_globals, private_name,
+        mangled_names, NULL);
+    if (!ann_ast) {
+        return NULL;
     }
-    int res = PyObject_RichCompareBool(format, o, Py_EQ);
-    Py_DECREF(o);
-    return res;
+    PyObject *result = PyObject_CallMethodObjArgs(ann_ast, &_Py_ID(evaluate), format);
+    Py_DECREF(ann_ast);
+    if (!result) {
+        return NULL;
+    }
+    return result;
 }
 
-// XXX: TODO: DESLOP
 // The whole PEP 649 protocol for a compiler-generated annotation function.
-// Both kinds produce annotation source strings, which the enclosing scope
-// handed over at definition time:
-//
-//     if format == VALUE and not PEP 563: return <the strings, evaluated>
-//     if format == VALUE or format == STRING: return the strings
-//     raise NotImplementedError
-//
-// Evaluating means handing this object to annotationlib, which uses its
-// globals and closure as the environment. PEP 563 only concerns __annotate__;
-// a type alias value or type param bound is evaluated either way.
+// Supports VALUE and AST formats by constructing AnnotationAST objects
+// and calling .evaluate(format) on them.
 static PyObject *
 annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
 {
     PyAnnotateObject *self = PyAnnotateObject_CAST(op);
-    int is_evaluate = (self->ann_flags & ANNOTATE_EVALUATE) != 0;
+    int is_evaluate = PyUnicode_Check(self->ann_asts);
 
     if (kwargs != NULL && PyDict_GET_SIZE(kwargs) != 0) {
         PyErr_Format(PyExc_TypeError, "%U() takes no keyword arguments",
@@ -194,46 +170,87 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
         format = _PyLong_GetOne();
     }
     else {
-        // XXX: this message is wrong:
-        PyErr_Format(PyExc_TypeError,
-                     "%U() takes exactly one argument (%zd given)",
-                     self->ann_qualname, nargs);
+        if (is_evaluate) {
+            PyErr_Format(PyExc_TypeError,
+                "%U() takes from 0 to 1 positional arguments but %zd were given",
+                self->ann_qualname, nargs);
+        } else if (nargs == 0) {
+            PyErr_Format(PyExc_TypeError,
+                "%U() missing 1 required positional argument: 'format'",
+                self->ann_qualname);
+        } else {
+            PyErr_Format(PyExc_TypeError,
+                "%U() takes 1 positional argument but %zd were given",
+                self->ann_qualname, nargs);
+        }
         return NULL;
     }
 
-    int is_value = format_equals(format, _Py_ANNOTATE_FORMAT_VALUE);
-    if (is_value < 0) {
+    PyObject *parsed_asts = _PyAST_FromAnnotationData(self->ann_asts);
+    if (!parsed_asts) {
         return NULL;
     }
-    // evaluate_FOO() do not get stringified when ANNOTATE_FUTURE is set, but
-    // __annotate__ functions do
-    if (is_value && (is_evaluate || !(self->ann_flags & ANNOTATE_FUTURE))) {
-        PyObject *impl = PyImport_ImportModuleAttrString("annotationlib",
-                                                         "_annotate_value");
-        if (impl == NULL) {
-            return NULL;
-        }
-        PyObject *res = PyObject_CallFunctionObjArgs(
-            impl, op, is_evaluate ? Py_True : Py_False, NULL);
-        Py_DECREF(impl);
-        return res;
-    }
-    if (!is_value) {
-        int is_string = format_equals(format, _Py_ANNOTATE_FORMAT_STRING);
-        if (is_string < 0) {
-            return NULL;
-        }
-        if (!is_string) {
-            PyErr_SetNone(PyExc_NotImplementedError);
-            return NULL;
-        }
-    }
-    if (self->ann_strings == NULL) {
-        PyErr_SetString(PyExc_SystemError,
-                        "annotation function has no annotation strings");
+    PyObject *make_namespace = PyImport_ImportModuleAttrString(
+        "annotationlib", "_namespace_from_annotate"
+    );
+    if (!make_namespace) {
         return NULL;
     }
-    return Py_NewRef(self->ann_strings);
+    PyObject *namespace = PyObject_CallFunctionObjArgs(make_namespace, self, NULL);
+    Py_DECREF(make_namespace);
+    if (!namespace) {
+        return NULL;
+    }
+    PyObject *annASTClass = PyImport_ImportModuleAttrString(
+        "annotationlib", "AnnotationAST"
+    );
+    if (!annASTClass) {
+        Py_DECREF(namespace);
+        return NULL;
+    }
+    PyObject *explicit_globals = self->ann_explicit_globals;
+    if (!explicit_globals) {
+        explicit_globals = Py_None;
+    }
+    PyObject *private_name = self->ann_private_name;
+    if (!private_name) {
+        private_name = Py_None;
+    }
+    PyObject *mangled_names = self->ann_mangled_names;
+    if (!mangled_names) {
+        mangled_names = Py_None;
+    }
+    PyObject *result = NULL;
+    if (is_evaluate) {
+        assert(PyUnicode_Check(parsed_asts));
+        result = _eval_ast(annASTClass, format, parsed_asts, namespace,
+            explicit_globals, private_name, mangled_names);
+    } else {
+        assert(PyDict_Check(parsed_asts));
+        result = PyDict_New();
+        if (!result) {
+            goto failed;
+        }
+        PyObject *key, *value;
+        Py_ssize_t pos = 0;
+        while (PyDict_Next(parsed_asts, &pos, &key, &value)) {
+            PyObject *evaluated = _eval_ast(annASTClass, format, value, namespace,
+                explicit_globals, private_name, mangled_names);
+            if (!evaluated) {
+                goto failed;
+            }
+            if (PyDict_SetItem(result, key, evaluated) < 0) {
+                Py_DECREF(evaluated);
+                goto failed;
+            }
+            Py_DECREF(evaluated);
+        }
+    }
+failed:
+    Py_DECREF(annASTClass);
+    Py_DECREF(namespace);
+    Py_DECREF(parsed_asts);
+    return result;
 }
 
 static PyObject *
@@ -282,7 +299,7 @@ annotate_get_signature(PyObject *op, void *Py_UNUSED(closure))
         return NULL;
     }
     PyObject *res = PyObject_CallOneArg(
-        impl, (self->ann_flags & ANNOTATE_EVALUATE) ? Py_True : Py_False);
+        impl, PyUnicode_Check(self->ann_asts) ? Py_True : Py_False);
     Py_DECREF(impl);
     return res;
 }

@@ -303,7 +303,7 @@ codegen_addop_load_const(compiler *c, location loc, PyObject *o)
     return SUCCESS;
 }
 static PyObject *
-get_annotation_ast(compiler *c, expr_ty annotation);
+get_annotation_ast(compiler *c, expr_ty annotation, int is_annotation);
 
 #define ADDOP_LOAD_CONST(C, LOC, O) \
     RETURN_IF_ERROR(codegen_addop_load_const((C), (LOC), (O)))
@@ -708,7 +708,7 @@ static int
 codegen_annotate(compiler *c, location loc, void *key, PyObject *name) {
     RETURN_IF_ERROR(
         codegen_enter_scope(c, name, COMPILE_SCOPE_ANNOTATIONS,
-                            key, loc.lineno, NULL, &umd));
+                            key, loc.lineno, NULL, NULL));
     assert(!SYMTABLE_ENTRY(c)->ste_has_docstring);
     PyObject *name_data = _PyCompile_AnnotateNameData(c);
     _PyCompile_ExitScope(c);
@@ -719,11 +719,11 @@ codegen_annotate(compiler *c, location loc, void *key, PyObject *name) {
     if (PyUnicode_CheckExact(name_data)) {
         ADDOP_LOAD_CONST(c, loc, name_data);
     } else {
-        if (PyTuple_GetItem(name_data, 0) == Py_None) {
+        if (PyTuple_GET_ITEM(name_data, 0) == Py_None) {
             ADDOP_LOAD_CONST(c, loc, Py_None);
         } else {
-            PyObject *freevars = PyTuple_GetItem(name_data, 0);
-            Py_ssize_t n = PyTuple_GetSize(freevars);
+            PyObject *freevars = PyTuple_GET_ITEM(name_data, 0);
+            Py_ssize_t n = PyTuple_GET_SIZE(freevars);
             for (Py_ssize_t i = 0; i < n; i++) {
                 int arg = _PyCompile_LookupArg(c, NULL, PyTuple_GET_ITEM(freevars, i));
                 RETURN_IF_ERROR(arg);
@@ -737,6 +737,7 @@ codegen_annotate(compiler *c, location loc, void *key, PyObject *name) {
         ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_LIST_TO_TUPLE);
     }
     ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_MAKE_ANNOTATE);
+    return SUCCESS;
 }
 
 static int
@@ -758,6 +759,7 @@ codegen_process_deferred_annotations(compiler *c, location loc)
     // parenthesized names). However, the reverse should not be possible.
     PySTEntryObject *ste = SYMTABLE_ENTRY(c);
     assert(ste->ste_annotation_block != NULL);
+    assert(ste->ste_has_conditional_annotations);
 
     if (scope_type == COMPILE_SCOPE_CLASS) {
         ADDOP_NAME(c, loc, LOAD_DEREF, &_Py_ID(__conditional_annotations__), cellvars);
@@ -766,8 +768,7 @@ codegen_process_deferred_annotations(compiler *c, location loc)
         ADDOP_NAME(c, loc, LOAD_NAME, &_Py_ID(__conditional_annotations__), names);
     }
     void *key = (void *)((uintptr_t)ste->ste_id + 1);
-    RETURN_IF_ERROR(codegen_annotate(
-        c, loc, key, ste->ste_annotation_block->ste_name, false));
+    RETURN_IF_ERROR(codegen_annotate(c, loc, key, ste->ste_annotation_block->ste_name));
     RETURN_IF_ERROR(codegen_nameop(
         c, loc,
         ste->ste_type == ClassBlock ? &_Py_ID(__annotate_func__) : &_Py_ID(__annotate__),
@@ -1353,11 +1354,11 @@ failed:
 }
 
 PyObject *
-get_annotation_ast(compiler *c, expr_ty annotation)
+get_annotation_ast(compiler *c, expr_ty annotation, int is_annotation)
 {
     PyUnicodeWriter *data = PyUnicodeWriter_Create(0);
     int err = 0;
-    if (FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS) {
+    if (is_annotation && (FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS)) {
         err = build_ast_const(data, _PyAST_ExprAsUnicode(annotation));
     } else {
         err = build_ast_expr(data, annotation);
@@ -1385,7 +1386,7 @@ codegen_argannotation(compiler *c, identifier id,
     if (!mangled) {
         return ERROR;
     }
-    PyObject *annotation_ast = get_annotation_ast(c, annotation);
+    PyObject *annotation_ast = get_annotation_ast(c, annotation, true);
     if (!annotation_ast) {
         Py_DECREF(mangled);
         return ERROR;
@@ -1471,10 +1472,10 @@ codegen_function_annotations(compiler *c, location loc,
         }
         PyObject *annotations_const = PyFrozenDict_New(annotations);
         Py_DECREF(annotations);
-        if (!frozen) {
+        if (!annotations_const) {
             return ERROR;
         }
-        ADDOP_LOAD_CONST_NEW(c, loc, frozen);
+        ADDOP_LOAD_CONST_NEW(c, loc, annotations_const);
         int err = codegen_annotate(c, loc, (void *) args, ste->ste_name);
         Py_DECREF(ste);
         RETURN_IF_ERROR(err);
@@ -1550,7 +1551,7 @@ static int
 codegen_type_param_bound_or_default(compiler *c, expr_ty e,
                                     identifier name, void *key)
 {
-    PyObject *annotation_ast = get_annotation_ast(c, e);
+    PyObject *annotation_ast = get_annotation_ast(c, e, false);
     if (!annotation_ast) {
         return ERROR;
     }
@@ -1890,7 +1891,7 @@ codegen_class_body(compiler *c, stmt_ty s, int firstlineno)
         // that by default.
         ADDOP_N_IN_SCOPE(c, loc, STORE_DEREF, &_Py_ID(__classdict__), cellvars);
     }
-    if (SYMTABLE_ENTRY(c)->ste_annotations_used) {
+    if (SYMTABLE_ENTRY(c)->ste_has_conditional_annotations) {
         ADDOP_I(c, loc, BUILD_MAP, 0);
         ADDOP_N_IN_SCOPE(c, loc, STORE_DEREF, &_Py_ID(__conditional_annotations__), cellvars);
     }
@@ -2040,12 +2041,12 @@ codegen_typealias_body(compiler *c, stmt_ty s)
 {
     location loc = LOC(s);
     PyObject *name = s->v.TypeAlias.name->v.Name.id;
-    PyObject *annotation_ast = get_annotation_ast(c, s->v.TypeAlias.value);
+    PyObject *annotation_ast = get_annotation_ast(c, s->v.TypeAlias.value, false);
     if (!annotation_ast) {
         return ERROR;
     }
     ADDOP_LOAD_CONST_NEW(c, LOC(s), annotation_ast);
-    RETURN_IF_ERROR(c, LOC(s), s, name);
+    RETURN_IF_ERROR(codegen_annotate(c, LOC(s), s, name));
 
     ADDOP_I(c, loc, BUILD_TUPLE, 3);
     ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_TYPEALIAS);
@@ -5981,8 +5982,8 @@ codegen_annassign(compiler *c, stmt_ty s)
                 VISIT(c, annexpr, s->v.AnnAssign.annotation);
                 ADDOP_NAME(c, loc, LOAD_NAME, &_Py_ID(__annotations__), names);
             } else {
-                _PyCompile_AddDeferredAnnotation(c);
-                PyObject *annotation_ast = get_annotation_ast(c, annotation);
+                assert(SYMTABLE_ENTRY(c)->ste_has_conditional_annotations);
+                PyObject *annotation_ast = get_annotation_ast(c, s->v.AnnAssign.annotation, true);
                 if (!annotation_ast) {
                     return ERROR;
                 }
