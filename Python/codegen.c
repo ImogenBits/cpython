@@ -698,9 +698,9 @@ codegen_enter_scope(compiler *c, identifier name, int scope_type,
     }
 
     ADDOP_I(c, loc, RESUME, RESUME_AT_FUNC_START);
-    if (scope_type == COMPILE_SCOPE_MODULE) {
-        ADDOP(c, loc, ANNOTATIONS_PLACEHOLDER);
-    }
+    //if (scope_type == COMPILE_SCOPE_MODULE) {
+    //    ADDOP(c, loc, ANNOTATIONS_PLACEHOLDER);
+    //}
     return SUCCESS;
 }
 
@@ -5982,6 +5982,7 @@ codegen_annassign(compiler *c, stmt_ty s)
                 VISIT(c, annexpr, s->v.AnnAssign.annotation);
                 ADDOP_NAME(c, loc, LOAD_NAME, &_Py_ID(__annotations__), names);
             } else {
+                _PyCompile_AddDeferredAnnotation(c);
                 assert(SYMTABLE_ENTRY(c)->ste_has_conditional_annotations);
                 PyObject *annotation_ast = get_annotation_ast(c, s->v.AnnAssign.annotation, true);
                 if (!annotation_ast) {

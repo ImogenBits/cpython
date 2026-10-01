@@ -8,6 +8,7 @@ import enum
 import keyword
 import sys
 import types
+lazy import typing
 
 __all__ = [
     "Format",
@@ -1002,13 +1003,13 @@ def get_annotations(
         case Format.AST:
             ann = _get_and_call_annotate(obj, format)
             if ann is not None:
-                return dict(ann[0]), dict(ann[1])
+                return dict(ann)
         case _:
             raise ValueError(f"Unsupported format {format!r}")
 
     if ann is None:
         if isinstance(obj, type) or callable(obj):
-            return ({}, {}) if format == Format.AST else {}
+            return {}
         raise TypeError(f"{obj!r} does not have annotations")
 
     if not ann:
@@ -1121,20 +1122,22 @@ def annotations_to_string(annotations):
     }
 
 
+def annotation_to_ast(annotation):
+    """Convert an annotation to approximately the AST format."""
+    node = ast.Expression(ast.Name(id="__annotation__"))
+    ast.fix_missing_locations(node)
+    return AnnotationAST(node, {"__annotation__": annotation})
+
+
 def annotations_to_ast(annotations):
     """Convert an annotation dict containing values to approximately the AST format.
 
     Always returns a fresh dictionary.
     """
-    annos, namespace = {}, {}
-    for name, value in annotations.items():
-        # we need a name that is unique per value and also shouldn't clash with
-        # other namespaces that might be mixed with this
-        value_name = f"__annotation_{id(value)}__"
-        namespace[value_name] = value
-        annos[name] = ast.Expression(ast.Name(id=value_name))
-    return annos, namespace
-
+    return {
+        n: annotation_to_ast(t)
+        for n, t in annotations.items()
+    }
 
 def _rewrite_star_unpack(arg):
     """If the given argument annotation expression is a star unpack e.g. `'*Ts'`
@@ -1154,18 +1157,9 @@ def _get_and_call_annotate(obj, format):
     annotate = getattr(obj, "__annotate__", None)
     if annotate is not None:
         ann = call_annotate_function(annotate, format, owner=obj)
-        if format == Format.AST:
-            if not isinstance(ann, tuple) or len(ann) != 2:
-                raise ValueError(f"{obj!r}.__annotate__ returned an invalid AST format")
-            ann, namespace = ann
-            if not isinstance(namespace, dict):
-                raise ValueError(f"{obj!r}.__annotate__ returned a non-dict namespace")
         if not isinstance(ann, dict):
             raise ValueError(f"{obj!r}.__annotate__ returned a non-dict annotation mapping")
-        if format == Format.AST:
-            return ann, namespace
-        else:
-            return ann
+        return ann
     return None
 
 
@@ -1315,8 +1309,8 @@ class _AnnotationASTTransformer(ast.NodeTransformer):
     """Reproduces name mangling and class scopes for annotations."""
 
     def __init__(self, explicit_globals, private_name, mangled_names):
-        self.explicit_globals = explicit_globals ()
-        if not private_name.lstrip("_"):
+        self.explicit_globals = explicit_globals or ()
+        if isinstance(private_name, str) and not private_name.lstrip("_"):
             private_name = None
         self.private_name = private_name
         self.mangled_names = mangled_names or ()
@@ -1426,6 +1420,10 @@ def _namespace_from_annotate(annotate):
         namespace.maps.append(cells)
     if globals:
         namespace.maps.append(globals)
+    if "__builtins__" in globals:
+        namespace.maps.append(globals["__builtins__"])
+    else:
+        namespace.maps.append(builtins.__dict__)
     if classdict:
         inner = namespace.parents
         namespace.maps.insert(0, { _ANNOTATION_AST_SKIP_CLASS: inner })
@@ -1450,17 +1448,24 @@ class AnnotationAST:
         self.private_name = private_name
         self.mangled_names = mangled_names
 
+    def __repr__(self):
+        return f"AnnotationAST(ast={self.ast!r}, namespace={self.namespace!r})"
+
     def evaluate(self, format):
         if format == Format.AST:
             return self
-        if format not in (Format.VALUE, Format.VALUE_WITH_FAKE_GLOBALS):
-            raise NotImplementedError(f"AnnotationAST does not support format {format!r}")
+        elif format == Format.STRING:
+            return ast.unparse(self.ast)
+        elif format == Format.FORWARDREF:
+            return ForwardRef(ast.unparse(self.ast))
         if _ANNOTATION_AST_SKIP_CLASS in self.namespace:
             transformer = _AnnotationASTTransformer(
                 self.explicit_globals, self.private_name, self.mangled_names
             )
-            ast = transformer.visit(self, self.ast)
+            ann_ast = transformer.visit(self.ast)
         else:
-            ast = self.ast
-        globals = {"__builtins__": self.namespace.get("__builtins__", builtins.__dict__)}
-        return eval(compile(ast, "<annotation>", "eval"), globals=globals, locals=self.namespace)
+            ann_ast = self.ast
+        return eval(compile(ann_ast, "<annotation>", "eval"), globals={}, locals=self.namespace)
+
+    def evaluate_type(self, format):
+        return typing.eval_annotation_AST(self.ast, self.namespace, format=format)

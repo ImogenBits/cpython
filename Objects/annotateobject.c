@@ -138,7 +138,8 @@ _eval_ast(PyObject *ann_ast_class, PyObject *format, PyObject *ast, PyObject *na
     if (!ann_ast) {
         return NULL;
     }
-    PyObject *result = PyObject_CallMethodObjArgs(ann_ast, &_Py_ID(evaluate), format);
+    PyObject *result = PyObject_CallMethodObjArgs(
+        ann_ast, &_Py_ID(evaluate), format, NULL);
     Py_DECREF(ann_ast);
     if (!result) {
         return NULL;
@@ -237,10 +238,14 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
             PyObject *evaluated = _eval_ast(annASTClass, format, value, namespace,
                 explicit_globals, private_name, mangled_names);
             if (!evaluated) {
+                Py_DECREF(result);
+                result = NULL;
                 goto failed;
             }
             if (PyDict_SetItem(result, key, evaluated) < 0) {
                 Py_DECREF(evaluated);
+                Py_DECREF(result);
+                result = NULL;
                 goto failed;
             }
             Py_DECREF(evaluated);

@@ -398,7 +398,6 @@ static int astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTPreprocessState *sta
 static int astfold_arguments(arguments_ty node_, PyArena *ctx_, _PyASTPreprocessState *state);
 static int astfold_comprehension(comprehension_ty node_, PyArena *ctx_, _PyASTPreprocessState *state);
 static int astfold_keyword(keyword_ty node_, PyArena *ctx_, _PyASTPreprocessState *state);
-static int astfold_arg(arg_ty node_, PyArena *ctx_, _PyASTPreprocessState *state);
 static int astfold_withitem(withitem_ty node_, PyArena *ctx_, _PyASTPreprocessState *state);
 static int astfold_excepthandler(excepthandler_ty node_, PyArena *ctx_, _PyASTPreprocessState *state);
 static int astfold_match_case(match_case_ty node_, PyArena *ctx_, _PyASTPreprocessState *state);

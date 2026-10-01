@@ -2061,14 +2061,6 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
                     return 0;
                 }
             }
-            if (s->v.AnnAssign.simple && !st->st_cur->ste_has_conditional_annotations
-                && (st->st_cur->ste_type == ClassBlock || st->st_cur->ste_type == ModuleBlock))
-            {
-                st->st_cur->ste_has_conditional_annotations = 1;
-                if (!symtable_add_def(st, &_Py_ID(__conditional_annotations__), USE, LOCATION(s))) {
-                    return 0;
-                }
-            }
         }
         else {
             VISIT(st, expr, s->v.AnnAssign.target);
@@ -2823,6 +2815,15 @@ symtable_visit_annotation(struct symtable *st, expr_ty annotation, void *key)
 {
     // Annotations in local scopes are not executed and should not affect the symtable
     bool is_unevaluated = st->st_cur->ste_type == FunctionBlock;
+
+    if (!st->st_cur->ste_has_conditional_annotations
+        && (st->st_cur->ste_type == ClassBlock || st->st_cur->ste_type == ModuleBlock))
+    {
+        st->st_cur->ste_has_conditional_annotations = 1;
+        if (!symtable_add_def(st, &_Py_ID(__conditional_annotations__), USE, LOCATION(annotation))) {
+            return 0;
+        }
+    }
     struct _symtable_entry *parent_ste = st->st_cur;
     if (parent_ste->ste_annotation_block == NULL) {
         _Py_block_ty current_type = parent_ste->ste_type;
