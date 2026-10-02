@@ -931,7 +931,6 @@ PyObject* PyAST_mod2obj(mod_ty t);
 int PyAst_CheckMode(PyObject *ast, int mode);
 mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode);
 int PyAST_Check(PyObject* obj);
-PyObject *PyAST_AnnotationDictToAST(PyObject *asts);
 
 extern int _PyAST_Validate(mod_ty);
 
@@ -941,12 +940,13 @@ extern PyObject* _PyAST_ExprAsUnicode(expr_ty);
 /* _PyAST_GetAnnotationAST is defined in ast_annotations.c */
 extern PyObject* _PyAST_GetAnnotationAST(expr_ty, int);
 
+extern PyObject* _PyAST_FromAnnotationString(PyArena *, PyObject *);
+extern PyObject* _PyAST_FromAnnotationData(PyObject *);
+
 /* Return the borrowed reference to the first literal string in the
    sequence of statements or NULL if it doesn't start from a literal string.
    Doesn't set exception. */
 extern PyObject* _PyAST_GetDocString(asdl_stmt_seq *);
-
-extern PyObject * _PyAST_FromAnnotationData(PyObject *data);
 
 #ifdef __cplusplus
 }
