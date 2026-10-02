@@ -153,12 +153,14 @@ class TypeParamsInvalidTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, r"\(MRO\) for bases object, Generic"):
             class My[X](object): ...
 
-    def test_compile_error_in_type_param_bound(self):
-        # This should not crash, see gh-145187
-        check_syntax_error(
-            self,
-            "if True:\n class h[l:{7for*()in 0}]:2"
-        )
+    def test_codegen_error_in_type_param_bound_is_deferred(self):
+        # XXX: TODO: DESLOP
+        # This should not crash, see gh-145187. Because evaluate functions
+        # contain only strings, errors detected only by expression codegen
+        # are deferred until the bound is evaluated.
+        ns = run_code("if True:\n class h[l:{7 for *() in 0}]:2")
+        with self.assertRaises(SyntaxError):
+            ns["h"].__type_params__[0].__bound__
 
 
 class TypeParamsNonlocalTest(unittest.TestCase):
@@ -395,6 +397,28 @@ class TypeParamsAccessTest(unittest.TestCase):
         type Alias[T] = lambda: T
         T, = Alias.__type_params__
         self.assertIs(Alias.__value__(), T)
+
+    def test_type_alias_value_keeps_live_namespaces(self):
+        ns = run_code("""
+            value = 1
+            type Alias = lambda: value
+        """)
+        callback = ns["Alias"].__value__
+        ns["value"] = 2
+        self.assertEqual(callback(), 2)
+
+        def outer():
+            value = 1
+            type Alias = lambda: value
+            def set_value(new_value):
+                nonlocal value
+                value = new_value
+            return Alias, set_value
+
+        alias, set_value = outer()
+        callback = alias.__value__
+        set_value(2)
+        self.assertEqual(callback(), 2)
 
     def test_class_base_containing_lambda(self):
         # Test that scopes nested inside hidden functions work correctly
@@ -770,6 +794,20 @@ class TypeParamsClassScopeTest(unittest.TestCase):
                     nonlocal x
                     type Alias = x
                     x = "class"
+                return Cls
+        """)
+        cls = ns["outer"]()
+        self.assertEqual(cls.Alias.__value__, "class")
+
+    def test_explicit_nonlocal_assignment(self):
+        ns = run_code("""
+            x = "global"
+            def outer():
+                x = "nonlocal"
+                class Cls:
+                    nonlocal x
+                    type Alias = x
+                Cls.x = "class"
                 return Cls
         """)
         cls = ns["outer"]()

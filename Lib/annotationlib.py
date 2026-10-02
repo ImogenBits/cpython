@@ -2,10 +2,13 @@
 
 import ast
 import builtins
+import collections
+import collections.abc
 import enum
 import keyword
 import sys
 import types
+lazy import typing
 
 __all__ = [
     "Format",
@@ -1000,13 +1003,13 @@ def get_annotations(
         case Format.AST:
             ann = _get_and_call_annotate(obj, format)
             if ann is not None:
-                return dict(ann[0]), dict(ann[1])
+                return dict(ann)
         case _:
             raise ValueError(f"Unsupported format {format!r}")
 
     if ann is None:
         if isinstance(obj, type) or callable(obj):
-            return ({}, {}) if format == Format.AST else {}
+            return {}
         raise TypeError(f"{obj!r} does not have annotations")
 
     if not ann:
@@ -1119,20 +1122,22 @@ def annotations_to_string(annotations):
     }
 
 
+def annotation_to_ast(annotation):
+    """Convert an annotation to approximately the AST format."""
+    node = ast.Expression(ast.Name(id="__annotation__"))
+    ast.fix_missing_locations(node)
+    return AnnotationAST(node, {"__annotation__": annotation})
+
+
 def annotations_to_ast(annotations):
     """Convert an annotation dict containing values to approximately the AST format.
 
     Always returns a fresh dictionary.
     """
-    annos, namespace = {}, {}
-    for name, value in annotations.items():
-        # we need a name that is unique per value and also shouldn't clash with
-        # other namespaces that might be mixed with this
-        value_name = f"__annotation_{id(value)}__"
-        namespace[value_name] = value
-        annos[name] = ast.Expression(ast.Name(id=value_name))
-    return annos, namespace
-
+    return {
+        n: annotation_to_ast(t)
+        for n, t in annotations.items()
+    }
 
 def _rewrite_star_unpack(arg):
     """If the given argument annotation expression is a star unpack e.g. `'*Ts'`
@@ -1152,18 +1157,9 @@ def _get_and_call_annotate(obj, format):
     annotate = getattr(obj, "__annotate__", None)
     if annotate is not None:
         ann = call_annotate_function(annotate, format, owner=obj)
-        if format == Format.AST:
-            if not isinstance(ann, tuple) or len(ann) != 2:
-                raise ValueError(f"{obj!r}.__annotate__ returned an invalid AST format")
-            ann, namespace = ann
-            if not isinstance(namespace, dict):
-                raise ValueError(f"{obj!r}.__annotate__ returned a non-dict namespace")
         if not isinstance(ann, dict):
             raise ValueError(f"{obj!r}.__annotate__ returned a non-dict annotation mapping")
-        if format == Format.AST:
-            return ann, namespace
-        else:
-            return ann
+        return ann
     return None
 
 
@@ -1304,3 +1300,172 @@ class _ExtraNameFixer(ast.NodeTransformer):
         if (new_name := self.extra_names.get(node.id, _sentinel)) is not _sentinel:
             node = ast.Name(id=type_repr(new_name))
         return node
+
+
+_ANNOTATION_AST_SKIP_CLASS = "__annotation_ast_skip_class__"
+
+
+class _AnnotationASTTransformer(ast.NodeTransformer):
+    """Reproduces name mangling and class scopes for annotations."""
+
+    def __init__(self, explicit_globals, private_name, mangled_names):
+        self.explicit_globals = explicit_globals or ()
+        if isinstance(private_name, str) and not private_name.lstrip("_"):
+            private_name = None
+        self.private_name = private_name
+        self.mangled_names = mangled_names or ()
+        self.scope = 0
+        super().__init__()
+
+    def maybe_mangle(self, name):
+        if self.private_name is None or name not in self.mangled_names:
+            return name
+        return self.private_name + name
+
+    def visit_Name(self, node):
+        node.id = self.maybe_mangle(node.id)
+        if self.scope > 0 or node.id in self.explicit_globals:
+            new = ast.Subscript(
+                ast.Name(_ANNOTATION_AST_SKIP_CLASS),
+                node,
+            )
+            return ast.copy_location(new, node)
+        return node
+
+    def visit_Attribute(self, node):
+        self.generic_visit(node)
+        node.attr = self.maybe_mangle(node.attr)
+        return node
+
+    def visit_Lambda(self, node):
+        node.args = self.visit(node.args)
+        self.scope += 1
+        body = self.visit(node.body)
+        node.self.scope -= 1
+        return node
+
+    def _visit_comprehension(self, node):
+        if node.generators:
+            node.generators[0] = self.visit(node.generators[0])
+        self.scope += 1
+        node.generators[1:] = [self.visit(inner) for inner in node.generators[1:]]
+        for key in ("elt", "key", "value"):
+            attr = getattr(node, key, None)
+            if attr:
+                setattr(node, key, self.visit(attr))
+        self.scope -= 1
+        return node
+
+    visit_ListComp = _visit_comprehension
+    visit_SetComp = _visit_comprehension
+    visit_DictComp = _visit_comprehension
+    visit_GeneratorExp = _visit_comprehension
+
+
+class _CellMapping(collections.abc.Mapping):
+    """A mapping that holds cells and dereferences them on access."""
+
+    __slots__ = ("closure",)
+
+    def __init__(self, freevars, closure):
+        self.closure = dict(zip(freevars, closure, strict=True))
+
+    def __getitem__(self, key):
+        cell = self.closure[key]
+        try:
+            return cell.cell_contents
+        except ValueError:
+            raise NameError(
+                f"cannot access free variable {key!r} where it is not "
+                "associated with a value in enclosing scope",
+                name=key,
+            )
+
+    def __iter__(self):
+        return iter(self.closure)
+
+    def __len__(self):
+        return len(self.closure)
+
+
+def _namespace_from_annotate(annotate):
+    """Constructs the namespaces an annotation can be evaluated in.
+
+    Returns a namespace that combines the globals, closure and classdict of the
+    annotate function. If the annotate is defined in a class scope, it also
+    contains an inner namespace at `_ANNOTATION_AST_SKIP_CLASS` that can be used
+    to evaluate inner scopes (comprehensions and lambdas) where the enclosing
+    classdict is not visible.
+    """
+    globals = getattr(annotate, "__globals__", None)
+    closure = getattr(annotate, "__closure__", None)
+    freevars = getattr(annotate, "__freevars__", None)
+    if freevars is None:
+        code = getattr(annotate, "__code__", None)
+        if code is not None:
+            freevars = getattr(code, "co_freevars", None)
+    if closure is not None and freevars is not None:
+        cells = _CellMapping(freevars, closure)
+        try:
+            classdict = cells.get("__classdict__", None)
+        except NameError:
+            classdict = None
+    else:
+        cells = None
+        classdict = None
+    namespace = collections.ChainMap()
+    if classdict:
+        namespace.maps.append(classdict)
+    if cells:
+        namespace.maps.append(cells)
+    if globals:
+        namespace.maps.append(globals)
+    if "__builtins__" in globals:
+        namespace.maps.append(globals["__builtins__"])
+    else:
+        namespace.maps.append(builtins.__dict__)
+    if classdict:
+        inner = namespace.parents
+        namespace.maps.insert(0, { _ANNOTATION_AST_SKIP_CLASS: inner })
+    return namespace
+
+
+class AnnotationAST:
+    __slots__ = ("ast", "namespace", "explicit_globals", "private_name", "mangled_names")
+
+    def __init__(
+        self,
+        ast,
+        namespace=None,
+        explicit_globals=None,
+        private_name=None,
+        mangled_names=None,
+    ):
+        super().__init__()
+        self.ast = ast
+        self.namespace = namespace if namespace is not None else {}
+        self.explicit_globals = explicit_globals
+        self.private_name = private_name
+        self.mangled_names = mangled_names
+
+    def __repr__(self):
+        return f"AnnotationAST(ast={self.ast!r}, namespace={self.namespace!r})"
+
+    def evaluate(self, format):
+        if format == Format.AST:
+            return self
+        elif format == Format.STRING:
+            return ast.unparse(self.ast)
+        elif format == Format.FORWARDREF:
+            return ForwardRef(ast.unparse(self.ast))
+        if _ANNOTATION_AST_SKIP_CLASS in self.namespace:
+            transformer = _AnnotationASTTransformer(
+                self.explicit_globals, self.private_name, self.mangled_names
+            )
+            ann_ast = transformer.visit(self.ast)
+        else:
+            ann_ast = self.ast
+        return eval(compile(ann_ast, "<annotation>", "eval"), globals={}, locals=self.namespace)
+
+    def evaluate_type(self, format):
+        return typing.eval_annotation_AST(self.ast, self.namespace, format=format)

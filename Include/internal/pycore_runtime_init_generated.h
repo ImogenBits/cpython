@@ -1320,7 +1320,6 @@ extern "C" {
     INIT_STR(defaults, ".defaults"), \
     INIT_STR(dot_locals, ".<locals>"), \
     INIT_STR(empty, ""), \
-    INIT_STR(format, ".format"), \
     INIT_STR(gc, "<GC>"), \
     INIT_STR(generic_base, ".generic_base"), \
     INIT_STR(json_decoder, "json.decoder"), \
@@ -1734,6 +1733,7 @@ extern "C" {
     INIT_ID(entrypoint), \
     INIT_ID(env), \
     INIT_ID(errors), \
+    INIT_ID(evaluate), \
     INIT_ID(event), \
     INIT_ID(eventmask), \
     INIT_ID(exc), \

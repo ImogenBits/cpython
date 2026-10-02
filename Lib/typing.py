@@ -2431,25 +2431,20 @@ def eval_annotation_AST(expr, namespace, format):
 
 
 def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
-    annotations, namespace = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
+    annotations = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
     if annotations is None:
         return None
     elif not isinstance(annotations, dict):
         annotations = {"": annotations}
-
-    for name, annotation in annotations.items():
-        annotation = annotation.body
-        if eval_str and isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-            annotations[name] = ast.parse(annotation.value, "<annotation>", "eval").body
-        else:
-            annotations[name] = annotation
-
     if format is None:
         format = annotationlib.Format.VALUE
-    annotations = {
-        name: eval_annotation_AST(value, namespace=namespace, format=format)
-        for name, value in annotations.items()
-    }
+
+    result = {}
+    for name, annotation in annotations.items():
+        ann_ast = annotation.ast.body
+        if eval_str and isinstance(ann_ast, ast.Constant) and isinstance(ann_ast.value, str):
+            ann_ast = ast.parse(ann_ast.value, "<annotation>", "eval").body
+        result[name] = eval_annotation_AST(ann_ast, namespace=annotation.namespace, format=format)
 
     if "" in annotations:
         return annotations[""]
@@ -3346,7 +3341,6 @@ class _TypedDictMeta(type):
         )
 
         def __annotate__(format):
-            namespace = {}
             annos = {}
             for base in bases:
                 if base is Generic:
@@ -3356,17 +3350,11 @@ class _TypedDictMeta(type):
                     continue
                 base_annos = annotationlib.call_annotate_function(
                     base_annotate, format, owner=base)
-                if format == annotationlib.Format.AST:
-                    base_annos, base_namespace = base_annos
-                    namespace.update(base_namespace)
                 annos.update(base_annos)
             if own_annotate is not None:
                 own = annotationlib.call_annotate_function(
                     own_annotate, format, owner=tp_dict)
-                if format == annotationlib.Format.AST:
-                    own, own_namespace = own
-                    namespace.update(own_namespace)
-                elif format != annotationlib.Format.STRING:
+                if format not in (annotationlib.Format.STRING, annotationlib.Format.AST):
                     own = {
                         n: _type_check(tp, msg, module=tp_dict.__module__)
                         for n, tp in own.items()
@@ -3376,15 +3364,11 @@ class _TypedDictMeta(type):
             elif format in (annotationlib.Format.FORWARDREF, annotationlib.Format.VALUE):
                 own = own_checked_annotations
             elif format == annotationlib.Format.AST:
-                own, own_namespace = annotationlib.annotations_to_ast(own_annotations)
-                namespace.update(own_namespace)
+                own = annotationlib.annotations_to_ast(own_annotations)
             else:
                 raise NotImplementedError(format)
             annos.update(own)
-            if format == annotationlib.Format.AST:
-                return annos, namespace
-            else:
-                return annos
+            return annos
 
         tp_dict.__annotate__ = __annotate__
         tp_dict.__required_keys__ = frozenset(required_keys)

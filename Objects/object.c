@@ -2,6 +2,7 @@
 /* Generic object operations; and implementation of None */
 
 #include "Python.h"
+#include "pycore_annotateobject.h" // PyAnnotate_Type
 #include "pycore_brc.h"           // _Py_brc_queue_object()
 #include "pycore_call.h"          // _PyObject_CallNoArgs()
 #include "pycore_ceval.h"         // _Py_EnterRecursiveCallTstate()
@@ -2538,6 +2539,7 @@ static PyTypeObject* static_types[_Py_NUM_MANAGED_PREINITIALIZED_TYPES] = {
     &PyCFunction_Type,
 
     // Static types with base=&PyBaseObject_Type
+    &PyAnnotate_Type,
     &PyAsyncGen_Type,
     &PyByteArrayIter_Type,
     &PyByteArray_Type,

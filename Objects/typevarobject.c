@@ -1972,13 +1972,17 @@ typealias_module(PyObject *self, void *Py_UNUSED(closure))
         return module;
     }
     if (ta->compute_value != NULL) {
-        PyObject* mod = PyFunction_GetModule(ta->compute_value);
-        if (mod != NULL) {
-            // PyFunction_GetModule() returns a borrowed reference,
-            // and it may return NULL (e.g., for functions defined
-            // in an exec()'ed block).
-            return Py_NewRef(mod);
+        // May be absent, or None (e.g. for a type alias defined in an
+        // exec()'ed block).
+        PyObject *mod;
+        if (PyObject_GetOptionalAttr(ta->compute_value, &_Py_ID(__module__),
+                                     &mod) < 0) {
+            return NULL;
         }
+        if (mod != NULL && mod != Py_None) {
+            return mod;
+        }
+        Py_XDECREF(mod);
     }
     Py_RETURN_NONE;
 }
@@ -2253,15 +2257,15 @@ _Py_make_typealias(PyThreadState* unused, PyObject *args)
     assert(PyUnicode_Check(name));
     PyObject *type_params = typealias_convert_type_params(PyTuple_GET_ITEM(args, 1));
     PyObject *compute_value = PyTuple_GET_ITEM(args, 2);
-    assert(PyFunction_Check(compute_value));
+    PyObject *qualname = PyObject_GetAttr(compute_value, &_Py_ID(__qualname__));
+    if (qualname == NULL) {
+        return NULL;
+    }
 
-    PyFunctionObject *compute_func = (PyFunctionObject *)compute_value;
-    PyCodeObject *code_obj = (PyCodeObject *)compute_func->func_code;
-    PyObject *qualname = code_obj->co_qualname;
-    assert(qualname != NULL);
-
-    return (PyObject *)typealias_alloc(
+    PyObject *res = (PyObject *)typealias_alloc(
         name, qualname, type_params, compute_value, NULL, NULL);
+    Py_DECREF(qualname);
+    return res;
 }
 
 PyDoc_STRVAR(generic_doc,

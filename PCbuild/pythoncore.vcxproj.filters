@@ -558,6 +558,9 @@
     <ClInclude Include="..\Include\internal\pycore_abstract.h">
       <Filter>Include\internal</Filter>
     </ClInclude>
+    <ClInclude Include="..\Include\internal\pycore_annotateobject.h">
+      <Filter>Include\internal</Filter>
+    </ClInclude>
     <ClInclude Include="..\Include\internal\pycore_asdl.h">
       <Filter>Include\internal</Filter>
     </ClInclude>
@@ -1194,6 +1197,9 @@
       <Filter>Modules\cjkcodecs</Filter>
     </ClCompile>
     <ClCompile Include="..\Objects\abstract.c">
+      <Filter>Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Objects\annotateobject.c">
       <Filter>Objects</Filter>
     </ClCompile>
     <ClCompile Include="..\Objects\accu.c">

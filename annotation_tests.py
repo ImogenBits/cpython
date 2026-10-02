@@ -94,7 +94,7 @@ for package in PACKAGES:
 print(time)
 """
 
-procs = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True) for _ in range(5)]
+procs = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True) for _ in range(10)]
 import_time, memory, pyc, exec_time = 0, 0, 0, 0
 for proc in procs:
     if proc.stderr:

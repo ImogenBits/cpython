@@ -537,12 +537,9 @@ def _make_annotate_function(__class__, method_name, annotation_fields, return_ty
         Format = annotationlib.Format
         match format:
             case Format.VALUE | Format.FORWARDREF | Format.STRING | Format.AST:
-                cls_annotations, cls_namspace = {}, {}
+                cls_annotations = {}
                 for base in reversed(__class__.__mro__):
                     base_annotations = annotationlib.get_annotations(base, format=format)
-                    if format == Format.AST:
-                        base_annotations, base_namespace = base_annotations
-                        cls_namspace.update(base_namespace)
                     cls_annotations.update(base_annotations)
 
                 new_annotations = {}
@@ -558,16 +555,11 @@ def _make_annotate_function(__class__, method_name, annotation_fields, return_ty
                     if format == Format.STRING:
                         new_annotations["return"] = annotationlib.type_repr(return_type)
                     elif format == Format.AST:
-                        ret_annotation, ret_namespace = annotationlib.annotations_to_ast({"return": return_type})
-                        cls_namspace.update(ret_namespace)
-                        new_annotations["return"] = ret_annotation["return"]
+                        new_annotations["return"] = annotationlib.annotation_to_ast(return_type)
                     else:
                         new_annotations["return"] = return_type
 
-                if format == Format.AST:
-                    return new_annotations, cls_namspace
-                else:
-                    return new_annotations
+                return new_annotations
 
             case _:
                 raise NotImplementedError(format)
@@ -1744,7 +1736,9 @@ def make_dataclass(cls_name, fields, *, bases=(), namespace=None, init=True,
                     else:
                         from typing import Any
                         namespace = {"Any": Any}
-                    return namespace, ast.Expression(ast.Name(id="Any", ctx=ast.Load()))
+                    node = ast.Expression(ast.Name(id="Any", ctx=ast.Load()))
+                    ast.fix_missing_locations(node)
+                    return annotationlib.AnnotationAST(node, namespace)
                 case _:
                     raise NotImplementedError
         annos = {

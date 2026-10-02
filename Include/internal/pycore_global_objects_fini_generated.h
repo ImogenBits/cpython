@@ -1325,7 +1325,6 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(defaults));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(dot_locals));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(empty));
-    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(format));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(gc));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(generic_base));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(json_decoder));
@@ -1736,6 +1735,7 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(entrypoint));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(env));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(errors));
+    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(evaluate));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(event));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(eventmask));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(exc));

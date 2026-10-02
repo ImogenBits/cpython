@@ -2,6 +2,7 @@
 #define _PY_INTERPRETER
 
 #include "Python.h"
+#include "pycore_annotateobject.h" // _PyAnnotate_New()
 #include "pycore_compile.h"       // _PyCompile_GetUnaryIntrinsicName
 #include "pycore_function.h"      // _Py_set_function_type_params()
 #include "pycore_genobject.h"     // _PyAsyncGenValueWrapperNew
@@ -217,13 +218,6 @@ make_frozenset(PyThreadState* Py_UNUSED(ignored), PyObject *set)
     return _PySet_Freeze(set);
 }
 
-static PyObject *
-build_annotation_ast(PyThreadState* Py_UNUSED(ignored), PyObject *data)
-{
-    assert(PyDict_CheckExact(data) || PyUnicode_CheckExact(data));
-    return _PyAST_FromAnnotationData(data);
-}
-
 
 #define INTRINSIC_FUNC_ENTRY(N, F) \
     [N] = {F, #N},
@@ -243,7 +237,6 @@ _PyIntrinsics_UnaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SUBSCRIPT_GENERIC, _Py_subscript_generic)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEALIAS, _Py_make_typealias)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_FROZENSET, make_frozenset)
-    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_AST, build_annotation_ast)
 };
 
 
@@ -280,49 +273,11 @@ make_typevar_with_constraints(PyThreadState* Py_UNUSED(ignored), PyObject *name,
 }
 
 static PyObject *
-build_annotation_value(PyThreadState* Py_UNUSED(ignored), PyObject *asts, PyObject *namespace)
+make_annotate(PyThreadState* tstate, PyObject *asts, PyObject *data)
 {
-    PyObject *expr = PyAST_AnnotationDictToAST(asts);
-    if (expr == NULL) {
-        return NULL;
-    }
-
-    PyArena *arena = _PyArena_New();
-    if (arena == NULL) {
-        Py_DECREF(expr);
-        return NULL;
-    }
-
-    mod_ty mod = PyAST_obj2mod(expr, arena, 1 /* eval */);
-    Py_DECREF(expr);
-    if (mod == NULL || !_PyAST_Validate(mod)) {
-        _PyArena_Free(arena);
-        return NULL;
-    }
-
-    PyCompilerFlags flags = _PyCompilerFlags_INIT;
-    PyObject *filename = PyUnicode_FromString("<annotation>");
-    if (filename == NULL) {
-        _PyArena_Free(arena);
-        return NULL;
-    }
-    PyCodeObject *code = _PyAST_Compile(mod, filename, &flags, -1, arena, NULL);
-    Py_DECREF(filename);
-    _PyArena_Free(arena);
-    if (code == NULL) {
-        return NULL;
-    }
-
-    if (!PyDict_Contains(namespace, &_Py_ID(__builtins__))) {
-        if (PyDict_SetItem(namespace, &_Py_ID(__builtins__),
-                           PyEval_GetBuiltins()) < 0) {
-            Py_DECREF(code);
-            return NULL;
-        }
-    }
-    PyObject *result = PyEval_EvalCode((PyObject *)code, namespace, namespace);
-    Py_DECREF(code);
-    return result;
+    _PyInterpreterFrame *frame = tstate->current_frame;
+    assert(frame != NULL);
+    return _PyAnnotate_New(asts, frame->f_globals, data);
 }
 
 const intrinsic_func2_info
@@ -333,7 +288,7 @@ _PyIntrinsics_BinaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEVAR_WITH_CONSTRAINTS, make_typevar_with_constraints)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_FUNCTION_TYPE_PARAMS, _Py_set_function_type_params)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_TYPEPARAM_DEFAULT, _Py_set_typeparam_default)
-    INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_ANNOTATION_VALUE, build_annotation_value)
+    INTRINSIC_FUNC_ENTRY(INTRINSIC_MAKE_ANNOTATE, make_annotate)
 };
 
 #undef INTRINSIC_FUNC_ENTRY
