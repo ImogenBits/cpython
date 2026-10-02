@@ -1388,6 +1388,9 @@
     <ClCompile Include="..\Python\ast.c">
       <Filter>Python</Filter>
     </ClCompile>
+    <ClCompile Include="..\Python\ast_annotations.c">
+      <Filter>Python</Filter>
+    </ClCompile>
     <ClCompile Include="..\Python\ast_preprocess.c">
       <Filter>Python</Filter>
     </ClCompile>

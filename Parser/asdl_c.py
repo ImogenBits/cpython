@@ -2332,6 +2332,9 @@ def write_header(mod, metadata, f):
         /* _PyAST_ExprAsUnicode is defined in ast_unparse.c */
         extern PyObject* _PyAST_ExprAsUnicode(expr_ty);
 
+        /* _PyAST_GetAnnotationAST is defined in ast_annotations.c */
+        extern PyObject* _PyAST_GetAnnotationAST(expr_ty, int);
+
         /* Return the borrowed reference to the first literal string in the
            sequence of statements or NULL if it doesn't start from a literal string.
            Doesn't set exception. */

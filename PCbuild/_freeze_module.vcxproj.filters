@@ -34,6 +34,9 @@
     <ClCompile Include="..\Python\ast.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\Python\ast_annotations.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\Python\ast_preprocess.c">
       <Filter>Source Files</Filter>
     </ClCompile>

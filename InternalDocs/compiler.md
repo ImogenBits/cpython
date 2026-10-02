@@ -505,6 +505,9 @@ Important files
   * [Python/ast.c](../Python/ast.c):
     Used for validating the AST.
 
+  * [Python/ast_annotations.c](../Python/ast_annotations.c):
+    Encodes ASTs for runtime annotation evaluation.
+
   * [Python/ast_preprocess.c](../Python/ast_preprocess.c):
     Preprocesses the AST before compiling.
 
