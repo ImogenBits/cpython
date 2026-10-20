@@ -11,6 +11,48 @@ from dataclasses import InitVar, dataclass
 from typing import Annotated, ClassVar
 from contextlib import redirect_stdout
 import subprocess
+import shutil
+
+
+VENV_PATH = Path() / ".venv/Lib/site-packages"
+PACKAGES = [
+    "urllib3",
+    "certifi",
+    "idna",
+    "requests",
+    "charset_normalizer",
+    "cryptography",
+    "pluggy",
+    "pytest",
+    "click",
+    "iniconfig",
+    "anyio",
+    "attrs",
+    "h11",
+]
+
+
+def iter_modules(package: str) -> Iterable[ModuleType]:
+    try:
+        package_module = import_module(package)
+    except Exception as e:
+        if "." not in package:
+            raise
+        return
+    yield package_module
+    if hasattr(package_module, "__path__"):
+        for _, name, _ in pkgutil.iter_modules(package_module.__path__, package + "."):
+            yield from iter_modules(name)
+
+
+def iter_annotates(obj: object, obj_cache: set[int]) -> Iterable[Callable[[int], object]]:
+    obj_cache.add(id(obj))
+    if getattr(obj, "__annotate__", None) is not None and callable(obj.__annotate__):
+        yield obj.__annotate__
+    if isinstance(obj, (type, ModuleType)) and hasattr(obj, "__dict__"):
+        for attr_value in obj.__dict__.values():
+            if id(attr_value) not in obj_cache:
+                yield from iter_annotates(attr_value, obj_cache)
 
 
 class _Address:
@@ -67,49 +109,12 @@ def make_forwardref_class():
     return ForwardRef
 
 
-def run_test():
-    VENV_PATH = Path() / ".venv/Lib/site-packages"
+def run_test(clean: str) -> None:
     sys.path.insert(0, str(VENV_PATH))
-    PACKAGES = [
-        "urllib3",
-        "certifi",
-        "idna",
-        "requests",
-        "charset_normalizer",
-        "cryptography",
-        "pluggy",
-        "pytest",
-        "click",
-        "iniconfig",
-        "anyio",
-        "attrs",
-        "h11",
-    ]
 
-
-    def iter_modules(package: str) -> Iterable[ModuleType]:
-        try:
-            package_module = import_module(package)
-        except Exception as e:
-            if "." not in package:
-                raise
-            return
-        yield package_module
-        if hasattr(package_module, "__path__"):
-            for _, name, _ in pkgutil.iter_modules(package_module.__path__, package + "."):
-                yield from iter_modules(name)
-
-
-    def iter_annotates(obj: object) -> Iterable[Callable[[int], object]]:
-        obj_cache.add(id(obj))
-        if getattr(obj, "__annotate__", None) is not None and callable(obj.__annotate__):
-            yield obj.__annotate__
-        if isinstance(obj, (type, ModuleType)) and hasattr(obj, "__dict__"):
-            for attr_value in obj.__dict__.values():
-                if id(attr_value) not in obj_cache:
-                    yield from iter_annotates(attr_value)
-
-    obj_cache = set()
+    if clean:
+        for path in VENV_PATH.glob("**/__pycache__"):
+            shutil.rmtree(path)
 
     tracemalloc.start()
     with open("/dev/null", "w") as dev_null, redirect_stdout(dev_null):
@@ -126,10 +131,11 @@ def run_test():
     for path in VENV_PATH.glob("**/*.pyc"):
         pyc_size += path.stat().st_size
 
+    obj_cache = set()
     time = 0
     for package in PACKAGES:
         for mod in iter_modules(package):
-            for annotate in iter_annotates(mod):
+            for annotate in iter_annotates(mod, obj_cache):
                 time_start = timeit.default_timer()
                 call_annotate_function(annotate, format=Format.VALUE)
                 time += timeit.default_timer() - time_start
@@ -152,16 +158,22 @@ def run_test():
 
 code = """
 import annotation_tests
-print(*annotation_tests.run_test())
+print(*annotation_tests.run_test({clean}))
 """
 
 if __name__ == "__main__":
     count = 10
     if len(sys.argv) >= 2:
         count = int(sys.argv[1])
+    clean = len(sys.argv) >= 3 and sys.argv[2] == "c"
 
     res = (0.0,) * 7
     if count > 1:
+        if not clean and not list(VENV_PATH.glob("**/__pycache__")):
+            for package in PACKAGES:
+                for mod in iter_modules(package):
+                    pass
+        code = code.format(clean=clean)
         procs = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True) for _ in range(count)]
         for proc in procs:
             if proc.stderr:
@@ -173,7 +185,7 @@ if __name__ == "__main__":
             )
     else:
         sys.argv = ["annotation_tests.py"]
-        res = run_test()
+        res = run_test(clean)
 
     print(
         f"Import time: {res[0]:.2f} s\n"
