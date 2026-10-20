@@ -695,8 +695,10 @@ class AST_Tests(unittest.TestCase):
         self.assertEqual(ast.GtE.__doc__, "GtE")
         self.assertEqual(ast.Name.__doc__, "Name(identifier id, expr_context ctx)")
         self.assertEqual(ast.cmpop.__doc__, "cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn")
-        expressions = [f"     | {node.__doc__}" for node in ast.expr.__subclasses__()]
-        expressions[0] = f"expr = {ast.expr.__subclasses__()[0].__doc__}"
+        subclasses = [node for node in ast.expr.__subclasses__()
+                      if node.__doc__ != ast.expr.__doc__]
+        expressions = [f"     | {node.__doc__}" for node in subclasses]
+        expressions[0] = f"expr = {subclasses[0].__doc__}"
         self.assertCountEqual(ast.expr.__doc__.split("\n"), expressions)
 
     def test_compare_basics(self):

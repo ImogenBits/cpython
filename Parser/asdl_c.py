@@ -850,6 +850,8 @@ class PyTypesVisitor(PickleVisitor):
     def visitModule(self, mod):
         self.emit("""
 
+typedef struct FrozenTypeInfo FrozenTypeInfo;
+
 typedef struct {
     PyObject_HEAD
     PyObject *dict;
@@ -884,6 +886,169 @@ ast_clear(PyObject *op)
     AST_object *self = (AST_object*)op;
     Py_CLEAR(self->dict);
     return 0;
+}
+
+typedef PyObject *(*frozen_field_converter)(struct ast_state *, void *);
+
+typedef struct {
+    Py_ssize_t index;
+    frozen_field_converter convert;
+} FrozenFieldInfo;
+
+struct FrozenTypeInfo {
+    Py_ssize_t ncache;
+    PyGetSetDef *getsets;
+};
+
+typedef struct {
+    AST_object base;
+    FrozenTypeInfo *type_info;
+    PyObject *fields[1];
+} FrozenASTObject;
+
+static int init_frozen_types(struct ast_state *state);
+
+static int
+frozen_traverse(PyObject *op, visitproc visit, void *arg)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_VISIT(Py_TYPE(op));
+    Py_VISIT(self->base.dict);
+    for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+        Py_VISIT(self->fields[i]);
+    }
+    return 0;
+}
+
+static int
+frozen_clear(PyObject *op)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_CLEAR(self->base.dict);
+    for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+        Py_CLEAR(self->fields[i]);
+    }
+    return 0;
+}
+
+static void
+frozen_dealloc(PyObject *op)
+{
+    PyTypeObject *type = Py_TYPE(op);
+    PyObject_GC_UnTrack(op);
+    frozen_clear(op);
+    freefunc free_func = PyType_GetSlot(type, Py_tp_free);
+    assert(free_func != NULL);
+    free_func(op);
+    Py_DECREF(type);
+}
+
+static PyObject *
+frozen_field_get(PyObject *op, void *closure)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    FrozenFieldInfo *field = closure;
+    if (self->base.dict != NULL) {
+        PyObject *value = PyDict_GetItemString(
+            self->base.dict, self->type_info->getsets[field->index].name);
+        if (value != NULL) {
+            return Py_NewRef(value);
+        }
+        PyErr_Format(PyExc_AttributeError, "%s has no attribute '%s'",
+                     _PyType_Name(Py_TYPE(op)),
+                     self->type_info->getsets[field->index].name);
+        return NULL;
+    }
+    PyObject *value = self->fields[field->index];
+    if (value == NULL) {
+        PyErr_Format(PyExc_AttributeError, "%s has no attribute '%s'",
+                     _PyType_Name(Py_TYPE(op)),
+                     self->type_info->getsets[field->index].name);
+        return NULL;
+    }
+    return Py_NewRef(value);
+}
+
+static PyObject *
+frozen_getattro(PyObject *op, PyObject *name)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    PyObject *descr = _PyType_LookupRef(Py_TYPE(op), name);
+    if (descr == NULL && PyErr_Occurred()) {
+        return NULL;
+    }
+    int is_data = descr != NULL && PyDescr_IsData(descr);
+    Py_XDECREF(descr);
+    if (is_data &&
+        !_PyUnicode_EqualToASCIIString(name, "__dict__")) {
+        return PyObject_GenericGetAttr(op, name);
+    }
+    if (_PyUnicode_EqualToASCIIString(name, "__dict__")) {
+        if (self->base.dict == NULL) {
+            PyObject *dict = PyDict_New();
+            if (dict == NULL) {
+                return NULL;
+            }
+            for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+                PyGetSetDef *field = &self->type_info->getsets[i];
+                if (self->fields[i] != NULL &&
+                    PyDict_SetItemString(dict, field->name,
+                                         self->fields[i]) < 0) {
+                    Py_DECREF(dict);
+                    return NULL;
+                }
+            }
+            self->base.dict = dict;
+        }
+        return Py_NewRef(self->base.dict);
+    }
+    if (self->type_info->getsets != NULL) {
+        for (PyGetSetDef *field = self->type_info->getsets;
+             field->name != NULL; field++) {
+            if (_PyUnicode_EqualToASCIIString(name, field->name)) {
+                return frozen_field_get(op, field->closure);
+            }
+        }
+    }
+    return PyObject_GenericGetAttr(op, name);
+}
+
+static int
+frozen_setattro(PyObject *op, PyObject *name, PyObject *value)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    PyObject *descr = _PyType_LookupRef(Py_TYPE(op), name);
+    if (descr == NULL && PyErr_Occurred()) {
+        return -1;
+    }
+    int is_data = descr != NULL && PyDescr_IsData(descr);
+    Py_XDECREF(descr);
+    if (is_data) {
+        return PyObject_GenericSetAttr(op, name, value);
+    }
+    if (self->type_info->getsets != NULL) {
+        for (PyGetSetDef *field = self->type_info->getsets;
+             field->name != NULL; field++) {
+            if (_PyUnicode_EqualToASCIIString(name, field->name)) {
+                FrozenFieldInfo *info = field->closure;
+                if (self->base.dict != NULL) {
+                    if (value == NULL) {
+                        if (PyDict_DelItemString(self->base.dict,
+                                                 field->name) < 0) {
+                            return -1;
+                        }
+                    }
+                    else if (PyDict_SetItemString(self->base.dict,
+                                                  field->name, value) < 0) {
+                        return -1;
+                    }
+                }
+                Py_XSETREF(self->fields[info->index], Py_XNewRef(value));
+                return 0;
+            }
+        }
+    }
+    return PyObject_GenericSetAttr(op, name, value);
 }
 
 /*
@@ -2154,7 +2319,7 @@ _PyAST_FromAnnotationString(PyArena *arena, PyObject *data,
         error_msg = "constructing annotation";
         goto parsing_err;
     }
-    PyObject *out = PyAST_mod2obj(mod_ast);
+    PyObject *out = _PyAST_mod2obj_frozen(mod_ast);
     if (!out) {
         error_msg = "constructing annotation object";
         goto parsing_err;
@@ -2784,6 +2949,327 @@ class ObjVisitor(PickleVisitor):
             self.emit("value = ast2obj_%s(state, %s);" % (field.type, value), depth, reflow=False)
 
 
+class FrozenASTVisitor(PickleVisitor):
+    """Generate AST wrappers with inline Python field storage."""
+
+    def visitModule(self, mod):
+        self.mod = mod
+        self.emit("""
+static PyObject *
+frozen_new_node(struct ast_state *state, PyObject *type,
+                FrozenTypeInfo *type_info, void *node)
+{
+    PyObject *result = PyType_GenericAlloc((PyTypeObject *)type, 0);
+    if (result == NULL) {
+        return NULL;
+    }
+    FrozenASTObject *self = (FrozenASTObject *)result;
+    self->type_info = type_info;
+    for (Py_ssize_t i = 0; i < type_info->ncache; i++) {
+        FrozenFieldInfo *field = type_info->getsets[i].closure;
+        self->fields[i] = field->convert(state, node);
+        if (self->fields[i] == NULL) {
+            Py_DECREF(result);
+            return NULL;
+        }
+    }
+    return result;
+}
+
+static PyObject *
+make_frozen_type(const char *name, PyObject *mutable_type,
+                 FrozenTypeInfo *type_info,
+                 Py_ssize_t ncache, PyGetSetDef *getsets)
+{
+    type_info->ncache = ncache;
+    type_info->getsets = getsets;
+    PyType_Slot slots[] = {
+        {Py_tp_dealloc, frozen_dealloc},
+        {Py_tp_getattro, frozen_getattro},
+        {Py_tp_setattro, frozen_setattro},
+        {Py_tp_traverse, frozen_traverse},
+        {Py_tp_clear, frozen_clear},
+        {0, NULL},
+    };
+    PyType_Spec spec = {
+        .name = name,
+        .basicsize = offsetof(FrozenASTObject, fields) +
+                     ncache * sizeof(PyObject *),
+        .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
+        .slots = slots,
+    };
+    PyObject *bases = PyTuple_Pack(1, mutable_type);
+    if (bases == NULL) {
+        return NULL;
+    }
+    PyObject *type = PyType_FromSpecWithBases(&spec, bases);
+    Py_DECREF(bases);
+    if (type == NULL) {
+        return NULL;
+    }
+    static const char *copy_attrs[] = {
+        "_fields", "_attributes", "__match_args__", "__module__",
+        "__name__", "__qualname__", "__doc__", "_field_types", NULL
+    };
+    for (const char **name = copy_attrs; *name != NULL; name++) {
+        PyObject *value = NULL;
+        if (PyObject_GetOptionalAttrString(mutable_type, *name, &value) < 0) {
+            Py_DECREF(type);
+            return NULL;
+        }
+        if (value != NULL) {
+            int res = PyObject_SetAttrString(type, *name, value);
+            Py_DECREF(value);
+            if (res < 0) {
+                Py_DECREF(type);
+                return NULL;
+            }
+        }
+    }
+    return type;
+}
+""".strip(), 0, reflow=False)
+
+        self.emit("static FrozenTypeInfo AST_frozen_info;", 0)
+        for dfn in mod.dfns:
+            self.emit(f"static FrozenTypeInfo {dfn.name}_frozen_info;", 0)
+            if isinstance(dfn.value, asdl.Sum):
+                for cons in dfn.value.types:
+                    self.emit(f"static FrozenTypeInfo {cons.name}_frozen_info;", 0)
+        for dfn in mod.dfns:
+            self.emit_type_prototypes(dfn)
+        for dfn in mod.dfns:
+            self.emit_converter_functions(dfn)
+        for dfn in mod.dfns:
+            self.emit_type_metadata(dfn)
+        self.emit_init_types(mod)
+        self.emit_frozen_entrypoint()
+
+    def emit_type_prototypes(self, dfn):
+        value = dfn.value
+        name = dfn.name
+        if isinstance(value, asdl.Product) or (
+            isinstance(value, asdl.Sum) and not is_simple(value)
+        ):
+            ctype = get_c_type(name)
+            self.emit(
+                f"static PyObject *frozen_ast2obj_{name}("
+                f"struct ast_state *, {ctype});",
+                0,
+            )
+
+    def emit_converter_functions(self, dfn):
+        value = dfn.value
+        if isinstance(value, asdl.Product):
+            for field in list(value.fields) + list(value.attributes):
+                self.emit_value_converter(dfn.name, field, False)
+            self.emit_product_converter(dfn.name, value)
+        elif isinstance(value, asdl.Sum):
+            if not is_simple(value):
+                for field in value.attributes:
+                    self.emit_value_converter(dfn.name, field, False)
+                for cons in value.types:
+                    for field in cons.fields:
+                        self.emit_value_converter(
+                            cons.name, field, True, dfn.name
+                        )
+                self.emit_sum_converter(dfn.name, value)
+
+    def emit_value_converter(self, owner_name, field, constructor,
+                             sum_name=None):
+        func = f"frozen_convert_{owner_name}_{field.name}"
+        node_type = sum_name if constructor else owner_name
+        ctype = get_c_type(node_type)
+        self.emit("static PyObject *", 0)
+        self.emit(f"{func}(struct ast_state *state, void *node)", 0)
+        self.emit("{", 0)
+        self.emit(f"{ctype} o = ({ctype})node;", 1)
+        if constructor:
+            source = f"o->v.{owner_name}.{field.name}"
+        else:
+            source = f"o->{field.name}"
+        self.emit_value_expression(field, source, 1)
+        self.emit("}", 0)
+
+    def emit_value_expression(self, field, source, depth):
+        if field.seq:
+            seqtype = "int" if (
+                field.type in self.metadata.simple_sums or
+                field.type in ("int", "bool")
+            ) else field.type
+            elemtype = get_c_type(field.type)
+            self.emit(f"Py_ssize_t n = asdl_seq_LEN({source});", depth)
+            self.emit("PyObject *result = PyList_New(n);", depth)
+            self.emit("if (result == NULL) return NULL;", depth)
+            self.emit("for (Py_ssize_t i = 0; i < n; i++) {", depth)
+            self.emit(
+                f"{elemtype} item = asdl_seq_GET({source}, i);",
+                depth + 1,
+            )
+            self.emit_value_conversion(
+                field.type, "item", "value", "failed", depth + 1
+            )
+            self.emit("PyList_SET_ITEM(result, i, value);", depth + 1)
+            self.emit("}", depth)
+            self.emit("return result;", depth)
+            self.emit("failed:", depth)
+            self.emit("Py_DECREF(result);", depth + 1)
+            self.emit("return NULL;", depth + 1)
+        else:
+            self.emit_value_conversion(
+                field.type, source, "value", None, depth
+            )
+            self.emit("return value;", depth)
+
+    def emit_value_conversion(self, type_name, source, variable, failed, depth):
+        if type_name not in asdl.builtin_types and type_name not in self.metadata.simple_sums:
+            expression = f"frozen_ast2obj_{type_name}(state, {source})"
+        else:
+            expression = f"ast2obj_{type_name}(state, {source})"
+        self.emit(f"PyObject *{variable} = {expression};", depth, reflow=False)
+        self.emit(f"if ({variable} == NULL) {{", depth)
+        if failed:
+            self.emit(f"goto {failed};", depth + 1)
+        else:
+            self.emit("return NULL;", depth + 1)
+        self.emit("}", depth)
+
+    def emit_product_converter(self, name, prod):
+        ctype = get_c_type(name)
+        self.emit("static PyObject *", 0)
+        self.emit(f"frozen_ast2obj_{name}(struct ast_state *state, {ctype} o)", 0)
+        self.emit("{", 0)
+        self.emit("if (o == NULL) Py_RETURN_NONE;", 1)
+        self.emit(
+            f"return frozen_new_node(state, state->{name}_frozen_type, "
+            f"&{name}_frozen_info, o);",
+            1,
+        )
+        self.emit("}", 0)
+
+    def emit_sum_converter(self, name, sum):
+        ctype = get_c_type(name)
+        self.emit("static PyObject *", 0)
+        self.emit(f"frozen_ast2obj_{name}(struct ast_state *state, {ctype} o)", 0)
+        self.emit("{", 0)
+        self.emit("if (o == NULL) Py_RETURN_NONE;", 1)
+        self.emit("switch (o->kind) {", 1)
+        for cons in sum.types:
+            self.emit(f"case {cons.name}_kind:", 2)
+            self.emit(
+                f"return frozen_new_node(state, state->{cons.name}_frozen_type, "
+                f"&{cons.name}_frozen_info, o);",
+                3,
+            )
+        self.emit("}", 1)
+        self.emit("Py_UNREACHABLE();", 1)
+        self.emit("}", 0)
+
+    def emit_type_metadata(self, dfn):
+        value = dfn.value
+        if isinstance(value, asdl.Product):
+            self.emit_class_metadata(dfn.name, value.fields, value.attributes, None)
+        elif isinstance(value, asdl.Sum):
+            self.emit_class_metadata(dfn.name, [], value.attributes, None)
+            for cons in value.types:
+                self.emit_class_metadata(
+                    cons.name, cons.fields, value.attributes, dfn.name
+                )
+
+    def emit_class_metadata(self, name, fields, attributes, sum_name):
+        all_fields = list(attributes) + list(fields)
+        if not all_fields:
+            return
+        self.emit(f"static FrozenFieldInfo {name}_frozen_field_info[] = {{", 0)
+        for index, field in enumerate(all_fields):
+            converter_owner = sum_name if (
+                sum_name is not None and field in attributes
+            ) else name
+            self.emit(
+                f"{{{index}, frozen_convert_{converter_owner}_{field.name}}},",
+                1,
+            )
+        self.emit("};", 0)
+        self.emit(f"static PyGetSetDef {name}_frozen_getsets[] = {{", 0)
+        for index, field in enumerate(all_fields):
+            converter_owner = sum_name if (
+                sum_name is not None and field in attributes
+            ) else name
+            self.emit(
+                f'{{"{field.name}", frozen_field_get, NULL, NULL, '
+                f'&{name}_frozen_field_info[{index}]}},',
+                1,
+            )
+        self.emit("{NULL}", 1)
+        self.emit("};", 0)
+
+    def emit_init_types(self, mod):
+        self.emit("static int", 0)
+        self.emit("init_frozen_types(struct ast_state *state)", 0)
+        self.emit("{", 0)
+        self.emit_class_init(
+            "AST", "state->AST_type", "NULL", [], 0, True
+        )
+        for dfn in mod.dfns:
+            value = dfn.value
+            name = dfn.name
+            if isinstance(value, asdl.Product):
+                self.emit_class_init(
+                    name, f"state->{name}_type", "NULL",
+                    list(value.attributes) + list(value.fields),
+                    len(value.attributes) + len(value.fields),
+                )
+            elif isinstance(value, asdl.Sum):
+                self.emit_class_init(
+                    name, f"state->{name}_type", "NULL",
+                    list(value.attributes), len(value.attributes),
+                )
+                for cons in value.types:
+                    self.emit_class_init(
+                        cons.name, f"state->{cons.name}_type", "NULL",
+                        list(value.attributes) + list(cons.fields),
+                        len(value.attributes) + len(cons.fields),
+                    )
+        self.emit("return 0;", 1)
+        self.emit("}", 0)
+
+    def emit_class_init(self, name, mutable_type, base, fields, ncache,
+                        root=False):
+        if root:
+            type_name = "ast.FrozenAST"
+        else:
+            type_name = f"ast.Frozen{name}"
+        getsets = f"{name}_frozen_getsets" if fields else "NULL"
+        self.emit(
+            f'state->{name}_frozen_type = make_frozen_type("{type_name}", '
+            f'{mutable_type}, &{name}_frozen_info, {ncache}, {getsets});',
+            1,
+            reflow=False,
+        )
+        self.emit(f"if (!state->{name}_frozen_type) return -1;", 1)
+
+    def emit_frozen_entrypoint(self):
+        self.emit("""
+PyObject *
+_PyAST_mod2obj_frozen(mod_ty t)
+{
+    if (t == NULL) {
+        PyErr_SetString(PyExc_ValueError, "AST must not be NULL");
+        return NULL;
+    }
+    struct ast_state *state = get_ast_state();
+    if (state == NULL) {
+        return NULL;
+    }
+    if (_PyOnceFlag_CallOnce(&state->frozen_once,
+                             (_Py_once_fn_t *)init_frozen_types, state) < 0) {
+        return NULL;
+    }
+    return frozen_ast2obj_mod(state, t);
+}
+""".strip(), 0, reflow=False)
+
+
 class PartingShots(StaticVisitor):
 
     CODE = """
@@ -2873,6 +3359,7 @@ class ChainOfVisitors:
 def generate_ast_state(module_state, f):
     f.write('struct ast_state {\n')
     f.write('    _PyOnceFlag once;\n')
+    f.write('    _PyOnceFlag frozen_once;\n')
     f.write('    int finalized;\n')
     for s in module_state:
         f.write('    PyObject *' + s + ';\n')
@@ -2891,6 +3378,7 @@ def generate_ast_fini(module_state, f):
     f.write(textwrap.dedent("""
                 state->finalized = 1;
                 state->once = (_PyOnceFlag){0};
+                state->frozen_once = (_PyOnceFlag){0};
             }
 
     """))
@@ -2918,6 +3406,10 @@ def generate_module_def(mod, metadata, f, internal_h):
         "%s_type" % type
         for type in metadata.types
     )
+    module_state.update(
+        "%s_frozen_type" % type
+        for type in metadata.types
+    )
     module_state.add("abstract_types")
 
     state_strings = sorted(state_strings)
@@ -2937,6 +3429,7 @@ def generate_module_def(mod, metadata, f, internal_h):
         #include "pycore_setobject.h"     // _PySet_NextEntry()
         #include "pycore_symtable.h"      // _Py_Mangle()
         #include "pycore_unionobject.h"   // _Py_union_type_or
+        #include "pycore_unicodeobject.h" // _PyUnicode_EqualToASCIIString()
 
         #include <stddef.h>               // offsetof()
 
@@ -2999,6 +3492,7 @@ def write_header(mod, metadata, f):
     f.write(textwrap.dedent("""
 
         PyObject* PyAST_mod2obj(mod_ty t);
+        PyObject* _PyAST_mod2obj_frozen(mod_ty t);
         int PyAst_CheckMode(PyObject *ast, int mode);
         mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode);
         int PyAST_Check(PyObject* obj);
@@ -3065,6 +3559,7 @@ def write_source(mod, metadata, f, internal_h_file):
         Obj2ModPrototypeVisitor(f),
         FunctionVisitor(f),
         ObjVisitor(f),
+        FrozenASTVisitor(f),
         Obj2ModVisitor(f),
         AnnotationDecoderVisitor(f),
         ASTModuleVisitor(f),

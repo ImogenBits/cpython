@@ -11,6 +11,7 @@
 #include "pycore_setobject.h"     // _PySet_NextEntry()
 #include "pycore_symtable.h"      // _Py_Mangle()
 #include "pycore_unionobject.h"   // _Py_union_type_or
+#include "pycore_unicodeobject.h" // _PyUnicode_EqualToASCIIString()
 
 #include <stddef.h>               // offsetof()
 
@@ -34,144 +35,251 @@ void _PyAST_Fini(PyInterpreterState *interp)
 {
     struct ast_state *state = &interp->ast;
 
+    Py_CLEAR(state->AST_frozen_type);
     Py_CLEAR(state->AST_type);
+    Py_CLEAR(state->Add_frozen_type);
     Py_CLEAR(state->Add_singleton);
     Py_CLEAR(state->Add_type);
+    Py_CLEAR(state->And_frozen_type);
     Py_CLEAR(state->And_singleton);
     Py_CLEAR(state->And_type);
+    Py_CLEAR(state->AnnAssign_frozen_type);
     Py_CLEAR(state->AnnAssign_type);
+    Py_CLEAR(state->Assert_frozen_type);
     Py_CLEAR(state->Assert_type);
+    Py_CLEAR(state->Assign_frozen_type);
     Py_CLEAR(state->Assign_type);
+    Py_CLEAR(state->AsyncFor_frozen_type);
     Py_CLEAR(state->AsyncFor_type);
+    Py_CLEAR(state->AsyncFunctionDef_frozen_type);
     Py_CLEAR(state->AsyncFunctionDef_type);
+    Py_CLEAR(state->AsyncWith_frozen_type);
     Py_CLEAR(state->AsyncWith_type);
+    Py_CLEAR(state->Attribute_frozen_type);
     Py_CLEAR(state->Attribute_type);
+    Py_CLEAR(state->AugAssign_frozen_type);
     Py_CLEAR(state->AugAssign_type);
+    Py_CLEAR(state->Await_frozen_type);
     Py_CLEAR(state->Await_type);
+    Py_CLEAR(state->BinOp_frozen_type);
     Py_CLEAR(state->BinOp_type);
+    Py_CLEAR(state->BitAnd_frozen_type);
     Py_CLEAR(state->BitAnd_singleton);
     Py_CLEAR(state->BitAnd_type);
+    Py_CLEAR(state->BitOr_frozen_type);
     Py_CLEAR(state->BitOr_singleton);
     Py_CLEAR(state->BitOr_type);
+    Py_CLEAR(state->BitXor_frozen_type);
     Py_CLEAR(state->BitXor_singleton);
     Py_CLEAR(state->BitXor_type);
+    Py_CLEAR(state->BoolOp_frozen_type);
     Py_CLEAR(state->BoolOp_type);
+    Py_CLEAR(state->Break_frozen_type);
     Py_CLEAR(state->Break_type);
+    Py_CLEAR(state->Call_frozen_type);
     Py_CLEAR(state->Call_type);
+    Py_CLEAR(state->ClassDef_frozen_type);
     Py_CLEAR(state->ClassDef_type);
+    Py_CLEAR(state->Compare_frozen_type);
     Py_CLEAR(state->Compare_type);
+    Py_CLEAR(state->Constant_frozen_type);
     Py_CLEAR(state->Constant_type);
+    Py_CLEAR(state->Continue_frozen_type);
     Py_CLEAR(state->Continue_type);
+    Py_CLEAR(state->Del_frozen_type);
     Py_CLEAR(state->Del_singleton);
     Py_CLEAR(state->Del_type);
+    Py_CLEAR(state->Delete_frozen_type);
     Py_CLEAR(state->Delete_type);
+    Py_CLEAR(state->DictComp_frozen_type);
     Py_CLEAR(state->DictComp_type);
+    Py_CLEAR(state->Dict_frozen_type);
     Py_CLEAR(state->Dict_type);
+    Py_CLEAR(state->Div_frozen_type);
     Py_CLEAR(state->Div_singleton);
     Py_CLEAR(state->Div_type);
+    Py_CLEAR(state->Eq_frozen_type);
     Py_CLEAR(state->Eq_singleton);
     Py_CLEAR(state->Eq_type);
+    Py_CLEAR(state->ExceptHandler_frozen_type);
     Py_CLEAR(state->ExceptHandler_type);
+    Py_CLEAR(state->Expr_frozen_type);
     Py_CLEAR(state->Expr_type);
+    Py_CLEAR(state->Expression_frozen_type);
     Py_CLEAR(state->Expression_type);
+    Py_CLEAR(state->FloorDiv_frozen_type);
     Py_CLEAR(state->FloorDiv_singleton);
     Py_CLEAR(state->FloorDiv_type);
+    Py_CLEAR(state->For_frozen_type);
     Py_CLEAR(state->For_type);
+    Py_CLEAR(state->FormattedValue_frozen_type);
     Py_CLEAR(state->FormattedValue_type);
+    Py_CLEAR(state->FunctionDef_frozen_type);
     Py_CLEAR(state->FunctionDef_type);
+    Py_CLEAR(state->FunctionType_frozen_type);
     Py_CLEAR(state->FunctionType_type);
+    Py_CLEAR(state->GeneratorExp_frozen_type);
     Py_CLEAR(state->GeneratorExp_type);
+    Py_CLEAR(state->Global_frozen_type);
     Py_CLEAR(state->Global_type);
+    Py_CLEAR(state->GtE_frozen_type);
     Py_CLEAR(state->GtE_singleton);
     Py_CLEAR(state->GtE_type);
+    Py_CLEAR(state->Gt_frozen_type);
     Py_CLEAR(state->Gt_singleton);
     Py_CLEAR(state->Gt_type);
+    Py_CLEAR(state->IfExp_frozen_type);
     Py_CLEAR(state->IfExp_type);
+    Py_CLEAR(state->If_frozen_type);
     Py_CLEAR(state->If_type);
+    Py_CLEAR(state->ImportFrom_frozen_type);
     Py_CLEAR(state->ImportFrom_type);
+    Py_CLEAR(state->Import_frozen_type);
     Py_CLEAR(state->Import_type);
+    Py_CLEAR(state->In_frozen_type);
     Py_CLEAR(state->In_singleton);
     Py_CLEAR(state->In_type);
+    Py_CLEAR(state->Interactive_frozen_type);
     Py_CLEAR(state->Interactive_type);
+    Py_CLEAR(state->Interpolation_frozen_type);
     Py_CLEAR(state->Interpolation_type);
+    Py_CLEAR(state->Invert_frozen_type);
     Py_CLEAR(state->Invert_singleton);
     Py_CLEAR(state->Invert_type);
+    Py_CLEAR(state->IsNot_frozen_type);
     Py_CLEAR(state->IsNot_singleton);
     Py_CLEAR(state->IsNot_type);
+    Py_CLEAR(state->Is_frozen_type);
     Py_CLEAR(state->Is_singleton);
     Py_CLEAR(state->Is_type);
+    Py_CLEAR(state->JoinedStr_frozen_type);
     Py_CLEAR(state->JoinedStr_type);
+    Py_CLEAR(state->LShift_frozen_type);
     Py_CLEAR(state->LShift_singleton);
     Py_CLEAR(state->LShift_type);
+    Py_CLEAR(state->Lambda_frozen_type);
     Py_CLEAR(state->Lambda_type);
+    Py_CLEAR(state->ListComp_frozen_type);
     Py_CLEAR(state->ListComp_type);
+    Py_CLEAR(state->List_frozen_type);
     Py_CLEAR(state->List_type);
+    Py_CLEAR(state->Load_frozen_type);
     Py_CLEAR(state->Load_singleton);
     Py_CLEAR(state->Load_type);
+    Py_CLEAR(state->LtE_frozen_type);
     Py_CLEAR(state->LtE_singleton);
     Py_CLEAR(state->LtE_type);
+    Py_CLEAR(state->Lt_frozen_type);
     Py_CLEAR(state->Lt_singleton);
     Py_CLEAR(state->Lt_type);
+    Py_CLEAR(state->MatMult_frozen_type);
     Py_CLEAR(state->MatMult_singleton);
     Py_CLEAR(state->MatMult_type);
+    Py_CLEAR(state->MatchAs_frozen_type);
     Py_CLEAR(state->MatchAs_type);
+    Py_CLEAR(state->MatchClass_frozen_type);
     Py_CLEAR(state->MatchClass_type);
+    Py_CLEAR(state->MatchMapping_frozen_type);
     Py_CLEAR(state->MatchMapping_type);
+    Py_CLEAR(state->MatchOr_frozen_type);
     Py_CLEAR(state->MatchOr_type);
+    Py_CLEAR(state->MatchSequence_frozen_type);
     Py_CLEAR(state->MatchSequence_type);
+    Py_CLEAR(state->MatchSingleton_frozen_type);
     Py_CLEAR(state->MatchSingleton_type);
+    Py_CLEAR(state->MatchStar_frozen_type);
     Py_CLEAR(state->MatchStar_type);
+    Py_CLEAR(state->MatchValue_frozen_type);
     Py_CLEAR(state->MatchValue_type);
+    Py_CLEAR(state->Match_frozen_type);
     Py_CLEAR(state->Match_type);
+    Py_CLEAR(state->Mod_frozen_type);
     Py_CLEAR(state->Mod_singleton);
     Py_CLEAR(state->Mod_type);
+    Py_CLEAR(state->Module_frozen_type);
     Py_CLEAR(state->Module_type);
+    Py_CLEAR(state->Mult_frozen_type);
     Py_CLEAR(state->Mult_singleton);
     Py_CLEAR(state->Mult_type);
+    Py_CLEAR(state->Name_frozen_type);
     Py_CLEAR(state->Name_type);
+    Py_CLEAR(state->NamedExpr_frozen_type);
     Py_CLEAR(state->NamedExpr_type);
+    Py_CLEAR(state->Nonlocal_frozen_type);
     Py_CLEAR(state->Nonlocal_type);
+    Py_CLEAR(state->NotEq_frozen_type);
     Py_CLEAR(state->NotEq_singleton);
     Py_CLEAR(state->NotEq_type);
+    Py_CLEAR(state->NotIn_frozen_type);
     Py_CLEAR(state->NotIn_singleton);
     Py_CLEAR(state->NotIn_type);
+    Py_CLEAR(state->Not_frozen_type);
     Py_CLEAR(state->Not_singleton);
     Py_CLEAR(state->Not_type);
+    Py_CLEAR(state->Or_frozen_type);
     Py_CLEAR(state->Or_singleton);
     Py_CLEAR(state->Or_type);
+    Py_CLEAR(state->ParamSpec_frozen_type);
     Py_CLEAR(state->ParamSpec_type);
+    Py_CLEAR(state->Pass_frozen_type);
     Py_CLEAR(state->Pass_type);
+    Py_CLEAR(state->Pow_frozen_type);
     Py_CLEAR(state->Pow_singleton);
     Py_CLEAR(state->Pow_type);
+    Py_CLEAR(state->RShift_frozen_type);
     Py_CLEAR(state->RShift_singleton);
     Py_CLEAR(state->RShift_type);
+    Py_CLEAR(state->Raise_frozen_type);
     Py_CLEAR(state->Raise_type);
+    Py_CLEAR(state->Return_frozen_type);
     Py_CLEAR(state->Return_type);
+    Py_CLEAR(state->SetComp_frozen_type);
     Py_CLEAR(state->SetComp_type);
+    Py_CLEAR(state->Set_frozen_type);
     Py_CLEAR(state->Set_type);
+    Py_CLEAR(state->Slice_frozen_type);
     Py_CLEAR(state->Slice_type);
+    Py_CLEAR(state->Starred_frozen_type);
     Py_CLEAR(state->Starred_type);
+    Py_CLEAR(state->Store_frozen_type);
     Py_CLEAR(state->Store_singleton);
     Py_CLEAR(state->Store_type);
+    Py_CLEAR(state->Sub_frozen_type);
     Py_CLEAR(state->Sub_singleton);
     Py_CLEAR(state->Sub_type);
+    Py_CLEAR(state->Subscript_frozen_type);
     Py_CLEAR(state->Subscript_type);
+    Py_CLEAR(state->TemplateStr_frozen_type);
     Py_CLEAR(state->TemplateStr_type);
+    Py_CLEAR(state->TryStar_frozen_type);
     Py_CLEAR(state->TryStar_type);
+    Py_CLEAR(state->Try_frozen_type);
     Py_CLEAR(state->Try_type);
+    Py_CLEAR(state->Tuple_frozen_type);
     Py_CLEAR(state->Tuple_type);
+    Py_CLEAR(state->TypeAlias_frozen_type);
     Py_CLEAR(state->TypeAlias_type);
+    Py_CLEAR(state->TypeIgnore_frozen_type);
     Py_CLEAR(state->TypeIgnore_type);
+    Py_CLEAR(state->TypeVarTuple_frozen_type);
     Py_CLEAR(state->TypeVarTuple_type);
+    Py_CLEAR(state->TypeVar_frozen_type);
     Py_CLEAR(state->TypeVar_type);
+    Py_CLEAR(state->UAdd_frozen_type);
     Py_CLEAR(state->UAdd_singleton);
     Py_CLEAR(state->UAdd_type);
+    Py_CLEAR(state->USub_frozen_type);
     Py_CLEAR(state->USub_singleton);
     Py_CLEAR(state->USub_type);
+    Py_CLEAR(state->UnaryOp_frozen_type);
     Py_CLEAR(state->UnaryOp_type);
+    Py_CLEAR(state->While_frozen_type);
     Py_CLEAR(state->While_type);
+    Py_CLEAR(state->With_frozen_type);
     Py_CLEAR(state->With_type);
+    Py_CLEAR(state->YieldFrom_frozen_type);
     Py_CLEAR(state->YieldFrom_type);
+    Py_CLEAR(state->Yield_frozen_type);
     Py_CLEAR(state->Yield_type);
     Py_CLEAR(state->__dict__);
     Py_CLEAR(state->__doc__);
@@ -180,26 +288,32 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->_attributes);
     Py_CLEAR(state->_fields);
     Py_CLEAR(state->abstract_types);
+    Py_CLEAR(state->alias_frozen_type);
     Py_CLEAR(state->alias_type);
     Py_CLEAR(state->annotation);
     Py_CLEAR(state->arg);
+    Py_CLEAR(state->arg_frozen_type);
     Py_CLEAR(state->arg_type);
     Py_CLEAR(state->args);
     Py_CLEAR(state->argtypes);
+    Py_CLEAR(state->arguments_frozen_type);
     Py_CLEAR(state->arguments_type);
     Py_CLEAR(state->asname);
     Py_CLEAR(state->ast);
     Py_CLEAR(state->attr);
     Py_CLEAR(state->bases);
     Py_CLEAR(state->body);
+    Py_CLEAR(state->boolop_frozen_type);
     Py_CLEAR(state->boolop_type);
     Py_CLEAR(state->bound);
     Py_CLEAR(state->cases);
     Py_CLEAR(state->cause);
     Py_CLEAR(state->cls);
+    Py_CLEAR(state->cmpop_frozen_type);
     Py_CLEAR(state->cmpop_type);
     Py_CLEAR(state->col_offset);
     Py_CLEAR(state->comparators);
+    Py_CLEAR(state->comprehension_frozen_type);
     Py_CLEAR(state->comprehension_type);
     Py_CLEAR(state->context_expr);
     Py_CLEAR(state->conversion);
@@ -212,8 +326,11 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->end_col_offset);
     Py_CLEAR(state->end_lineno);
     Py_CLEAR(state->exc);
+    Py_CLEAR(state->excepthandler_frozen_type);
     Py_CLEAR(state->excepthandler_type);
+    Py_CLEAR(state->expr_context_frozen_type);
     Py_CLEAR(state->expr_context_type);
+    Py_CLEAR(state->expr_frozen_type);
     Py_CLEAR(state->expr_type);
     Py_CLEAR(state->finalbody);
     Py_CLEAR(state->format_spec);
@@ -229,6 +346,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->iter);
     Py_CLEAR(state->key);
     Py_CLEAR(state->keys);
+    Py_CLEAR(state->keyword_frozen_type);
     Py_CLEAR(state->keyword_type);
     Py_CLEAR(state->keywords);
     Py_CLEAR(state->kind);
@@ -241,7 +359,9 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->level);
     Py_CLEAR(state->lineno);
     Py_CLEAR(state->lower);
+    Py_CLEAR(state->match_case_frozen_type);
     Py_CLEAR(state->match_case_type);
+    Py_CLEAR(state->mod_frozen_type);
     Py_CLEAR(state->mod_type);
     Py_CLEAR(state->module);
     Py_CLEAR(state->msg);
@@ -249,11 +369,13 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->names);
     Py_CLEAR(state->op);
     Py_CLEAR(state->operand);
+    Py_CLEAR(state->operator_frozen_type);
     Py_CLEAR(state->operator_type);
     Py_CLEAR(state->ops);
     Py_CLEAR(state->optional_vars);
     Py_CLEAR(state->orelse);
     Py_CLEAR(state->pattern);
+    Py_CLEAR(state->pattern_frozen_type);
     Py_CLEAR(state->pattern_type);
     Py_CLEAR(state->patterns);
     Py_CLEAR(state->posonlyargs);
@@ -263,6 +385,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->simple);
     Py_CLEAR(state->slice);
     Py_CLEAR(state->step);
+    Py_CLEAR(state->stmt_frozen_type);
     Py_CLEAR(state->stmt_type);
     Py_CLEAR(state->str);
     Py_CLEAR(state->subject);
@@ -272,19 +395,24 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->test);
     Py_CLEAR(state->type);
     Py_CLEAR(state->type_comment);
+    Py_CLEAR(state->type_ignore_frozen_type);
     Py_CLEAR(state->type_ignore_type);
     Py_CLEAR(state->type_ignores);
+    Py_CLEAR(state->type_param_frozen_type);
     Py_CLEAR(state->type_param_type);
     Py_CLEAR(state->type_params);
+    Py_CLEAR(state->unaryop_frozen_type);
     Py_CLEAR(state->unaryop_type);
     Py_CLEAR(state->upper);
     Py_CLEAR(state->value);
     Py_CLEAR(state->values);
     Py_CLEAR(state->vararg);
+    Py_CLEAR(state->withitem_frozen_type);
     Py_CLEAR(state->withitem_type);
 
     state->finalized = 1;
     state->once = (_PyOnceFlag){0};
+    state->frozen_once = (_PyOnceFlag){0};
 }
 
 static int init_identifiers(struct ast_state *state)
@@ -5163,6 +5291,8 @@ add_ast_annotations(struct ast_state *state)
 
 
 
+typedef struct FrozenTypeInfo FrozenTypeInfo;
+
 typedef struct {
     PyObject_HEAD
     PyObject *dict;
@@ -5197,6 +5327,169 @@ ast_clear(PyObject *op)
     AST_object *self = (AST_object*)op;
     Py_CLEAR(self->dict);
     return 0;
+}
+
+typedef PyObject *(*frozen_field_converter)(struct ast_state *, void *);
+
+typedef struct {
+    Py_ssize_t index;
+    frozen_field_converter convert;
+} FrozenFieldInfo;
+
+struct FrozenTypeInfo {
+    Py_ssize_t ncache;
+    PyGetSetDef *getsets;
+};
+
+typedef struct {
+    AST_object base;
+    FrozenTypeInfo *type_info;
+    PyObject *fields[1];
+} FrozenASTObject;
+
+static int init_frozen_types(struct ast_state *state);
+
+static int
+frozen_traverse(PyObject *op, visitproc visit, void *arg)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_VISIT(Py_TYPE(op));
+    Py_VISIT(self->base.dict);
+    for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+        Py_VISIT(self->fields[i]);
+    }
+    return 0;
+}
+
+static int
+frozen_clear(PyObject *op)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_CLEAR(self->base.dict);
+    for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+        Py_CLEAR(self->fields[i]);
+    }
+    return 0;
+}
+
+static void
+frozen_dealloc(PyObject *op)
+{
+    PyTypeObject *type = Py_TYPE(op);
+    PyObject_GC_UnTrack(op);
+    frozen_clear(op);
+    freefunc free_func = PyType_GetSlot(type, Py_tp_free);
+    assert(free_func != NULL);
+    free_func(op);
+    Py_DECREF(type);
+}
+
+static PyObject *
+frozen_field_get(PyObject *op, void *closure)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    FrozenFieldInfo *field = closure;
+    if (self->base.dict != NULL) {
+        PyObject *value = PyDict_GetItemString(
+            self->base.dict, self->type_info->getsets[field->index].name);
+        if (value != NULL) {
+            return Py_NewRef(value);
+        }
+        PyErr_Format(PyExc_AttributeError, "%s has no attribute '%s'",
+                     _PyType_Name(Py_TYPE(op)),
+                     self->type_info->getsets[field->index].name);
+        return NULL;
+    }
+    PyObject *value = self->fields[field->index];
+    if (value == NULL) {
+        PyErr_Format(PyExc_AttributeError, "%s has no attribute '%s'",
+                     _PyType_Name(Py_TYPE(op)),
+                     self->type_info->getsets[field->index].name);
+        return NULL;
+    }
+    return Py_NewRef(value);
+}
+
+static PyObject *
+frozen_getattro(PyObject *op, PyObject *name)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    PyObject *descr = _PyType_LookupRef(Py_TYPE(op), name);
+    if (descr == NULL && PyErr_Occurred()) {
+        return NULL;
+    }
+    int is_data = descr != NULL && PyDescr_IsData(descr);
+    Py_XDECREF(descr);
+    if (is_data &&
+        !_PyUnicode_EqualToASCIIString(name, "__dict__")) {
+        return PyObject_GenericGetAttr(op, name);
+    }
+    if (_PyUnicode_EqualToASCIIString(name, "__dict__")) {
+        if (self->base.dict == NULL) {
+            PyObject *dict = PyDict_New();
+            if (dict == NULL) {
+                return NULL;
+            }
+            for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+                PyGetSetDef *field = &self->type_info->getsets[i];
+                if (self->fields[i] != NULL &&
+                    PyDict_SetItemString(dict, field->name,
+                                         self->fields[i]) < 0) {
+                    Py_DECREF(dict);
+                    return NULL;
+                }
+            }
+            self->base.dict = dict;
+        }
+        return Py_NewRef(self->base.dict);
+    }
+    if (self->type_info->getsets != NULL) {
+        for (PyGetSetDef *field = self->type_info->getsets;
+             field->name != NULL; field++) {
+            if (_PyUnicode_EqualToASCIIString(name, field->name)) {
+                return frozen_field_get(op, field->closure);
+            }
+        }
+    }
+    return PyObject_GenericGetAttr(op, name);
+}
+
+static int
+frozen_setattro(PyObject *op, PyObject *name, PyObject *value)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    PyObject *descr = _PyType_LookupRef(Py_TYPE(op), name);
+    if (descr == NULL && PyErr_Occurred()) {
+        return -1;
+    }
+    int is_data = descr != NULL && PyDescr_IsData(descr);
+    Py_XDECREF(descr);
+    if (is_data) {
+        return PyObject_GenericSetAttr(op, name, value);
+    }
+    if (self->type_info->getsets != NULL) {
+        for (PyGetSetDef *field = self->type_info->getsets;
+             field->name != NULL; field++) {
+            if (_PyUnicode_EqualToASCIIString(name, field->name)) {
+                FrozenFieldInfo *info = field->closure;
+                if (self->base.dict != NULL) {
+                    if (value == NULL) {
+                        if (PyDict_DelItemString(self->base.dict,
+                                                 field->name) < 0) {
+                            return -1;
+                        }
+                    }
+                    else if (PyDict_SetItemString(self->base.dict,
+                                                  field->name, value) < 0) {
+                        return -1;
+                    }
+                }
+                Py_XSETREF(self->fields[info->index], Py_XNewRef(value));
+                return 0;
+            }
+        }
+    }
+    return PyObject_GenericSetAttr(op, name, value);
 }
 
 /*
@@ -10867,6 +11160,5503 @@ failed:
     return NULL;
 }
 
+
+static PyObject *
+frozen_new_node(struct ast_state *state, PyObject *type,
+                FrozenTypeInfo *type_info, void *node)
+{
+    PyObject *result = PyType_GenericAlloc((PyTypeObject *)type, 0);
+    if (result == NULL) {
+        return NULL;
+    }
+    FrozenASTObject *self = (FrozenASTObject *)result;
+    self->type_info = type_info;
+    for (Py_ssize_t i = 0; i < type_info->ncache; i++) {
+        FrozenFieldInfo *field = type_info->getsets[i].closure;
+        self->fields[i] = field->convert(state, node);
+        if (self->fields[i] == NULL) {
+            Py_DECREF(result);
+            return NULL;
+        }
+    }
+    return result;
+}
+
+static PyObject *
+make_frozen_type(const char *name, PyObject *mutable_type,
+                 FrozenTypeInfo *type_info,
+                 Py_ssize_t ncache, PyGetSetDef *getsets)
+{
+    type_info->ncache = ncache;
+    type_info->getsets = getsets;
+    PyType_Slot slots[] = {
+        {Py_tp_dealloc, frozen_dealloc},
+        {Py_tp_getattro, frozen_getattro},
+        {Py_tp_setattro, frozen_setattro},
+        {Py_tp_traverse, frozen_traverse},
+        {Py_tp_clear, frozen_clear},
+        {0, NULL},
+    };
+    PyType_Spec spec = {
+        .name = name,
+        .basicsize = offsetof(FrozenASTObject, fields) +
+                     ncache * sizeof(PyObject *),
+        .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
+        .slots = slots,
+    };
+    PyObject *bases = PyTuple_Pack(1, mutable_type);
+    if (bases == NULL) {
+        return NULL;
+    }
+    PyObject *type = PyType_FromSpecWithBases(&spec, bases);
+    Py_DECREF(bases);
+    if (type == NULL) {
+        return NULL;
+    }
+    static const char *copy_attrs[] = {
+        "_fields", "_attributes", "__match_args__", "__module__",
+        "__name__", "__qualname__", "__doc__", "_field_types", NULL
+    };
+    for (const char **name = copy_attrs; *name != NULL; name++) {
+        PyObject *value = NULL;
+        if (PyObject_GetOptionalAttrString(mutable_type, *name, &value) < 0) {
+            Py_DECREF(type);
+            return NULL;
+        }
+        if (value != NULL) {
+            int res = PyObject_SetAttrString(type, *name, value);
+            Py_DECREF(value);
+            if (res < 0) {
+                Py_DECREF(type);
+                return NULL;
+            }
+        }
+    }
+    return type;
+}
+static FrozenTypeInfo AST_frozen_info;
+static FrozenTypeInfo mod_frozen_info;
+static FrozenTypeInfo Module_frozen_info;
+static FrozenTypeInfo Interactive_frozen_info;
+static FrozenTypeInfo Expression_frozen_info;
+static FrozenTypeInfo FunctionType_frozen_info;
+static FrozenTypeInfo stmt_frozen_info;
+static FrozenTypeInfo FunctionDef_frozen_info;
+static FrozenTypeInfo AsyncFunctionDef_frozen_info;
+static FrozenTypeInfo ClassDef_frozen_info;
+static FrozenTypeInfo Return_frozen_info;
+static FrozenTypeInfo Delete_frozen_info;
+static FrozenTypeInfo Assign_frozen_info;
+static FrozenTypeInfo TypeAlias_frozen_info;
+static FrozenTypeInfo AugAssign_frozen_info;
+static FrozenTypeInfo AnnAssign_frozen_info;
+static FrozenTypeInfo For_frozen_info;
+static FrozenTypeInfo AsyncFor_frozen_info;
+static FrozenTypeInfo While_frozen_info;
+static FrozenTypeInfo If_frozen_info;
+static FrozenTypeInfo With_frozen_info;
+static FrozenTypeInfo AsyncWith_frozen_info;
+static FrozenTypeInfo Match_frozen_info;
+static FrozenTypeInfo Raise_frozen_info;
+static FrozenTypeInfo Try_frozen_info;
+static FrozenTypeInfo TryStar_frozen_info;
+static FrozenTypeInfo Assert_frozen_info;
+static FrozenTypeInfo Import_frozen_info;
+static FrozenTypeInfo ImportFrom_frozen_info;
+static FrozenTypeInfo Global_frozen_info;
+static FrozenTypeInfo Nonlocal_frozen_info;
+static FrozenTypeInfo Expr_frozen_info;
+static FrozenTypeInfo Pass_frozen_info;
+static FrozenTypeInfo Break_frozen_info;
+static FrozenTypeInfo Continue_frozen_info;
+static FrozenTypeInfo expr_frozen_info;
+static FrozenTypeInfo BoolOp_frozen_info;
+static FrozenTypeInfo NamedExpr_frozen_info;
+static FrozenTypeInfo BinOp_frozen_info;
+static FrozenTypeInfo UnaryOp_frozen_info;
+static FrozenTypeInfo Lambda_frozen_info;
+static FrozenTypeInfo IfExp_frozen_info;
+static FrozenTypeInfo Dict_frozen_info;
+static FrozenTypeInfo Set_frozen_info;
+static FrozenTypeInfo ListComp_frozen_info;
+static FrozenTypeInfo SetComp_frozen_info;
+static FrozenTypeInfo DictComp_frozen_info;
+static FrozenTypeInfo GeneratorExp_frozen_info;
+static FrozenTypeInfo Await_frozen_info;
+static FrozenTypeInfo Yield_frozen_info;
+static FrozenTypeInfo YieldFrom_frozen_info;
+static FrozenTypeInfo Compare_frozen_info;
+static FrozenTypeInfo Call_frozen_info;
+static FrozenTypeInfo FormattedValue_frozen_info;
+static FrozenTypeInfo Interpolation_frozen_info;
+static FrozenTypeInfo JoinedStr_frozen_info;
+static FrozenTypeInfo TemplateStr_frozen_info;
+static FrozenTypeInfo Constant_frozen_info;
+static FrozenTypeInfo Attribute_frozen_info;
+static FrozenTypeInfo Subscript_frozen_info;
+static FrozenTypeInfo Starred_frozen_info;
+static FrozenTypeInfo Name_frozen_info;
+static FrozenTypeInfo List_frozen_info;
+static FrozenTypeInfo Tuple_frozen_info;
+static FrozenTypeInfo Slice_frozen_info;
+static FrozenTypeInfo expr_context_frozen_info;
+static FrozenTypeInfo Load_frozen_info;
+static FrozenTypeInfo Store_frozen_info;
+static FrozenTypeInfo Del_frozen_info;
+static FrozenTypeInfo boolop_frozen_info;
+static FrozenTypeInfo And_frozen_info;
+static FrozenTypeInfo Or_frozen_info;
+static FrozenTypeInfo operator_frozen_info;
+static FrozenTypeInfo Add_frozen_info;
+static FrozenTypeInfo Sub_frozen_info;
+static FrozenTypeInfo Mult_frozen_info;
+static FrozenTypeInfo MatMult_frozen_info;
+static FrozenTypeInfo Div_frozen_info;
+static FrozenTypeInfo Mod_frozen_info;
+static FrozenTypeInfo Pow_frozen_info;
+static FrozenTypeInfo LShift_frozen_info;
+static FrozenTypeInfo RShift_frozen_info;
+static FrozenTypeInfo BitOr_frozen_info;
+static FrozenTypeInfo BitXor_frozen_info;
+static FrozenTypeInfo BitAnd_frozen_info;
+static FrozenTypeInfo FloorDiv_frozen_info;
+static FrozenTypeInfo unaryop_frozen_info;
+static FrozenTypeInfo Invert_frozen_info;
+static FrozenTypeInfo Not_frozen_info;
+static FrozenTypeInfo UAdd_frozen_info;
+static FrozenTypeInfo USub_frozen_info;
+static FrozenTypeInfo cmpop_frozen_info;
+static FrozenTypeInfo Eq_frozen_info;
+static FrozenTypeInfo NotEq_frozen_info;
+static FrozenTypeInfo Lt_frozen_info;
+static FrozenTypeInfo LtE_frozen_info;
+static FrozenTypeInfo Gt_frozen_info;
+static FrozenTypeInfo GtE_frozen_info;
+static FrozenTypeInfo Is_frozen_info;
+static FrozenTypeInfo IsNot_frozen_info;
+static FrozenTypeInfo In_frozen_info;
+static FrozenTypeInfo NotIn_frozen_info;
+static FrozenTypeInfo comprehension_frozen_info;
+static FrozenTypeInfo excepthandler_frozen_info;
+static FrozenTypeInfo ExceptHandler_frozen_info;
+static FrozenTypeInfo arguments_frozen_info;
+static FrozenTypeInfo arg_frozen_info;
+static FrozenTypeInfo keyword_frozen_info;
+static FrozenTypeInfo alias_frozen_info;
+static FrozenTypeInfo withitem_frozen_info;
+static FrozenTypeInfo match_case_frozen_info;
+static FrozenTypeInfo pattern_frozen_info;
+static FrozenTypeInfo MatchValue_frozen_info;
+static FrozenTypeInfo MatchSingleton_frozen_info;
+static FrozenTypeInfo MatchSequence_frozen_info;
+static FrozenTypeInfo MatchMapping_frozen_info;
+static FrozenTypeInfo MatchClass_frozen_info;
+static FrozenTypeInfo MatchStar_frozen_info;
+static FrozenTypeInfo MatchAs_frozen_info;
+static FrozenTypeInfo MatchOr_frozen_info;
+static FrozenTypeInfo type_ignore_frozen_info;
+static FrozenTypeInfo TypeIgnore_frozen_info;
+static FrozenTypeInfo type_param_frozen_info;
+static FrozenTypeInfo TypeVar_frozen_info;
+static FrozenTypeInfo ParamSpec_frozen_info;
+static FrozenTypeInfo TypeVarTuple_frozen_info;
+static PyObject *frozen_ast2obj_mod(struct ast_state *, mod_ty);
+static PyObject *frozen_ast2obj_stmt(struct ast_state *, stmt_ty);
+static PyObject *frozen_ast2obj_expr(struct ast_state *, expr_ty);
+static PyObject *frozen_ast2obj_comprehension(struct ast_state *,
+                                              comprehension_ty);
+static PyObject *frozen_ast2obj_excepthandler(struct ast_state *,
+                                              excepthandler_ty);
+static PyObject *frozen_ast2obj_arguments(struct ast_state *, arguments_ty);
+static PyObject *frozen_ast2obj_arg(struct ast_state *, arg_ty);
+static PyObject *frozen_ast2obj_keyword(struct ast_state *, keyword_ty);
+static PyObject *frozen_ast2obj_alias(struct ast_state *, alias_ty);
+static PyObject *frozen_ast2obj_withitem(struct ast_state *, withitem_ty);
+static PyObject *frozen_ast2obj_match_case(struct ast_state *, match_case_ty);
+static PyObject *frozen_ast2obj_pattern(struct ast_state *, pattern_ty);
+static PyObject *frozen_ast2obj_type_ignore(struct ast_state *, type_ignore_ty);
+static PyObject *frozen_ast2obj_type_param(struct ast_state *, type_param_ty);
+static PyObject *
+frozen_convert_Module_body(struct ast_state *state, void *node)
+{
+    mod_ty o = (mod_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Module.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.Module.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Module_type_ignores(struct ast_state *state, void *node)
+{
+    mod_ty o = (mod_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Module.type_ignores);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        type_ignore_ty item = asdl_seq_GET(o->v.Module.type_ignores, i);
+        PyObject *value = frozen_ast2obj_type_ignore(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Interactive_body(struct ast_state *state, void *node)
+{
+    mod_ty o = (mod_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Interactive.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.Interactive.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Expression_body(struct ast_state *state, void *node)
+{
+    mod_ty o = (mod_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Expression.body);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FunctionType_argtypes(struct ast_state *state, void *node)
+{
+    mod_ty o = (mod_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.FunctionType.argtypes);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.FunctionType.argtypes, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_FunctionType_returns(struct ast_state *state, void *node)
+{
+    mod_ty o = (mod_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.FunctionType.returns);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_mod(struct ast_state *state, mod_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    switch (o->kind) {
+        case Module_kind:
+            return frozen_new_node(state, state->Module_frozen_type,
+                                   &Module_frozen_info, o);
+        case Interactive_kind:
+            return frozen_new_node(state, state->Interactive_frozen_type,
+                                   &Interactive_frozen_info, o);
+        case Expression_kind:
+            return frozen_new_node(state, state->Expression_frozen_type,
+                                   &Expression_frozen_info, o);
+        case FunctionType_kind:
+            return frozen_new_node(state, state->FunctionType_frozen_type,
+                                   &FunctionType_frozen_info, o);
+    }
+    Py_UNREACHABLE();
+}
+static PyObject *
+frozen_convert_stmt_lineno(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_stmt_col_offset(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_stmt_end_lineno(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_stmt_end_col_offset(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FunctionDef_name(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.FunctionDef.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FunctionDef_args(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_arguments(state, o->v.FunctionDef.args);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FunctionDef_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.FunctionDef.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.FunctionDef.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_FunctionDef_decorator_list(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.FunctionDef.decorator_list);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.FunctionDef.decorator_list, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_FunctionDef_returns(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.FunctionDef.returns);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FunctionDef_type_comment(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.FunctionDef.type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FunctionDef_type_params(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.FunctionDef.type_params);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        type_param_ty item = asdl_seq_GET(o->v.FunctionDef.type_params, i);
+        PyObject *value = frozen_ast2obj_type_param(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_AsyncFunctionDef_name(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.AsyncFunctionDef.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncFunctionDef_args(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_arguments(state, o->v.AsyncFunctionDef.args);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncFunctionDef_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.AsyncFunctionDef.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.AsyncFunctionDef.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_AsyncFunctionDef_decorator_list(struct ast_state *state, void
+                                               *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.AsyncFunctionDef.decorator_list);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.AsyncFunctionDef.decorator_list, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_AsyncFunctionDef_returns(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AsyncFunctionDef.returns);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncFunctionDef_type_comment(struct ast_state *state, void
+                                             *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.AsyncFunctionDef.type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncFunctionDef_type_params(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.AsyncFunctionDef.type_params);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        type_param_ty item = asdl_seq_GET(o->v.AsyncFunctionDef.type_params, i);
+        PyObject *value = frozen_ast2obj_type_param(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_ClassDef_name(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.ClassDef.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ClassDef_bases(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ClassDef.bases);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.ClassDef.bases, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_ClassDef_keywords(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ClassDef.keywords);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        keyword_ty item = asdl_seq_GET(o->v.ClassDef.keywords, i);
+        PyObject *value = frozen_ast2obj_keyword(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_ClassDef_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ClassDef.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.ClassDef.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_ClassDef_decorator_list(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ClassDef.decorator_list);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.ClassDef.decorator_list, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_ClassDef_type_params(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ClassDef.type_params);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        type_param_ty item = asdl_seq_GET(o->v.ClassDef.type_params, i);
+        PyObject *value = frozen_ast2obj_type_param(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Return_value(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Return.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Delete_targets(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Delete.targets);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Delete.targets, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Assign_targets(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Assign.targets);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Assign.targets, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Assign_value(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Assign.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Assign_type_comment(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.Assign.type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeAlias_name(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.TypeAlias.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeAlias_type_params(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.TypeAlias.type_params);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        type_param_ty item = asdl_seq_GET(o->v.TypeAlias.type_params, i);
+        PyObject *value = frozen_ast2obj_type_param(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_TypeAlias_value(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.TypeAlias.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AugAssign_target(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AugAssign.target);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AugAssign_op(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_operator(state, o->v.AugAssign.op);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AugAssign_value(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AugAssign.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AnnAssign_target(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AnnAssign.target);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AnnAssign_annotation(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AnnAssign.annotation);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AnnAssign_value(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AnnAssign.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AnnAssign_simple(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->v.AnnAssign.simple);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_For_target(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.For.target);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_For_iter(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.For.iter);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_For_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.For.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.For.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_For_orelse(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.For.orelse);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.For.orelse, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_For_type_comment(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.For.type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncFor_target(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AsyncFor.target);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncFor_iter(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.AsyncFor.iter);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncFor_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.AsyncFor.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.AsyncFor.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_AsyncFor_orelse(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.AsyncFor.orelse);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.AsyncFor.orelse, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_AsyncFor_type_comment(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.AsyncFor.type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_While_test(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.While.test);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_While_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.While.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.While.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_While_orelse(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.While.orelse);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.While.orelse, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_If_test(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.If.test);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_If_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.If.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.If.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_If_orelse(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.If.orelse);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.If.orelse, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_With_items(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.With.items);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        withitem_ty item = asdl_seq_GET(o->v.With.items, i);
+        PyObject *value = frozen_ast2obj_withitem(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_With_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.With.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.With.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_With_type_comment(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.With.type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_AsyncWith_items(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.AsyncWith.items);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        withitem_ty item = asdl_seq_GET(o->v.AsyncWith.items, i);
+        PyObject *value = frozen_ast2obj_withitem(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_AsyncWith_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.AsyncWith.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.AsyncWith.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_AsyncWith_type_comment(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.AsyncWith.type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Match_subject(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Match.subject);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Match_cases(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Match.cases);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        match_case_ty item = asdl_seq_GET(o->v.Match.cases, i);
+        PyObject *value = frozen_ast2obj_match_case(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Raise_exc(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Raise.exc);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Raise_cause(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Raise.cause);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Try_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Try.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.Try.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Try_handlers(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Try.handlers);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        excepthandler_ty item = asdl_seq_GET(o->v.Try.handlers, i);
+        PyObject *value = frozen_ast2obj_excepthandler(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Try_orelse(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Try.orelse);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.Try.orelse, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Try_finalbody(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Try.finalbody);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.Try.finalbody, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_TryStar_body(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.TryStar.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.TryStar.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_TryStar_handlers(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.TryStar.handlers);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        excepthandler_ty item = asdl_seq_GET(o->v.TryStar.handlers, i);
+        PyObject *value = frozen_ast2obj_excepthandler(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_TryStar_orelse(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.TryStar.orelse);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.TryStar.orelse, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_TryStar_finalbody(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.TryStar.finalbody);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.TryStar.finalbody, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Assert_test(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Assert.test);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Assert_msg(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Assert.msg);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Import_names(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Import.names);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        alias_ty item = asdl_seq_GET(o->v.Import.names, i);
+        PyObject *value = frozen_ast2obj_alias(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Import_is_lazy(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->v.Import.is_lazy);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ImportFrom_module(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.ImportFrom.module);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ImportFrom_names(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ImportFrom.names);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        alias_ty item = asdl_seq_GET(o->v.ImportFrom.names, i);
+        PyObject *value = frozen_ast2obj_alias(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_ImportFrom_level(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->v.ImportFrom.level);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ImportFrom_is_lazy(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = ast2obj_int(state, o->v.ImportFrom.is_lazy);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Global_names(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Global.names);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        identifier item = asdl_seq_GET(o->v.Global.names, i);
+        PyObject *value = ast2obj_identifier(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Nonlocal_names(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Nonlocal.names);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        identifier item = asdl_seq_GET(o->v.Nonlocal.names, i);
+        PyObject *value = ast2obj_identifier(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Expr_value(struct ast_state *state, void *node)
+{
+    stmt_ty o = (stmt_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Expr.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_stmt(struct ast_state *state, stmt_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    switch (o->kind) {
+        case FunctionDef_kind:
+            return frozen_new_node(state, state->FunctionDef_frozen_type,
+                                   &FunctionDef_frozen_info, o);
+        case AsyncFunctionDef_kind:
+            return frozen_new_node(state, state->AsyncFunctionDef_frozen_type,
+                                   &AsyncFunctionDef_frozen_info, o);
+        case ClassDef_kind:
+            return frozen_new_node(state, state->ClassDef_frozen_type,
+                                   &ClassDef_frozen_info, o);
+        case Return_kind:
+            return frozen_new_node(state, state->Return_frozen_type,
+                                   &Return_frozen_info, o);
+        case Delete_kind:
+            return frozen_new_node(state, state->Delete_frozen_type,
+                                   &Delete_frozen_info, o);
+        case Assign_kind:
+            return frozen_new_node(state, state->Assign_frozen_type,
+                                   &Assign_frozen_info, o);
+        case TypeAlias_kind:
+            return frozen_new_node(state, state->TypeAlias_frozen_type,
+                                   &TypeAlias_frozen_info, o);
+        case AugAssign_kind:
+            return frozen_new_node(state, state->AugAssign_frozen_type,
+                                   &AugAssign_frozen_info, o);
+        case AnnAssign_kind:
+            return frozen_new_node(state, state->AnnAssign_frozen_type,
+                                   &AnnAssign_frozen_info, o);
+        case For_kind:
+            return frozen_new_node(state, state->For_frozen_type,
+                                   &For_frozen_info, o);
+        case AsyncFor_kind:
+            return frozen_new_node(state, state->AsyncFor_frozen_type,
+                                   &AsyncFor_frozen_info, o);
+        case While_kind:
+            return frozen_new_node(state, state->While_frozen_type,
+                                   &While_frozen_info, o);
+        case If_kind:
+            return frozen_new_node(state, state->If_frozen_type,
+                                   &If_frozen_info, o);
+        case With_kind:
+            return frozen_new_node(state, state->With_frozen_type,
+                                   &With_frozen_info, o);
+        case AsyncWith_kind:
+            return frozen_new_node(state, state->AsyncWith_frozen_type,
+                                   &AsyncWith_frozen_info, o);
+        case Match_kind:
+            return frozen_new_node(state, state->Match_frozen_type,
+                                   &Match_frozen_info, o);
+        case Raise_kind:
+            return frozen_new_node(state, state->Raise_frozen_type,
+                                   &Raise_frozen_info, o);
+        case Try_kind:
+            return frozen_new_node(state, state->Try_frozen_type,
+                                   &Try_frozen_info, o);
+        case TryStar_kind:
+            return frozen_new_node(state, state->TryStar_frozen_type,
+                                   &TryStar_frozen_info, o);
+        case Assert_kind:
+            return frozen_new_node(state, state->Assert_frozen_type,
+                                   &Assert_frozen_info, o);
+        case Import_kind:
+            return frozen_new_node(state, state->Import_frozen_type,
+                                   &Import_frozen_info, o);
+        case ImportFrom_kind:
+            return frozen_new_node(state, state->ImportFrom_frozen_type,
+                                   &ImportFrom_frozen_info, o);
+        case Global_kind:
+            return frozen_new_node(state, state->Global_frozen_type,
+                                   &Global_frozen_info, o);
+        case Nonlocal_kind:
+            return frozen_new_node(state, state->Nonlocal_frozen_type,
+                                   &Nonlocal_frozen_info, o);
+        case Expr_kind:
+            return frozen_new_node(state, state->Expr_frozen_type,
+                                   &Expr_frozen_info, o);
+        case Pass_kind:
+            return frozen_new_node(state, state->Pass_frozen_type,
+                                   &Pass_frozen_info, o);
+        case Break_kind:
+            return frozen_new_node(state, state->Break_frozen_type,
+                                   &Break_frozen_info, o);
+        case Continue_kind:
+            return frozen_new_node(state, state->Continue_frozen_type,
+                                   &Continue_frozen_info, o);
+    }
+    Py_UNREACHABLE();
+}
+static PyObject *
+frozen_convert_expr_lineno(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_expr_col_offset(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_expr_end_lineno(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_expr_end_col_offset(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_BoolOp_op(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_boolop(state, o->v.BoolOp.op);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_BoolOp_values(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.BoolOp.values);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.BoolOp.values, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_NamedExpr_target(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.NamedExpr.target);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_NamedExpr_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.NamedExpr.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_BinOp_left(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.BinOp.left);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_BinOp_op(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_operator(state, o->v.BinOp.op);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_BinOp_right(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.BinOp.right);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_UnaryOp_op(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_unaryop(state, o->v.UnaryOp.op);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_UnaryOp_operand(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.UnaryOp.operand);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Lambda_args(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_arguments(state, o->v.Lambda.args);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Lambda_body(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Lambda.body);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_IfExp_test(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.IfExp.test);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_IfExp_body(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.IfExp.body);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_IfExp_orelse(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.IfExp.orelse);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Dict_keys(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Dict.keys);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Dict.keys, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Dict_values(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Dict.values);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Dict.values, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Set_elts(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Set.elts);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Set.elts, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_ListComp_elt(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.ListComp.elt);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ListComp_generators(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ListComp.generators);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        comprehension_ty item = asdl_seq_GET(o->v.ListComp.generators, i);
+        PyObject *value = frozen_ast2obj_comprehension(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_SetComp_elt(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.SetComp.elt);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_SetComp_generators(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.SetComp.generators);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        comprehension_ty item = asdl_seq_GET(o->v.SetComp.generators, i);
+        PyObject *value = frozen_ast2obj_comprehension(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_DictComp_key(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.DictComp.key);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_DictComp_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.DictComp.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_DictComp_generators(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.DictComp.generators);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        comprehension_ty item = asdl_seq_GET(o->v.DictComp.generators, i);
+        PyObject *value = frozen_ast2obj_comprehension(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_GeneratorExp_elt(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.GeneratorExp.elt);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_GeneratorExp_generators(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.GeneratorExp.generators);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        comprehension_ty item = asdl_seq_GET(o->v.GeneratorExp.generators, i);
+        PyObject *value = frozen_ast2obj_comprehension(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Await_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Await.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Yield_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Yield.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_YieldFrom_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.YieldFrom.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Compare_left(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Compare.left);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Compare_ops(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Compare.ops);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        cmpop_ty item = asdl_seq_GET(o->v.Compare.ops, i);
+        PyObject *value = ast2obj_cmpop(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Compare_comparators(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Compare.comparators);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Compare.comparators, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Call_func(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Call.func);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Call_args(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Call.args);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Call.args, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Call_keywords(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Call.keywords);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        keyword_ty item = asdl_seq_GET(o->v.Call.keywords, i);
+        PyObject *value = frozen_ast2obj_keyword(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_FormattedValue_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.FormattedValue.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FormattedValue_conversion(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_int(state, o->v.FormattedValue.conversion);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_FormattedValue_format_spec(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.FormattedValue.format_spec);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Interpolation_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Interpolation.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Interpolation_str(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_constant(state, o->v.Interpolation.str);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Interpolation_conversion(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_int(state, o->v.Interpolation.conversion);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Interpolation_format_spec(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Interpolation.format_spec);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_JoinedStr_values(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.JoinedStr.values);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.JoinedStr.values, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_TemplateStr_values(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.TemplateStr.values);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.TemplateStr.values, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Constant_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_constant(state, o->v.Constant.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Constant_kind(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.Constant.kind);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Attribute_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Attribute.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Attribute_attr(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.Attribute.attr);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Attribute_ctx(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_expr_context(state, o->v.Attribute.ctx);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Subscript_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Subscript.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Subscript_slice(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Subscript.slice);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Subscript_ctx(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_expr_context(state, o->v.Subscript.ctx);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Starred_value(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Starred.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Starred_ctx(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_expr_context(state, o->v.Starred.ctx);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Name_id(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.Name.id);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Name_ctx(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_expr_context(state, o->v.Name.ctx);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_List_elts(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.List.elts);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.List.elts, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_List_ctx(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_expr_context(state, o->v.List.ctx);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Tuple_elts(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.Tuple.elts);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.Tuple.elts, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_Tuple_ctx(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = ast2obj_expr_context(state, o->v.Tuple.ctx);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Slice_lower(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Slice.lower);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Slice_upper(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Slice.upper);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_Slice_step(struct ast_state *state, void *node)
+{
+    expr_ty o = (expr_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.Slice.step);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_expr(struct ast_state *state, expr_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    switch (o->kind) {
+        case BoolOp_kind:
+            return frozen_new_node(state, state->BoolOp_frozen_type,
+                                   &BoolOp_frozen_info, o);
+        case NamedExpr_kind:
+            return frozen_new_node(state, state->NamedExpr_frozen_type,
+                                   &NamedExpr_frozen_info, o);
+        case BinOp_kind:
+            return frozen_new_node(state, state->BinOp_frozen_type,
+                                   &BinOp_frozen_info, o);
+        case UnaryOp_kind:
+            return frozen_new_node(state, state->UnaryOp_frozen_type,
+                                   &UnaryOp_frozen_info, o);
+        case Lambda_kind:
+            return frozen_new_node(state, state->Lambda_frozen_type,
+                                   &Lambda_frozen_info, o);
+        case IfExp_kind:
+            return frozen_new_node(state, state->IfExp_frozen_type,
+                                   &IfExp_frozen_info, o);
+        case Dict_kind:
+            return frozen_new_node(state, state->Dict_frozen_type,
+                                   &Dict_frozen_info, o);
+        case Set_kind:
+            return frozen_new_node(state, state->Set_frozen_type,
+                                   &Set_frozen_info, o);
+        case ListComp_kind:
+            return frozen_new_node(state, state->ListComp_frozen_type,
+                                   &ListComp_frozen_info, o);
+        case SetComp_kind:
+            return frozen_new_node(state, state->SetComp_frozen_type,
+                                   &SetComp_frozen_info, o);
+        case DictComp_kind:
+            return frozen_new_node(state, state->DictComp_frozen_type,
+                                   &DictComp_frozen_info, o);
+        case GeneratorExp_kind:
+            return frozen_new_node(state, state->GeneratorExp_frozen_type,
+                                   &GeneratorExp_frozen_info, o);
+        case Await_kind:
+            return frozen_new_node(state, state->Await_frozen_type,
+                                   &Await_frozen_info, o);
+        case Yield_kind:
+            return frozen_new_node(state, state->Yield_frozen_type,
+                                   &Yield_frozen_info, o);
+        case YieldFrom_kind:
+            return frozen_new_node(state, state->YieldFrom_frozen_type,
+                                   &YieldFrom_frozen_info, o);
+        case Compare_kind:
+            return frozen_new_node(state, state->Compare_frozen_type,
+                                   &Compare_frozen_info, o);
+        case Call_kind:
+            return frozen_new_node(state, state->Call_frozen_type,
+                                   &Call_frozen_info, o);
+        case FormattedValue_kind:
+            return frozen_new_node(state, state->FormattedValue_frozen_type,
+                                   &FormattedValue_frozen_info, o);
+        case Interpolation_kind:
+            return frozen_new_node(state, state->Interpolation_frozen_type,
+                                   &Interpolation_frozen_info, o);
+        case JoinedStr_kind:
+            return frozen_new_node(state, state->JoinedStr_frozen_type,
+                                   &JoinedStr_frozen_info, o);
+        case TemplateStr_kind:
+            return frozen_new_node(state, state->TemplateStr_frozen_type,
+                                   &TemplateStr_frozen_info, o);
+        case Constant_kind:
+            return frozen_new_node(state, state->Constant_frozen_type,
+                                   &Constant_frozen_info, o);
+        case Attribute_kind:
+            return frozen_new_node(state, state->Attribute_frozen_type,
+                                   &Attribute_frozen_info, o);
+        case Subscript_kind:
+            return frozen_new_node(state, state->Subscript_frozen_type,
+                                   &Subscript_frozen_info, o);
+        case Starred_kind:
+            return frozen_new_node(state, state->Starred_frozen_type,
+                                   &Starred_frozen_info, o);
+        case Name_kind:
+            return frozen_new_node(state, state->Name_frozen_type,
+                                   &Name_frozen_info, o);
+        case List_kind:
+            return frozen_new_node(state, state->List_frozen_type,
+                                   &List_frozen_info, o);
+        case Tuple_kind:
+            return frozen_new_node(state, state->Tuple_frozen_type,
+                                   &Tuple_frozen_info, o);
+        case Slice_kind:
+            return frozen_new_node(state, state->Slice_frozen_type,
+                                   &Slice_frozen_info, o);
+    }
+    Py_UNREACHABLE();
+}
+static PyObject *
+frozen_convert_comprehension_target(struct ast_state *state, void *node)
+{
+    comprehension_ty o = (comprehension_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->target);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_comprehension_iter(struct ast_state *state, void *node)
+{
+    comprehension_ty o = (comprehension_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->iter);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_comprehension_ifs(struct ast_state *state, void *node)
+{
+    comprehension_ty o = (comprehension_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->ifs);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->ifs, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_comprehension_is_async(struct ast_state *state, void *node)
+{
+    comprehension_ty o = (comprehension_ty)node;
+    PyObject *value = ast2obj_int(state, o->is_async);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_comprehension(struct ast_state *state, comprehension_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    return frozen_new_node(state, state->comprehension_frozen_type,
+                           &comprehension_frozen_info, o);
+}
+static PyObject *
+frozen_convert_excepthandler_lineno(struct ast_state *state, void *node)
+{
+    excepthandler_ty o = (excepthandler_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_excepthandler_col_offset(struct ast_state *state, void *node)
+{
+    excepthandler_ty o = (excepthandler_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_excepthandler_end_lineno(struct ast_state *state, void *node)
+{
+    excepthandler_ty o = (excepthandler_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_excepthandler_end_col_offset(struct ast_state *state, void *node)
+{
+    excepthandler_ty o = (excepthandler_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ExceptHandler_type(struct ast_state *state, void *node)
+{
+    excepthandler_ty o = (excepthandler_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.ExceptHandler.type);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ExceptHandler_name(struct ast_state *state, void *node)
+{
+    excepthandler_ty o = (excepthandler_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.ExceptHandler.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ExceptHandler_body(struct ast_state *state, void *node)
+{
+    excepthandler_ty o = (excepthandler_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.ExceptHandler.body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->v.ExceptHandler.body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_ast2obj_excepthandler(struct ast_state *state, excepthandler_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    switch (o->kind) {
+        case ExceptHandler_kind:
+            return frozen_new_node(state, state->ExceptHandler_frozen_type,
+                                   &ExceptHandler_frozen_info, o);
+    }
+    Py_UNREACHABLE();
+}
+static PyObject *
+frozen_convert_arguments_posonlyargs(struct ast_state *state, void *node)
+{
+    arguments_ty o = (arguments_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->posonlyargs);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        arg_ty item = asdl_seq_GET(o->posonlyargs, i);
+        PyObject *value = frozen_ast2obj_arg(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_arguments_args(struct ast_state *state, void *node)
+{
+    arguments_ty o = (arguments_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->args);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        arg_ty item = asdl_seq_GET(o->args, i);
+        PyObject *value = frozen_ast2obj_arg(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_arguments_vararg(struct ast_state *state, void *node)
+{
+    arguments_ty o = (arguments_ty)node;
+    PyObject *value = frozen_ast2obj_arg(state, o->vararg);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arguments_kwonlyargs(struct ast_state *state, void *node)
+{
+    arguments_ty o = (arguments_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->kwonlyargs);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        arg_ty item = asdl_seq_GET(o->kwonlyargs, i);
+        PyObject *value = frozen_ast2obj_arg(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_arguments_kw_defaults(struct ast_state *state, void *node)
+{
+    arguments_ty o = (arguments_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->kw_defaults);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->kw_defaults, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_arguments_kwarg(struct ast_state *state, void *node)
+{
+    arguments_ty o = (arguments_ty)node;
+    PyObject *value = frozen_ast2obj_arg(state, o->kwarg);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arguments_defaults(struct ast_state *state, void *node)
+{
+    arguments_ty o = (arguments_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->defaults);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->defaults, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_ast2obj_arguments(struct ast_state *state, arguments_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    return frozen_new_node(state, state->arguments_frozen_type,
+                           &arguments_frozen_info, o);
+}
+static PyObject *
+frozen_convert_arg_arg(struct ast_state *state, void *node)
+{
+    arg_ty o = (arg_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->arg);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arg_annotation(struct ast_state *state, void *node)
+{
+    arg_ty o = (arg_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->annotation);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arg_type_comment(struct ast_state *state, void *node)
+{
+    arg_ty o = (arg_ty)node;
+    PyObject *value = ast2obj_string(state, o->type_comment);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arg_lineno(struct ast_state *state, void *node)
+{
+    arg_ty o = (arg_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arg_col_offset(struct ast_state *state, void *node)
+{
+    arg_ty o = (arg_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arg_end_lineno(struct ast_state *state, void *node)
+{
+    arg_ty o = (arg_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_arg_end_col_offset(struct ast_state *state, void *node)
+{
+    arg_ty o = (arg_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_arg(struct ast_state *state, arg_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    return frozen_new_node(state, state->arg_frozen_type, &arg_frozen_info, o);
+}
+static PyObject *
+frozen_convert_keyword_arg(struct ast_state *state, void *node)
+{
+    keyword_ty o = (keyword_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->arg);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_keyword_value(struct ast_state *state, void *node)
+{
+    keyword_ty o = (keyword_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_keyword_lineno(struct ast_state *state, void *node)
+{
+    keyword_ty o = (keyword_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_keyword_col_offset(struct ast_state *state, void *node)
+{
+    keyword_ty o = (keyword_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_keyword_end_lineno(struct ast_state *state, void *node)
+{
+    keyword_ty o = (keyword_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_keyword_end_col_offset(struct ast_state *state, void *node)
+{
+    keyword_ty o = (keyword_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_keyword(struct ast_state *state, keyword_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    return frozen_new_node(state, state->keyword_frozen_type,
+                           &keyword_frozen_info, o);
+}
+static PyObject *
+frozen_convert_alias_name(struct ast_state *state, void *node)
+{
+    alias_ty o = (alias_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_alias_asname(struct ast_state *state, void *node)
+{
+    alias_ty o = (alias_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->asname);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_alias_lineno(struct ast_state *state, void *node)
+{
+    alias_ty o = (alias_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_alias_col_offset(struct ast_state *state, void *node)
+{
+    alias_ty o = (alias_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_alias_end_lineno(struct ast_state *state, void *node)
+{
+    alias_ty o = (alias_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_alias_end_col_offset(struct ast_state *state, void *node)
+{
+    alias_ty o = (alias_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_alias(struct ast_state *state, alias_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    return frozen_new_node(state, state->alias_frozen_type, &alias_frozen_info,
+                           o);
+}
+static PyObject *
+frozen_convert_withitem_context_expr(struct ast_state *state, void *node)
+{
+    withitem_ty o = (withitem_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->context_expr);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_withitem_optional_vars(struct ast_state *state, void *node)
+{
+    withitem_ty o = (withitem_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->optional_vars);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_withitem(struct ast_state *state, withitem_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    return frozen_new_node(state, state->withitem_frozen_type,
+                           &withitem_frozen_info, o);
+}
+static PyObject *
+frozen_convert_match_case_pattern(struct ast_state *state, void *node)
+{
+    match_case_ty o = (match_case_ty)node;
+    PyObject *value = frozen_ast2obj_pattern(state, o->pattern);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_match_case_guard(struct ast_state *state, void *node)
+{
+    match_case_ty o = (match_case_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->guard);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_match_case_body(struct ast_state *state, void *node)
+{
+    match_case_ty o = (match_case_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->body);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        stmt_ty item = asdl_seq_GET(o->body, i);
+        PyObject *value = frozen_ast2obj_stmt(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_ast2obj_match_case(struct ast_state *state, match_case_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    return frozen_new_node(state, state->match_case_frozen_type,
+                           &match_case_frozen_info, o);
+}
+static PyObject *
+frozen_convert_pattern_lineno(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_pattern_col_offset(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_pattern_end_lineno(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_pattern_end_col_offset(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchValue_value(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.MatchValue.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchSingleton_value(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_constant(state, o->v.MatchSingleton.value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchSequence_patterns(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.MatchSequence.patterns);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        pattern_ty item = asdl_seq_GET(o->v.MatchSequence.patterns, i);
+        PyObject *value = frozen_ast2obj_pattern(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_MatchMapping_keys(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.MatchMapping.keys);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty item = asdl_seq_GET(o->v.MatchMapping.keys, i);
+        PyObject *value = frozen_ast2obj_expr(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_MatchMapping_patterns(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.MatchMapping.patterns);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        pattern_ty item = asdl_seq_GET(o->v.MatchMapping.patterns, i);
+        PyObject *value = frozen_ast2obj_pattern(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_MatchMapping_rest(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.MatchMapping.rest);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchClass_cls(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.MatchClass.cls);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchClass_patterns(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.MatchClass.patterns);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        pattern_ty item = asdl_seq_GET(o->v.MatchClass.patterns, i);
+        PyObject *value = frozen_ast2obj_pattern(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_MatchClass_kwd_attrs(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.MatchClass.kwd_attrs);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        identifier item = asdl_seq_GET(o->v.MatchClass.kwd_attrs, i);
+        PyObject *value = ast2obj_identifier(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_MatchClass_kwd_patterns(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.MatchClass.kwd_patterns);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        pattern_ty item = asdl_seq_GET(o->v.MatchClass.kwd_patterns, i);
+        PyObject *value = frozen_ast2obj_pattern(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_convert_MatchStar_name(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.MatchStar.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchAs_pattern(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = frozen_ast2obj_pattern(state, o->v.MatchAs.pattern);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchAs_name(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.MatchAs.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_MatchOr_patterns(struct ast_state *state, void *node)
+{
+    pattern_ty o = (pattern_ty)node;
+    Py_ssize_t n = asdl_seq_LEN(o->v.MatchOr.patterns);
+    PyObject *result = PyList_New(n);
+    if (result == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        pattern_ty item = asdl_seq_GET(o->v.MatchOr.patterns, i);
+        PyObject *value = frozen_ast2obj_pattern(state, item);
+        if (value == NULL) {
+            goto failed;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+    failed:
+        Py_DECREF(result);
+        return NULL;
+}
+static PyObject *
+frozen_ast2obj_pattern(struct ast_state *state, pattern_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    switch (o->kind) {
+        case MatchValue_kind:
+            return frozen_new_node(state, state->MatchValue_frozen_type,
+                                   &MatchValue_frozen_info, o);
+        case MatchSingleton_kind:
+            return frozen_new_node(state, state->MatchSingleton_frozen_type,
+                                   &MatchSingleton_frozen_info, o);
+        case MatchSequence_kind:
+            return frozen_new_node(state, state->MatchSequence_frozen_type,
+                                   &MatchSequence_frozen_info, o);
+        case MatchMapping_kind:
+            return frozen_new_node(state, state->MatchMapping_frozen_type,
+                                   &MatchMapping_frozen_info, o);
+        case MatchClass_kind:
+            return frozen_new_node(state, state->MatchClass_frozen_type,
+                                   &MatchClass_frozen_info, o);
+        case MatchStar_kind:
+            return frozen_new_node(state, state->MatchStar_frozen_type,
+                                   &MatchStar_frozen_info, o);
+        case MatchAs_kind:
+            return frozen_new_node(state, state->MatchAs_frozen_type,
+                                   &MatchAs_frozen_info, o);
+        case MatchOr_kind:
+            return frozen_new_node(state, state->MatchOr_frozen_type,
+                                   &MatchOr_frozen_info, o);
+    }
+    Py_UNREACHABLE();
+}
+static PyObject *
+frozen_convert_TypeIgnore_lineno(struct ast_state *state, void *node)
+{
+    type_ignore_ty o = (type_ignore_ty)node;
+    PyObject *value = ast2obj_int(state, o->v.TypeIgnore.lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeIgnore_tag(struct ast_state *state, void *node)
+{
+    type_ignore_ty o = (type_ignore_ty)node;
+    PyObject *value = ast2obj_string(state, o->v.TypeIgnore.tag);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_type_ignore(struct ast_state *state, type_ignore_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    switch (o->kind) {
+        case TypeIgnore_kind:
+            return frozen_new_node(state, state->TypeIgnore_frozen_type,
+                                   &TypeIgnore_frozen_info, o);
+    }
+    Py_UNREACHABLE();
+}
+static PyObject *
+frozen_convert_type_param_lineno(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = ast2obj_int(state, o->lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_type_param_col_offset(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = ast2obj_int(state, o->col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_type_param_end_lineno(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_lineno);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_type_param_end_col_offset(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = ast2obj_int(state, o->end_col_offset);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeVar_name(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.TypeVar.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeVar_bound(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.TypeVar.bound);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeVar_default_value(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.TypeVar.default_value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ParamSpec_name(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.ParamSpec.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_ParamSpec_default_value(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.ParamSpec.default_value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeVarTuple_name(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = ast2obj_identifier(state, o->v.TypeVarTuple.name);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_convert_TypeVarTuple_default_value(struct ast_state *state, void *node)
+{
+    type_param_ty o = (type_param_ty)node;
+    PyObject *value = frozen_ast2obj_expr(state, o->v.TypeVarTuple.default_value);
+    if (value == NULL) {
+        return NULL;
+    }
+    return value;
+}
+static PyObject *
+frozen_ast2obj_type_param(struct ast_state *state, type_param_ty o)
+{
+    if (o == NULL) Py_RETURN_NONE;
+    switch (o->kind) {
+        case TypeVar_kind:
+            return frozen_new_node(state, state->TypeVar_frozen_type,
+                                   &TypeVar_frozen_info, o);
+        case ParamSpec_kind:
+            return frozen_new_node(state, state->ParamSpec_frozen_type,
+                                   &ParamSpec_frozen_info, o);
+        case TypeVarTuple_kind:
+            return frozen_new_node(state, state->TypeVarTuple_frozen_type,
+                                   &TypeVarTuple_frozen_info, o);
+    }
+    Py_UNREACHABLE();
+}
+static FrozenFieldInfo Module_frozen_field_info[] = {
+    {0, frozen_convert_Module_body},
+    {1, frozen_convert_Module_type_ignores},
+};
+static PyGetSetDef Module_frozen_getsets[] = {
+    {"body", frozen_field_get, NULL, NULL, &Module_frozen_field_info[0]},
+    {"type_ignores", frozen_field_get, NULL, NULL,
+      &Module_frozen_field_info[1]},
+    {NULL}
+};
+static FrozenFieldInfo Interactive_frozen_field_info[] = {
+    {0, frozen_convert_Interactive_body},
+};
+static PyGetSetDef Interactive_frozen_getsets[] = {
+    {"body", frozen_field_get, NULL, NULL, &Interactive_frozen_field_info[0]},
+    {NULL}
+};
+static FrozenFieldInfo Expression_frozen_field_info[] = {
+    {0, frozen_convert_Expression_body},
+};
+static PyGetSetDef Expression_frozen_getsets[] = {
+    {"body", frozen_field_get, NULL, NULL, &Expression_frozen_field_info[0]},
+    {NULL}
+};
+static FrozenFieldInfo FunctionType_frozen_field_info[] = {
+    {0, frozen_convert_FunctionType_argtypes},
+    {1, frozen_convert_FunctionType_returns},
+};
+static PyGetSetDef FunctionType_frozen_getsets[] = {
+    {"argtypes", frozen_field_get, NULL, NULL,
+      &FunctionType_frozen_field_info[0]},
+    {"returns", frozen_field_get, NULL, NULL,
+      &FunctionType_frozen_field_info[1]},
+    {NULL}
+};
+static FrozenFieldInfo stmt_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+};
+static PyGetSetDef stmt_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &stmt_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &stmt_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &stmt_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &stmt_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo FunctionDef_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_FunctionDef_name},
+    {5, frozen_convert_FunctionDef_args},
+    {6, frozen_convert_FunctionDef_body},
+    {7, frozen_convert_FunctionDef_decorator_list},
+    {8, frozen_convert_FunctionDef_returns},
+    {9, frozen_convert_FunctionDef_type_comment},
+    {10, frozen_convert_FunctionDef_type_params},
+};
+static PyGetSetDef FunctionDef_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &FunctionDef_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &FunctionDef_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &FunctionDef_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &FunctionDef_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &FunctionDef_frozen_field_info[4]},
+    {"args", frozen_field_get, NULL, NULL, &FunctionDef_frozen_field_info[5]},
+    {"body", frozen_field_get, NULL, NULL, &FunctionDef_frozen_field_info[6]},
+    {"decorator_list", frozen_field_get, NULL, NULL,
+      &FunctionDef_frozen_field_info[7]},
+    {"returns", frozen_field_get, NULL, NULL,
+      &FunctionDef_frozen_field_info[8]},
+    {"type_comment", frozen_field_get, NULL, NULL,
+      &FunctionDef_frozen_field_info[9]},
+    {"type_params", frozen_field_get, NULL, NULL,
+      &FunctionDef_frozen_field_info[10]},
+    {NULL}
+};
+static FrozenFieldInfo AsyncFunctionDef_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_AsyncFunctionDef_name},
+    {5, frozen_convert_AsyncFunctionDef_args},
+    {6, frozen_convert_AsyncFunctionDef_body},
+    {7, frozen_convert_AsyncFunctionDef_decorator_list},
+    {8, frozen_convert_AsyncFunctionDef_returns},
+    {9, frozen_convert_AsyncFunctionDef_type_comment},
+    {10, frozen_convert_AsyncFunctionDef_type_params},
+};
+static PyGetSetDef AsyncFunctionDef_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[4]},
+    {"args", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[5]},
+    {"body", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[6]},
+    {"decorator_list", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[7]},
+    {"returns", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[8]},
+    {"type_comment", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[9]},
+    {"type_params", frozen_field_get, NULL, NULL,
+      &AsyncFunctionDef_frozen_field_info[10]},
+    {NULL}
+};
+static FrozenFieldInfo ClassDef_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_ClassDef_name},
+    {5, frozen_convert_ClassDef_bases},
+    {6, frozen_convert_ClassDef_keywords},
+    {7, frozen_convert_ClassDef_body},
+    {8, frozen_convert_ClassDef_decorator_list},
+    {9, frozen_convert_ClassDef_type_params},
+};
+static PyGetSetDef ClassDef_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &ClassDef_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &ClassDef_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &ClassDef_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &ClassDef_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &ClassDef_frozen_field_info[4]},
+    {"bases", frozen_field_get, NULL, NULL, &ClassDef_frozen_field_info[5]},
+    {"keywords", frozen_field_get, NULL, NULL, &ClassDef_frozen_field_info[6]},
+    {"body", frozen_field_get, NULL, NULL, &ClassDef_frozen_field_info[7]},
+    {"decorator_list", frozen_field_get, NULL, NULL,
+      &ClassDef_frozen_field_info[8]},
+    {"type_params", frozen_field_get, NULL, NULL,
+      &ClassDef_frozen_field_info[9]},
+    {NULL}
+};
+static FrozenFieldInfo Return_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Return_value},
+};
+static PyGetSetDef Return_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Return_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Return_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Return_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Return_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Return_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Delete_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Delete_targets},
+};
+static PyGetSetDef Delete_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Delete_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Delete_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Delete_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Delete_frozen_field_info[3]},
+    {"targets", frozen_field_get, NULL, NULL, &Delete_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Assign_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Assign_targets},
+    {5, frozen_convert_Assign_value},
+    {6, frozen_convert_Assign_type_comment},
+};
+static PyGetSetDef Assign_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Assign_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Assign_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Assign_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Assign_frozen_field_info[3]},
+    {"targets", frozen_field_get, NULL, NULL, &Assign_frozen_field_info[4]},
+    {"value", frozen_field_get, NULL, NULL, &Assign_frozen_field_info[5]},
+    {"type_comment", frozen_field_get, NULL, NULL,
+      &Assign_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo TypeAlias_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_TypeAlias_name},
+    {5, frozen_convert_TypeAlias_type_params},
+    {6, frozen_convert_TypeAlias_value},
+};
+static PyGetSetDef TypeAlias_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &TypeAlias_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &TypeAlias_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &TypeAlias_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &TypeAlias_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &TypeAlias_frozen_field_info[4]},
+    {"type_params", frozen_field_get, NULL, NULL,
+      &TypeAlias_frozen_field_info[5]},
+    {"value", frozen_field_get, NULL, NULL, &TypeAlias_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo AugAssign_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_AugAssign_target},
+    {5, frozen_convert_AugAssign_op},
+    {6, frozen_convert_AugAssign_value},
+};
+static PyGetSetDef AugAssign_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &AugAssign_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &AugAssign_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &AugAssign_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &AugAssign_frozen_field_info[3]},
+    {"target", frozen_field_get, NULL, NULL, &AugAssign_frozen_field_info[4]},
+    {"op", frozen_field_get, NULL, NULL, &AugAssign_frozen_field_info[5]},
+    {"value", frozen_field_get, NULL, NULL, &AugAssign_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo AnnAssign_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_AnnAssign_target},
+    {5, frozen_convert_AnnAssign_annotation},
+    {6, frozen_convert_AnnAssign_value},
+    {7, frozen_convert_AnnAssign_simple},
+};
+static PyGetSetDef AnnAssign_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &AnnAssign_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &AnnAssign_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &AnnAssign_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &AnnAssign_frozen_field_info[3]},
+    {"target", frozen_field_get, NULL, NULL, &AnnAssign_frozen_field_info[4]},
+    {"annotation", frozen_field_get, NULL, NULL,
+      &AnnAssign_frozen_field_info[5]},
+    {"value", frozen_field_get, NULL, NULL, &AnnAssign_frozen_field_info[6]},
+    {"simple", frozen_field_get, NULL, NULL, &AnnAssign_frozen_field_info[7]},
+    {NULL}
+};
+static FrozenFieldInfo For_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_For_target},
+    {5, frozen_convert_For_iter},
+    {6, frozen_convert_For_body},
+    {7, frozen_convert_For_orelse},
+    {8, frozen_convert_For_type_comment},
+};
+static PyGetSetDef For_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &For_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &For_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &For_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL, &For_frozen_field_info[3]},
+    {"target", frozen_field_get, NULL, NULL, &For_frozen_field_info[4]},
+    {"iter", frozen_field_get, NULL, NULL, &For_frozen_field_info[5]},
+    {"body", frozen_field_get, NULL, NULL, &For_frozen_field_info[6]},
+    {"orelse", frozen_field_get, NULL, NULL, &For_frozen_field_info[7]},
+    {"type_comment", frozen_field_get, NULL, NULL, &For_frozen_field_info[8]},
+    {NULL}
+};
+static FrozenFieldInfo AsyncFor_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_AsyncFor_target},
+    {5, frozen_convert_AsyncFor_iter},
+    {6, frozen_convert_AsyncFor_body},
+    {7, frozen_convert_AsyncFor_orelse},
+    {8, frozen_convert_AsyncFor_type_comment},
+};
+static PyGetSetDef AsyncFor_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &AsyncFor_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &AsyncFor_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &AsyncFor_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &AsyncFor_frozen_field_info[3]},
+    {"target", frozen_field_get, NULL, NULL, &AsyncFor_frozen_field_info[4]},
+    {"iter", frozen_field_get, NULL, NULL, &AsyncFor_frozen_field_info[5]},
+    {"body", frozen_field_get, NULL, NULL, &AsyncFor_frozen_field_info[6]},
+    {"orelse", frozen_field_get, NULL, NULL, &AsyncFor_frozen_field_info[7]},
+    {"type_comment", frozen_field_get, NULL, NULL,
+      &AsyncFor_frozen_field_info[8]},
+    {NULL}
+};
+static FrozenFieldInfo While_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_While_test},
+    {5, frozen_convert_While_body},
+    {6, frozen_convert_While_orelse},
+};
+static PyGetSetDef While_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &While_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &While_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &While_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &While_frozen_field_info[3]},
+    {"test", frozen_field_get, NULL, NULL, &While_frozen_field_info[4]},
+    {"body", frozen_field_get, NULL, NULL, &While_frozen_field_info[5]},
+    {"orelse", frozen_field_get, NULL, NULL, &While_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo If_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_If_test},
+    {5, frozen_convert_If_body},
+    {6, frozen_convert_If_orelse},
+};
+static PyGetSetDef If_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &If_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &If_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &If_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL, &If_frozen_field_info[3]},
+    {"test", frozen_field_get, NULL, NULL, &If_frozen_field_info[4]},
+    {"body", frozen_field_get, NULL, NULL, &If_frozen_field_info[5]},
+    {"orelse", frozen_field_get, NULL, NULL, &If_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo With_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_With_items},
+    {5, frozen_convert_With_body},
+    {6, frozen_convert_With_type_comment},
+};
+static PyGetSetDef With_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &With_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &With_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &With_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &With_frozen_field_info[3]},
+    {"items", frozen_field_get, NULL, NULL, &With_frozen_field_info[4]},
+    {"body", frozen_field_get, NULL, NULL, &With_frozen_field_info[5]},
+    {"type_comment", frozen_field_get, NULL, NULL, &With_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo AsyncWith_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_AsyncWith_items},
+    {5, frozen_convert_AsyncWith_body},
+    {6, frozen_convert_AsyncWith_type_comment},
+};
+static PyGetSetDef AsyncWith_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &AsyncWith_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &AsyncWith_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &AsyncWith_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &AsyncWith_frozen_field_info[3]},
+    {"items", frozen_field_get, NULL, NULL, &AsyncWith_frozen_field_info[4]},
+    {"body", frozen_field_get, NULL, NULL, &AsyncWith_frozen_field_info[5]},
+    {"type_comment", frozen_field_get, NULL, NULL,
+      &AsyncWith_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo Match_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Match_subject},
+    {5, frozen_convert_Match_cases},
+};
+static PyGetSetDef Match_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Match_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Match_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Match_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Match_frozen_field_info[3]},
+    {"subject", frozen_field_get, NULL, NULL, &Match_frozen_field_info[4]},
+    {"cases", frozen_field_get, NULL, NULL, &Match_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Raise_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Raise_exc},
+    {5, frozen_convert_Raise_cause},
+};
+static PyGetSetDef Raise_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Raise_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Raise_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Raise_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Raise_frozen_field_info[3]},
+    {"exc", frozen_field_get, NULL, NULL, &Raise_frozen_field_info[4]},
+    {"cause", frozen_field_get, NULL, NULL, &Raise_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Try_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Try_body},
+    {5, frozen_convert_Try_handlers},
+    {6, frozen_convert_Try_orelse},
+    {7, frozen_convert_Try_finalbody},
+};
+static PyGetSetDef Try_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Try_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Try_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Try_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL, &Try_frozen_field_info[3]},
+    {"body", frozen_field_get, NULL, NULL, &Try_frozen_field_info[4]},
+    {"handlers", frozen_field_get, NULL, NULL, &Try_frozen_field_info[5]},
+    {"orelse", frozen_field_get, NULL, NULL, &Try_frozen_field_info[6]},
+    {"finalbody", frozen_field_get, NULL, NULL, &Try_frozen_field_info[7]},
+    {NULL}
+};
+static FrozenFieldInfo TryStar_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_TryStar_body},
+    {5, frozen_convert_TryStar_handlers},
+    {6, frozen_convert_TryStar_orelse},
+    {7, frozen_convert_TryStar_finalbody},
+};
+static PyGetSetDef TryStar_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &TryStar_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &TryStar_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &TryStar_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &TryStar_frozen_field_info[3]},
+    {"body", frozen_field_get, NULL, NULL, &TryStar_frozen_field_info[4]},
+    {"handlers", frozen_field_get, NULL, NULL, &TryStar_frozen_field_info[5]},
+    {"orelse", frozen_field_get, NULL, NULL, &TryStar_frozen_field_info[6]},
+    {"finalbody", frozen_field_get, NULL, NULL, &TryStar_frozen_field_info[7]},
+    {NULL}
+};
+static FrozenFieldInfo Assert_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Assert_test},
+    {5, frozen_convert_Assert_msg},
+};
+static PyGetSetDef Assert_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Assert_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Assert_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Assert_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Assert_frozen_field_info[3]},
+    {"test", frozen_field_get, NULL, NULL, &Assert_frozen_field_info[4]},
+    {"msg", frozen_field_get, NULL, NULL, &Assert_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Import_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Import_names},
+    {5, frozen_convert_Import_is_lazy},
+};
+static PyGetSetDef Import_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Import_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Import_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Import_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Import_frozen_field_info[3]},
+    {"names", frozen_field_get, NULL, NULL, &Import_frozen_field_info[4]},
+    {"is_lazy", frozen_field_get, NULL, NULL, &Import_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo ImportFrom_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_ImportFrom_module},
+    {5, frozen_convert_ImportFrom_names},
+    {6, frozen_convert_ImportFrom_level},
+    {7, frozen_convert_ImportFrom_is_lazy},
+};
+static PyGetSetDef ImportFrom_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &ImportFrom_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &ImportFrom_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &ImportFrom_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &ImportFrom_frozen_field_info[3]},
+    {"module", frozen_field_get, NULL, NULL, &ImportFrom_frozen_field_info[4]},
+    {"names", frozen_field_get, NULL, NULL, &ImportFrom_frozen_field_info[5]},
+    {"level", frozen_field_get, NULL, NULL, &ImportFrom_frozen_field_info[6]},
+    {"is_lazy", frozen_field_get, NULL, NULL, &ImportFrom_frozen_field_info[7]},
+    {NULL}
+};
+static FrozenFieldInfo Global_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Global_names},
+};
+static PyGetSetDef Global_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Global_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Global_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Global_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Global_frozen_field_info[3]},
+    {"names", frozen_field_get, NULL, NULL, &Global_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Nonlocal_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Nonlocal_names},
+};
+static PyGetSetDef Nonlocal_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Nonlocal_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &Nonlocal_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &Nonlocal_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Nonlocal_frozen_field_info[3]},
+    {"names", frozen_field_get, NULL, NULL, &Nonlocal_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Expr_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+    {4, frozen_convert_Expr_value},
+};
+static PyGetSetDef Expr_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Expr_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Expr_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Expr_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Expr_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Expr_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Pass_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+};
+static PyGetSetDef Pass_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Pass_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Pass_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Pass_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Pass_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo Break_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+};
+static PyGetSetDef Break_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Break_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Break_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Break_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Break_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo Continue_frozen_field_info[] = {
+    {0, frozen_convert_stmt_lineno},
+    {1, frozen_convert_stmt_col_offset},
+    {2, frozen_convert_stmt_end_lineno},
+    {3, frozen_convert_stmt_end_col_offset},
+};
+static PyGetSetDef Continue_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Continue_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &Continue_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &Continue_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Continue_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo expr_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+};
+static PyGetSetDef expr_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &expr_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &expr_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &expr_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &expr_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo BoolOp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_BoolOp_op},
+    {5, frozen_convert_BoolOp_values},
+};
+static PyGetSetDef BoolOp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &BoolOp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &BoolOp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &BoolOp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &BoolOp_frozen_field_info[3]},
+    {"op", frozen_field_get, NULL, NULL, &BoolOp_frozen_field_info[4]},
+    {"values", frozen_field_get, NULL, NULL, &BoolOp_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo NamedExpr_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_NamedExpr_target},
+    {5, frozen_convert_NamedExpr_value},
+};
+static PyGetSetDef NamedExpr_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &NamedExpr_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &NamedExpr_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &NamedExpr_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &NamedExpr_frozen_field_info[3]},
+    {"target", frozen_field_get, NULL, NULL, &NamedExpr_frozen_field_info[4]},
+    {"value", frozen_field_get, NULL, NULL, &NamedExpr_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo BinOp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_BinOp_left},
+    {5, frozen_convert_BinOp_op},
+    {6, frozen_convert_BinOp_right},
+};
+static PyGetSetDef BinOp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &BinOp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &BinOp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &BinOp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &BinOp_frozen_field_info[3]},
+    {"left", frozen_field_get, NULL, NULL, &BinOp_frozen_field_info[4]},
+    {"op", frozen_field_get, NULL, NULL, &BinOp_frozen_field_info[5]},
+    {"right", frozen_field_get, NULL, NULL, &BinOp_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo UnaryOp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_UnaryOp_op},
+    {5, frozen_convert_UnaryOp_operand},
+};
+static PyGetSetDef UnaryOp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &UnaryOp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &UnaryOp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &UnaryOp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &UnaryOp_frozen_field_info[3]},
+    {"op", frozen_field_get, NULL, NULL, &UnaryOp_frozen_field_info[4]},
+    {"operand", frozen_field_get, NULL, NULL, &UnaryOp_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Lambda_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Lambda_args},
+    {5, frozen_convert_Lambda_body},
+};
+static PyGetSetDef Lambda_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Lambda_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Lambda_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Lambda_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Lambda_frozen_field_info[3]},
+    {"args", frozen_field_get, NULL, NULL, &Lambda_frozen_field_info[4]},
+    {"body", frozen_field_get, NULL, NULL, &Lambda_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo IfExp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_IfExp_test},
+    {5, frozen_convert_IfExp_body},
+    {6, frozen_convert_IfExp_orelse},
+};
+static PyGetSetDef IfExp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &IfExp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &IfExp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &IfExp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &IfExp_frozen_field_info[3]},
+    {"test", frozen_field_get, NULL, NULL, &IfExp_frozen_field_info[4]},
+    {"body", frozen_field_get, NULL, NULL, &IfExp_frozen_field_info[5]},
+    {"orelse", frozen_field_get, NULL, NULL, &IfExp_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo Dict_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Dict_keys},
+    {5, frozen_convert_Dict_values},
+};
+static PyGetSetDef Dict_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Dict_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Dict_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Dict_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Dict_frozen_field_info[3]},
+    {"keys", frozen_field_get, NULL, NULL, &Dict_frozen_field_info[4]},
+    {"values", frozen_field_get, NULL, NULL, &Dict_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Set_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Set_elts},
+};
+static PyGetSetDef Set_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Set_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Set_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Set_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL, &Set_frozen_field_info[3]},
+    {"elts", frozen_field_get, NULL, NULL, &Set_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo ListComp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_ListComp_elt},
+    {5, frozen_convert_ListComp_generators},
+};
+static PyGetSetDef ListComp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &ListComp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &ListComp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &ListComp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &ListComp_frozen_field_info[3]},
+    {"elt", frozen_field_get, NULL, NULL, &ListComp_frozen_field_info[4]},
+    {"generators", frozen_field_get, NULL, NULL,
+      &ListComp_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo SetComp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_SetComp_elt},
+    {5, frozen_convert_SetComp_generators},
+};
+static PyGetSetDef SetComp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &SetComp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &SetComp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &SetComp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &SetComp_frozen_field_info[3]},
+    {"elt", frozen_field_get, NULL, NULL, &SetComp_frozen_field_info[4]},
+    {"generators", frozen_field_get, NULL, NULL, &SetComp_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo DictComp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_DictComp_key},
+    {5, frozen_convert_DictComp_value},
+    {6, frozen_convert_DictComp_generators},
+};
+static PyGetSetDef DictComp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &DictComp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &DictComp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &DictComp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &DictComp_frozen_field_info[3]},
+    {"key", frozen_field_get, NULL, NULL, &DictComp_frozen_field_info[4]},
+    {"value", frozen_field_get, NULL, NULL, &DictComp_frozen_field_info[5]},
+    {"generators", frozen_field_get, NULL, NULL,
+      &DictComp_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo GeneratorExp_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_GeneratorExp_elt},
+    {5, frozen_convert_GeneratorExp_generators},
+};
+static PyGetSetDef GeneratorExp_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &GeneratorExp_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &GeneratorExp_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &GeneratorExp_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &GeneratorExp_frozen_field_info[3]},
+    {"elt", frozen_field_get, NULL, NULL, &GeneratorExp_frozen_field_info[4]},
+    {"generators", frozen_field_get, NULL, NULL,
+      &GeneratorExp_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Await_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Await_value},
+};
+static PyGetSetDef Await_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Await_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Await_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Await_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Await_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Await_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Yield_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Yield_value},
+};
+static PyGetSetDef Yield_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Yield_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Yield_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Yield_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Yield_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Yield_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo YieldFrom_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_YieldFrom_value},
+};
+static PyGetSetDef YieldFrom_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &YieldFrom_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &YieldFrom_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &YieldFrom_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &YieldFrom_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &YieldFrom_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Compare_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Compare_left},
+    {5, frozen_convert_Compare_ops},
+    {6, frozen_convert_Compare_comparators},
+};
+static PyGetSetDef Compare_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Compare_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Compare_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Compare_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Compare_frozen_field_info[3]},
+    {"left", frozen_field_get, NULL, NULL, &Compare_frozen_field_info[4]},
+    {"ops", frozen_field_get, NULL, NULL, &Compare_frozen_field_info[5]},
+    {"comparators", frozen_field_get, NULL, NULL,
+      &Compare_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo Call_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Call_func},
+    {5, frozen_convert_Call_args},
+    {6, frozen_convert_Call_keywords},
+};
+static PyGetSetDef Call_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Call_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Call_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Call_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Call_frozen_field_info[3]},
+    {"func", frozen_field_get, NULL, NULL, &Call_frozen_field_info[4]},
+    {"args", frozen_field_get, NULL, NULL, &Call_frozen_field_info[5]},
+    {"keywords", frozen_field_get, NULL, NULL, &Call_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo FormattedValue_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_FormattedValue_value},
+    {5, frozen_convert_FormattedValue_conversion},
+    {6, frozen_convert_FormattedValue_format_spec},
+};
+static PyGetSetDef FormattedValue_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &FormattedValue_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &FormattedValue_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &FormattedValue_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &FormattedValue_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL,
+      &FormattedValue_frozen_field_info[4]},
+    {"conversion", frozen_field_get, NULL, NULL,
+      &FormattedValue_frozen_field_info[5]},
+    {"format_spec", frozen_field_get, NULL, NULL,
+      &FormattedValue_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo Interpolation_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Interpolation_value},
+    {5, frozen_convert_Interpolation_str},
+    {6, frozen_convert_Interpolation_conversion},
+    {7, frozen_convert_Interpolation_format_spec},
+};
+static PyGetSetDef Interpolation_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &Interpolation_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &Interpolation_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &Interpolation_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Interpolation_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL,
+      &Interpolation_frozen_field_info[4]},
+    {"str", frozen_field_get, NULL, NULL, &Interpolation_frozen_field_info[5]},
+    {"conversion", frozen_field_get, NULL, NULL,
+      &Interpolation_frozen_field_info[6]},
+    {"format_spec", frozen_field_get, NULL, NULL,
+      &Interpolation_frozen_field_info[7]},
+    {NULL}
+};
+static FrozenFieldInfo JoinedStr_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_JoinedStr_values},
+};
+static PyGetSetDef JoinedStr_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &JoinedStr_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &JoinedStr_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &JoinedStr_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &JoinedStr_frozen_field_info[3]},
+    {"values", frozen_field_get, NULL, NULL, &JoinedStr_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo TemplateStr_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_TemplateStr_values},
+};
+static PyGetSetDef TemplateStr_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &TemplateStr_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &TemplateStr_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &TemplateStr_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &TemplateStr_frozen_field_info[3]},
+    {"values", frozen_field_get, NULL, NULL, &TemplateStr_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo Constant_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Constant_value},
+    {5, frozen_convert_Constant_kind},
+};
+static PyGetSetDef Constant_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Constant_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &Constant_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &Constant_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Constant_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Constant_frozen_field_info[4]},
+    {"kind", frozen_field_get, NULL, NULL, &Constant_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Attribute_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Attribute_value},
+    {5, frozen_convert_Attribute_attr},
+    {6, frozen_convert_Attribute_ctx},
+};
+static PyGetSetDef Attribute_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Attribute_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &Attribute_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &Attribute_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Attribute_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Attribute_frozen_field_info[4]},
+    {"attr", frozen_field_get, NULL, NULL, &Attribute_frozen_field_info[5]},
+    {"ctx", frozen_field_get, NULL, NULL, &Attribute_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo Subscript_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Subscript_value},
+    {5, frozen_convert_Subscript_slice},
+    {6, frozen_convert_Subscript_ctx},
+};
+static PyGetSetDef Subscript_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Subscript_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &Subscript_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &Subscript_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Subscript_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Subscript_frozen_field_info[4]},
+    {"slice", frozen_field_get, NULL, NULL, &Subscript_frozen_field_info[5]},
+    {"ctx", frozen_field_get, NULL, NULL, &Subscript_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo Starred_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Starred_value},
+    {5, frozen_convert_Starred_ctx},
+};
+static PyGetSetDef Starred_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Starred_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Starred_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Starred_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Starred_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &Starred_frozen_field_info[4]},
+    {"ctx", frozen_field_get, NULL, NULL, &Starred_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Name_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Name_id},
+    {5, frozen_convert_Name_ctx},
+};
+static PyGetSetDef Name_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Name_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Name_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Name_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Name_frozen_field_info[3]},
+    {"id", frozen_field_get, NULL, NULL, &Name_frozen_field_info[4]},
+    {"ctx", frozen_field_get, NULL, NULL, &Name_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo List_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_List_elts},
+    {5, frozen_convert_List_ctx},
+};
+static PyGetSetDef List_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &List_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &List_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &List_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &List_frozen_field_info[3]},
+    {"elts", frozen_field_get, NULL, NULL, &List_frozen_field_info[4]},
+    {"ctx", frozen_field_get, NULL, NULL, &List_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Tuple_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Tuple_elts},
+    {5, frozen_convert_Tuple_ctx},
+};
+static PyGetSetDef Tuple_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Tuple_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Tuple_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Tuple_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Tuple_frozen_field_info[3]},
+    {"elts", frozen_field_get, NULL, NULL, &Tuple_frozen_field_info[4]},
+    {"ctx", frozen_field_get, NULL, NULL, &Tuple_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo Slice_frozen_field_info[] = {
+    {0, frozen_convert_expr_lineno},
+    {1, frozen_convert_expr_col_offset},
+    {2, frozen_convert_expr_end_lineno},
+    {3, frozen_convert_expr_end_col_offset},
+    {4, frozen_convert_Slice_lower},
+    {5, frozen_convert_Slice_upper},
+    {6, frozen_convert_Slice_step},
+};
+static PyGetSetDef Slice_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &Slice_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &Slice_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &Slice_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &Slice_frozen_field_info[3]},
+    {"lower", frozen_field_get, NULL, NULL, &Slice_frozen_field_info[4]},
+    {"upper", frozen_field_get, NULL, NULL, &Slice_frozen_field_info[5]},
+    {"step", frozen_field_get, NULL, NULL, &Slice_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo comprehension_frozen_field_info[] = {
+    {0, frozen_convert_comprehension_target},
+    {1, frozen_convert_comprehension_iter},
+    {2, frozen_convert_comprehension_ifs},
+    {3, frozen_convert_comprehension_is_async},
+};
+static PyGetSetDef comprehension_frozen_getsets[] = {
+    {"target", frozen_field_get, NULL, NULL,
+      &comprehension_frozen_field_info[0]},
+    {"iter", frozen_field_get, NULL, NULL, &comprehension_frozen_field_info[1]},
+    {"ifs", frozen_field_get, NULL, NULL, &comprehension_frozen_field_info[2]},
+    {"is_async", frozen_field_get, NULL, NULL,
+      &comprehension_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo excepthandler_frozen_field_info[] = {
+    {0, frozen_convert_excepthandler_lineno},
+    {1, frozen_convert_excepthandler_col_offset},
+    {2, frozen_convert_excepthandler_end_lineno},
+    {3, frozen_convert_excepthandler_end_col_offset},
+};
+static PyGetSetDef excepthandler_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &excepthandler_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &excepthandler_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &excepthandler_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &excepthandler_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo ExceptHandler_frozen_field_info[] = {
+    {0, frozen_convert_excepthandler_lineno},
+    {1, frozen_convert_excepthandler_col_offset},
+    {2, frozen_convert_excepthandler_end_lineno},
+    {3, frozen_convert_excepthandler_end_col_offset},
+    {4, frozen_convert_ExceptHandler_type},
+    {5, frozen_convert_ExceptHandler_name},
+    {6, frozen_convert_ExceptHandler_body},
+};
+static PyGetSetDef ExceptHandler_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &ExceptHandler_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &ExceptHandler_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &ExceptHandler_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &ExceptHandler_frozen_field_info[3]},
+    {"type", frozen_field_get, NULL, NULL, &ExceptHandler_frozen_field_info[4]},
+    {"name", frozen_field_get, NULL, NULL, &ExceptHandler_frozen_field_info[5]},
+    {"body", frozen_field_get, NULL, NULL, &ExceptHandler_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo arguments_frozen_field_info[] = {
+    {0, frozen_convert_arguments_posonlyargs},
+    {1, frozen_convert_arguments_args},
+    {2, frozen_convert_arguments_vararg},
+    {3, frozen_convert_arguments_kwonlyargs},
+    {4, frozen_convert_arguments_kw_defaults},
+    {5, frozen_convert_arguments_kwarg},
+    {6, frozen_convert_arguments_defaults},
+};
+static PyGetSetDef arguments_frozen_getsets[] = {
+    {"posonlyargs", frozen_field_get, NULL, NULL,
+      &arguments_frozen_field_info[0]},
+    {"args", frozen_field_get, NULL, NULL, &arguments_frozen_field_info[1]},
+    {"vararg", frozen_field_get, NULL, NULL, &arguments_frozen_field_info[2]},
+    {"kwonlyargs", frozen_field_get, NULL, NULL,
+      &arguments_frozen_field_info[3]},
+    {"kw_defaults", frozen_field_get, NULL, NULL,
+      &arguments_frozen_field_info[4]},
+    {"kwarg", frozen_field_get, NULL, NULL, &arguments_frozen_field_info[5]},
+    {"defaults", frozen_field_get, NULL, NULL, &arguments_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo arg_frozen_field_info[] = {
+    {0, frozen_convert_arg_lineno},
+    {1, frozen_convert_arg_col_offset},
+    {2, frozen_convert_arg_end_lineno},
+    {3, frozen_convert_arg_end_col_offset},
+    {4, frozen_convert_arg_arg},
+    {5, frozen_convert_arg_annotation},
+    {6, frozen_convert_arg_type_comment},
+};
+static PyGetSetDef arg_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &arg_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &arg_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &arg_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL, &arg_frozen_field_info[3]},
+    {"arg", frozen_field_get, NULL, NULL, &arg_frozen_field_info[4]},
+    {"annotation", frozen_field_get, NULL, NULL, &arg_frozen_field_info[5]},
+    {"type_comment", frozen_field_get, NULL, NULL, &arg_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo keyword_frozen_field_info[] = {
+    {0, frozen_convert_keyword_lineno},
+    {1, frozen_convert_keyword_col_offset},
+    {2, frozen_convert_keyword_end_lineno},
+    {3, frozen_convert_keyword_end_col_offset},
+    {4, frozen_convert_keyword_arg},
+    {5, frozen_convert_keyword_value},
+};
+static PyGetSetDef keyword_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &keyword_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &keyword_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &keyword_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &keyword_frozen_field_info[3]},
+    {"arg", frozen_field_get, NULL, NULL, &keyword_frozen_field_info[4]},
+    {"value", frozen_field_get, NULL, NULL, &keyword_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo alias_frozen_field_info[] = {
+    {0, frozen_convert_alias_lineno},
+    {1, frozen_convert_alias_col_offset},
+    {2, frozen_convert_alias_end_lineno},
+    {3, frozen_convert_alias_end_col_offset},
+    {4, frozen_convert_alias_name},
+    {5, frozen_convert_alias_asname},
+};
+static PyGetSetDef alias_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &alias_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &alias_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &alias_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &alias_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &alias_frozen_field_info[4]},
+    {"asname", frozen_field_get, NULL, NULL, &alias_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo withitem_frozen_field_info[] = {
+    {0, frozen_convert_withitem_context_expr},
+    {1, frozen_convert_withitem_optional_vars},
+};
+static PyGetSetDef withitem_frozen_getsets[] = {
+    {"context_expr", frozen_field_get, NULL, NULL,
+      &withitem_frozen_field_info[0]},
+    {"optional_vars", frozen_field_get, NULL, NULL,
+      &withitem_frozen_field_info[1]},
+    {NULL}
+};
+static FrozenFieldInfo match_case_frozen_field_info[] = {
+    {0, frozen_convert_match_case_pattern},
+    {1, frozen_convert_match_case_guard},
+    {2, frozen_convert_match_case_body},
+};
+static PyGetSetDef match_case_frozen_getsets[] = {
+    {"pattern", frozen_field_get, NULL, NULL, &match_case_frozen_field_info[0]},
+    {"guard", frozen_field_get, NULL, NULL, &match_case_frozen_field_info[1]},
+    {"body", frozen_field_get, NULL, NULL, &match_case_frozen_field_info[2]},
+    {NULL}
+};
+static FrozenFieldInfo pattern_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+};
+static PyGetSetDef pattern_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &pattern_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &pattern_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &pattern_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &pattern_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo MatchValue_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchValue_value},
+};
+static PyGetSetDef MatchValue_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &MatchValue_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &MatchValue_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &MatchValue_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchValue_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL, &MatchValue_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo MatchSingleton_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchSingleton_value},
+};
+static PyGetSetDef MatchSingleton_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &MatchSingleton_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &MatchSingleton_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &MatchSingleton_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchSingleton_frozen_field_info[3]},
+    {"value", frozen_field_get, NULL, NULL,
+      &MatchSingleton_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo MatchSequence_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchSequence_patterns},
+};
+static PyGetSetDef MatchSequence_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &MatchSequence_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &MatchSequence_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &MatchSequence_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchSequence_frozen_field_info[3]},
+    {"patterns", frozen_field_get, NULL, NULL,
+      &MatchSequence_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo MatchMapping_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchMapping_keys},
+    {5, frozen_convert_MatchMapping_patterns},
+    {6, frozen_convert_MatchMapping_rest},
+};
+static PyGetSetDef MatchMapping_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &MatchMapping_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &MatchMapping_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &MatchMapping_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchMapping_frozen_field_info[3]},
+    {"keys", frozen_field_get, NULL, NULL, &MatchMapping_frozen_field_info[4]},
+    {"patterns", frozen_field_get, NULL, NULL,
+      &MatchMapping_frozen_field_info[5]},
+    {"rest", frozen_field_get, NULL, NULL, &MatchMapping_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo MatchClass_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchClass_cls},
+    {5, frozen_convert_MatchClass_patterns},
+    {6, frozen_convert_MatchClass_kwd_attrs},
+    {7, frozen_convert_MatchClass_kwd_patterns},
+};
+static PyGetSetDef MatchClass_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &MatchClass_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &MatchClass_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &MatchClass_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchClass_frozen_field_info[3]},
+    {"cls", frozen_field_get, NULL, NULL, &MatchClass_frozen_field_info[4]},
+    {"patterns", frozen_field_get, NULL, NULL,
+      &MatchClass_frozen_field_info[5]},
+    {"kwd_attrs", frozen_field_get, NULL, NULL,
+      &MatchClass_frozen_field_info[6]},
+    {"kwd_patterns", frozen_field_get, NULL, NULL,
+      &MatchClass_frozen_field_info[7]},
+    {NULL}
+};
+static FrozenFieldInfo MatchStar_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchStar_name},
+};
+static PyGetSetDef MatchStar_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &MatchStar_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &MatchStar_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &MatchStar_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchStar_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &MatchStar_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo MatchAs_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchAs_pattern},
+    {5, frozen_convert_MatchAs_name},
+};
+static PyGetSetDef MatchAs_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &MatchAs_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &MatchAs_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &MatchAs_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchAs_frozen_field_info[3]},
+    {"pattern", frozen_field_get, NULL, NULL, &MatchAs_frozen_field_info[4]},
+    {"name", frozen_field_get, NULL, NULL, &MatchAs_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo MatchOr_frozen_field_info[] = {
+    {0, frozen_convert_pattern_lineno},
+    {1, frozen_convert_pattern_col_offset},
+    {2, frozen_convert_pattern_end_lineno},
+    {3, frozen_convert_pattern_end_col_offset},
+    {4, frozen_convert_MatchOr_patterns},
+};
+static PyGetSetDef MatchOr_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &MatchOr_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &MatchOr_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &MatchOr_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &MatchOr_frozen_field_info[3]},
+    {"patterns", frozen_field_get, NULL, NULL, &MatchOr_frozen_field_info[4]},
+    {NULL}
+};
+static FrozenFieldInfo TypeIgnore_frozen_field_info[] = {
+    {0, frozen_convert_TypeIgnore_lineno},
+    {1, frozen_convert_TypeIgnore_tag},
+};
+static PyGetSetDef TypeIgnore_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &TypeIgnore_frozen_field_info[0]},
+    {"tag", frozen_field_get, NULL, NULL, &TypeIgnore_frozen_field_info[1]},
+    {NULL}
+};
+static FrozenFieldInfo type_param_frozen_field_info[] = {
+    {0, frozen_convert_type_param_lineno},
+    {1, frozen_convert_type_param_col_offset},
+    {2, frozen_convert_type_param_end_lineno},
+    {3, frozen_convert_type_param_end_col_offset},
+};
+static PyGetSetDef type_param_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &type_param_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &type_param_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &type_param_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &type_param_frozen_field_info[3]},
+    {NULL}
+};
+static FrozenFieldInfo TypeVar_frozen_field_info[] = {
+    {0, frozen_convert_type_param_lineno},
+    {1, frozen_convert_type_param_col_offset},
+    {2, frozen_convert_type_param_end_lineno},
+    {3, frozen_convert_type_param_end_col_offset},
+    {4, frozen_convert_TypeVar_name},
+    {5, frozen_convert_TypeVar_bound},
+    {6, frozen_convert_TypeVar_default_value},
+};
+static PyGetSetDef TypeVar_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &TypeVar_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL, &TypeVar_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL, &TypeVar_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &TypeVar_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &TypeVar_frozen_field_info[4]},
+    {"bound", frozen_field_get, NULL, NULL, &TypeVar_frozen_field_info[5]},
+    {"default_value", frozen_field_get, NULL, NULL,
+      &TypeVar_frozen_field_info[6]},
+    {NULL}
+};
+static FrozenFieldInfo ParamSpec_frozen_field_info[] = {
+    {0, frozen_convert_type_param_lineno},
+    {1, frozen_convert_type_param_col_offset},
+    {2, frozen_convert_type_param_end_lineno},
+    {3, frozen_convert_type_param_end_col_offset},
+    {4, frozen_convert_ParamSpec_name},
+    {5, frozen_convert_ParamSpec_default_value},
+};
+static PyGetSetDef ParamSpec_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL, &ParamSpec_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &ParamSpec_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &ParamSpec_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &ParamSpec_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &ParamSpec_frozen_field_info[4]},
+    {"default_value", frozen_field_get, NULL, NULL,
+      &ParamSpec_frozen_field_info[5]},
+    {NULL}
+};
+static FrozenFieldInfo TypeVarTuple_frozen_field_info[] = {
+    {0, frozen_convert_type_param_lineno},
+    {1, frozen_convert_type_param_col_offset},
+    {2, frozen_convert_type_param_end_lineno},
+    {3, frozen_convert_type_param_end_col_offset},
+    {4, frozen_convert_TypeVarTuple_name},
+    {5, frozen_convert_TypeVarTuple_default_value},
+};
+static PyGetSetDef TypeVarTuple_frozen_getsets[] = {
+    {"lineno", frozen_field_get, NULL, NULL,
+      &TypeVarTuple_frozen_field_info[0]},
+    {"col_offset", frozen_field_get, NULL, NULL,
+      &TypeVarTuple_frozen_field_info[1]},
+    {"end_lineno", frozen_field_get, NULL, NULL,
+      &TypeVarTuple_frozen_field_info[2]},
+    {"end_col_offset", frozen_field_get, NULL, NULL,
+      &TypeVarTuple_frozen_field_info[3]},
+    {"name", frozen_field_get, NULL, NULL, &TypeVarTuple_frozen_field_info[4]},
+    {"default_value", frozen_field_get, NULL, NULL,
+      &TypeVarTuple_frozen_field_info[5]},
+    {NULL}
+};
+static int
+init_frozen_types(struct ast_state *state)
+{
+    state->AST_frozen_type = make_frozen_type("ast.FrozenAST", state->AST_type, &AST_frozen_info, 0, NULL);
+    if (!state->AST_frozen_type) return -1;
+    state->mod_frozen_type = make_frozen_type("ast.Frozenmod", state->mod_type, &mod_frozen_info, 0, NULL);
+    if (!state->mod_frozen_type) return -1;
+    state->Module_frozen_type = make_frozen_type("ast.FrozenModule", state->Module_type, &Module_frozen_info, 2, Module_frozen_getsets);
+    if (!state->Module_frozen_type) return -1;
+    state->Interactive_frozen_type = make_frozen_type("ast.FrozenInteractive", state->Interactive_type, &Interactive_frozen_info, 1, Interactive_frozen_getsets);
+    if (!state->Interactive_frozen_type) return -1;
+    state->Expression_frozen_type = make_frozen_type("ast.FrozenExpression", state->Expression_type, &Expression_frozen_info, 1, Expression_frozen_getsets);
+    if (!state->Expression_frozen_type) return -1;
+    state->FunctionType_frozen_type = make_frozen_type("ast.FrozenFunctionType", state->FunctionType_type, &FunctionType_frozen_info, 2, FunctionType_frozen_getsets);
+    if (!state->FunctionType_frozen_type) return -1;
+    state->stmt_frozen_type = make_frozen_type("ast.Frozenstmt", state->stmt_type, &stmt_frozen_info, 4, stmt_frozen_getsets);
+    if (!state->stmt_frozen_type) return -1;
+    state->FunctionDef_frozen_type = make_frozen_type("ast.FrozenFunctionDef", state->FunctionDef_type, &FunctionDef_frozen_info, 11, FunctionDef_frozen_getsets);
+    if (!state->FunctionDef_frozen_type) return -1;
+    state->AsyncFunctionDef_frozen_type = make_frozen_type("ast.FrozenAsyncFunctionDef", state->AsyncFunctionDef_type, &AsyncFunctionDef_frozen_info, 11, AsyncFunctionDef_frozen_getsets);
+    if (!state->AsyncFunctionDef_frozen_type) return -1;
+    state->ClassDef_frozen_type = make_frozen_type("ast.FrozenClassDef", state->ClassDef_type, &ClassDef_frozen_info, 10, ClassDef_frozen_getsets);
+    if (!state->ClassDef_frozen_type) return -1;
+    state->Return_frozen_type = make_frozen_type("ast.FrozenReturn", state->Return_type, &Return_frozen_info, 5, Return_frozen_getsets);
+    if (!state->Return_frozen_type) return -1;
+    state->Delete_frozen_type = make_frozen_type("ast.FrozenDelete", state->Delete_type, &Delete_frozen_info, 5, Delete_frozen_getsets);
+    if (!state->Delete_frozen_type) return -1;
+    state->Assign_frozen_type = make_frozen_type("ast.FrozenAssign", state->Assign_type, &Assign_frozen_info, 7, Assign_frozen_getsets);
+    if (!state->Assign_frozen_type) return -1;
+    state->TypeAlias_frozen_type = make_frozen_type("ast.FrozenTypeAlias", state->TypeAlias_type, &TypeAlias_frozen_info, 7, TypeAlias_frozen_getsets);
+    if (!state->TypeAlias_frozen_type) return -1;
+    state->AugAssign_frozen_type = make_frozen_type("ast.FrozenAugAssign", state->AugAssign_type, &AugAssign_frozen_info, 7, AugAssign_frozen_getsets);
+    if (!state->AugAssign_frozen_type) return -1;
+    state->AnnAssign_frozen_type = make_frozen_type("ast.FrozenAnnAssign", state->AnnAssign_type, &AnnAssign_frozen_info, 8, AnnAssign_frozen_getsets);
+    if (!state->AnnAssign_frozen_type) return -1;
+    state->For_frozen_type = make_frozen_type("ast.FrozenFor", state->For_type, &For_frozen_info, 9, For_frozen_getsets);
+    if (!state->For_frozen_type) return -1;
+    state->AsyncFor_frozen_type = make_frozen_type("ast.FrozenAsyncFor", state->AsyncFor_type, &AsyncFor_frozen_info, 9, AsyncFor_frozen_getsets);
+    if (!state->AsyncFor_frozen_type) return -1;
+    state->While_frozen_type = make_frozen_type("ast.FrozenWhile", state->While_type, &While_frozen_info, 7, While_frozen_getsets);
+    if (!state->While_frozen_type) return -1;
+    state->If_frozen_type = make_frozen_type("ast.FrozenIf", state->If_type, &If_frozen_info, 7, If_frozen_getsets);
+    if (!state->If_frozen_type) return -1;
+    state->With_frozen_type = make_frozen_type("ast.FrozenWith", state->With_type, &With_frozen_info, 7, With_frozen_getsets);
+    if (!state->With_frozen_type) return -1;
+    state->AsyncWith_frozen_type = make_frozen_type("ast.FrozenAsyncWith", state->AsyncWith_type, &AsyncWith_frozen_info, 7, AsyncWith_frozen_getsets);
+    if (!state->AsyncWith_frozen_type) return -1;
+    state->Match_frozen_type = make_frozen_type("ast.FrozenMatch", state->Match_type, &Match_frozen_info, 6, Match_frozen_getsets);
+    if (!state->Match_frozen_type) return -1;
+    state->Raise_frozen_type = make_frozen_type("ast.FrozenRaise", state->Raise_type, &Raise_frozen_info, 6, Raise_frozen_getsets);
+    if (!state->Raise_frozen_type) return -1;
+    state->Try_frozen_type = make_frozen_type("ast.FrozenTry", state->Try_type, &Try_frozen_info, 8, Try_frozen_getsets);
+    if (!state->Try_frozen_type) return -1;
+    state->TryStar_frozen_type = make_frozen_type("ast.FrozenTryStar", state->TryStar_type, &TryStar_frozen_info, 8, TryStar_frozen_getsets);
+    if (!state->TryStar_frozen_type) return -1;
+    state->Assert_frozen_type = make_frozen_type("ast.FrozenAssert", state->Assert_type, &Assert_frozen_info, 6, Assert_frozen_getsets);
+    if (!state->Assert_frozen_type) return -1;
+    state->Import_frozen_type = make_frozen_type("ast.FrozenImport", state->Import_type, &Import_frozen_info, 6, Import_frozen_getsets);
+    if (!state->Import_frozen_type) return -1;
+    state->ImportFrom_frozen_type = make_frozen_type("ast.FrozenImportFrom", state->ImportFrom_type, &ImportFrom_frozen_info, 8, ImportFrom_frozen_getsets);
+    if (!state->ImportFrom_frozen_type) return -1;
+    state->Global_frozen_type = make_frozen_type("ast.FrozenGlobal", state->Global_type, &Global_frozen_info, 5, Global_frozen_getsets);
+    if (!state->Global_frozen_type) return -1;
+    state->Nonlocal_frozen_type = make_frozen_type("ast.FrozenNonlocal", state->Nonlocal_type, &Nonlocal_frozen_info, 5, Nonlocal_frozen_getsets);
+    if (!state->Nonlocal_frozen_type) return -1;
+    state->Expr_frozen_type = make_frozen_type("ast.FrozenExpr", state->Expr_type, &Expr_frozen_info, 5, Expr_frozen_getsets);
+    if (!state->Expr_frozen_type) return -1;
+    state->Pass_frozen_type = make_frozen_type("ast.FrozenPass", state->Pass_type, &Pass_frozen_info, 4, Pass_frozen_getsets);
+    if (!state->Pass_frozen_type) return -1;
+    state->Break_frozen_type = make_frozen_type("ast.FrozenBreak", state->Break_type, &Break_frozen_info, 4, Break_frozen_getsets);
+    if (!state->Break_frozen_type) return -1;
+    state->Continue_frozen_type = make_frozen_type("ast.FrozenContinue", state->Continue_type, &Continue_frozen_info, 4, Continue_frozen_getsets);
+    if (!state->Continue_frozen_type) return -1;
+    state->expr_frozen_type = make_frozen_type("ast.Frozenexpr", state->expr_type, &expr_frozen_info, 4, expr_frozen_getsets);
+    if (!state->expr_frozen_type) return -1;
+    state->BoolOp_frozen_type = make_frozen_type("ast.FrozenBoolOp", state->BoolOp_type, &BoolOp_frozen_info, 6, BoolOp_frozen_getsets);
+    if (!state->BoolOp_frozen_type) return -1;
+    state->NamedExpr_frozen_type = make_frozen_type("ast.FrozenNamedExpr", state->NamedExpr_type, &NamedExpr_frozen_info, 6, NamedExpr_frozen_getsets);
+    if (!state->NamedExpr_frozen_type) return -1;
+    state->BinOp_frozen_type = make_frozen_type("ast.FrozenBinOp", state->BinOp_type, &BinOp_frozen_info, 7, BinOp_frozen_getsets);
+    if (!state->BinOp_frozen_type) return -1;
+    state->UnaryOp_frozen_type = make_frozen_type("ast.FrozenUnaryOp", state->UnaryOp_type, &UnaryOp_frozen_info, 6, UnaryOp_frozen_getsets);
+    if (!state->UnaryOp_frozen_type) return -1;
+    state->Lambda_frozen_type = make_frozen_type("ast.FrozenLambda", state->Lambda_type, &Lambda_frozen_info, 6, Lambda_frozen_getsets);
+    if (!state->Lambda_frozen_type) return -1;
+    state->IfExp_frozen_type = make_frozen_type("ast.FrozenIfExp", state->IfExp_type, &IfExp_frozen_info, 7, IfExp_frozen_getsets);
+    if (!state->IfExp_frozen_type) return -1;
+    state->Dict_frozen_type = make_frozen_type("ast.FrozenDict", state->Dict_type, &Dict_frozen_info, 6, Dict_frozen_getsets);
+    if (!state->Dict_frozen_type) return -1;
+    state->Set_frozen_type = make_frozen_type("ast.FrozenSet", state->Set_type, &Set_frozen_info, 5, Set_frozen_getsets);
+    if (!state->Set_frozen_type) return -1;
+    state->ListComp_frozen_type = make_frozen_type("ast.FrozenListComp", state->ListComp_type, &ListComp_frozen_info, 6, ListComp_frozen_getsets);
+    if (!state->ListComp_frozen_type) return -1;
+    state->SetComp_frozen_type = make_frozen_type("ast.FrozenSetComp", state->SetComp_type, &SetComp_frozen_info, 6, SetComp_frozen_getsets);
+    if (!state->SetComp_frozen_type) return -1;
+    state->DictComp_frozen_type = make_frozen_type("ast.FrozenDictComp", state->DictComp_type, &DictComp_frozen_info, 7, DictComp_frozen_getsets);
+    if (!state->DictComp_frozen_type) return -1;
+    state->GeneratorExp_frozen_type = make_frozen_type("ast.FrozenGeneratorExp", state->GeneratorExp_type, &GeneratorExp_frozen_info, 6, GeneratorExp_frozen_getsets);
+    if (!state->GeneratorExp_frozen_type) return -1;
+    state->Await_frozen_type = make_frozen_type("ast.FrozenAwait", state->Await_type, &Await_frozen_info, 5, Await_frozen_getsets);
+    if (!state->Await_frozen_type) return -1;
+    state->Yield_frozen_type = make_frozen_type("ast.FrozenYield", state->Yield_type, &Yield_frozen_info, 5, Yield_frozen_getsets);
+    if (!state->Yield_frozen_type) return -1;
+    state->YieldFrom_frozen_type = make_frozen_type("ast.FrozenYieldFrom", state->YieldFrom_type, &YieldFrom_frozen_info, 5, YieldFrom_frozen_getsets);
+    if (!state->YieldFrom_frozen_type) return -1;
+    state->Compare_frozen_type = make_frozen_type("ast.FrozenCompare", state->Compare_type, &Compare_frozen_info, 7, Compare_frozen_getsets);
+    if (!state->Compare_frozen_type) return -1;
+    state->Call_frozen_type = make_frozen_type("ast.FrozenCall", state->Call_type, &Call_frozen_info, 7, Call_frozen_getsets);
+    if (!state->Call_frozen_type) return -1;
+    state->FormattedValue_frozen_type = make_frozen_type("ast.FrozenFormattedValue", state->FormattedValue_type, &FormattedValue_frozen_info, 7, FormattedValue_frozen_getsets);
+    if (!state->FormattedValue_frozen_type) return -1;
+    state->Interpolation_frozen_type = make_frozen_type("ast.FrozenInterpolation", state->Interpolation_type, &Interpolation_frozen_info, 8, Interpolation_frozen_getsets);
+    if (!state->Interpolation_frozen_type) return -1;
+    state->JoinedStr_frozen_type = make_frozen_type("ast.FrozenJoinedStr", state->JoinedStr_type, &JoinedStr_frozen_info, 5, JoinedStr_frozen_getsets);
+    if (!state->JoinedStr_frozen_type) return -1;
+    state->TemplateStr_frozen_type = make_frozen_type("ast.FrozenTemplateStr", state->TemplateStr_type, &TemplateStr_frozen_info, 5, TemplateStr_frozen_getsets);
+    if (!state->TemplateStr_frozen_type) return -1;
+    state->Constant_frozen_type = make_frozen_type("ast.FrozenConstant", state->Constant_type, &Constant_frozen_info, 6, Constant_frozen_getsets);
+    if (!state->Constant_frozen_type) return -1;
+    state->Attribute_frozen_type = make_frozen_type("ast.FrozenAttribute", state->Attribute_type, &Attribute_frozen_info, 7, Attribute_frozen_getsets);
+    if (!state->Attribute_frozen_type) return -1;
+    state->Subscript_frozen_type = make_frozen_type("ast.FrozenSubscript", state->Subscript_type, &Subscript_frozen_info, 7, Subscript_frozen_getsets);
+    if (!state->Subscript_frozen_type) return -1;
+    state->Starred_frozen_type = make_frozen_type("ast.FrozenStarred", state->Starred_type, &Starred_frozen_info, 6, Starred_frozen_getsets);
+    if (!state->Starred_frozen_type) return -1;
+    state->Name_frozen_type = make_frozen_type("ast.FrozenName", state->Name_type, &Name_frozen_info, 6, Name_frozen_getsets);
+    if (!state->Name_frozen_type) return -1;
+    state->List_frozen_type = make_frozen_type("ast.FrozenList", state->List_type, &List_frozen_info, 6, List_frozen_getsets);
+    if (!state->List_frozen_type) return -1;
+    state->Tuple_frozen_type = make_frozen_type("ast.FrozenTuple", state->Tuple_type, &Tuple_frozen_info, 6, Tuple_frozen_getsets);
+    if (!state->Tuple_frozen_type) return -1;
+    state->Slice_frozen_type = make_frozen_type("ast.FrozenSlice", state->Slice_type, &Slice_frozen_info, 7, Slice_frozen_getsets);
+    if (!state->Slice_frozen_type) return -1;
+    state->expr_context_frozen_type = make_frozen_type("ast.Frozenexpr_context", state->expr_context_type, &expr_context_frozen_info, 0, NULL);
+    if (!state->expr_context_frozen_type) return -1;
+    state->Load_frozen_type = make_frozen_type("ast.FrozenLoad", state->Load_type, &Load_frozen_info, 0, NULL);
+    if (!state->Load_frozen_type) return -1;
+    state->Store_frozen_type = make_frozen_type("ast.FrozenStore", state->Store_type, &Store_frozen_info, 0, NULL);
+    if (!state->Store_frozen_type) return -1;
+    state->Del_frozen_type = make_frozen_type("ast.FrozenDel", state->Del_type, &Del_frozen_info, 0, NULL);
+    if (!state->Del_frozen_type) return -1;
+    state->boolop_frozen_type = make_frozen_type("ast.Frozenboolop", state->boolop_type, &boolop_frozen_info, 0, NULL);
+    if (!state->boolop_frozen_type) return -1;
+    state->And_frozen_type = make_frozen_type("ast.FrozenAnd", state->And_type, &And_frozen_info, 0, NULL);
+    if (!state->And_frozen_type) return -1;
+    state->Or_frozen_type = make_frozen_type("ast.FrozenOr", state->Or_type, &Or_frozen_info, 0, NULL);
+    if (!state->Or_frozen_type) return -1;
+    state->operator_frozen_type = make_frozen_type("ast.Frozenoperator", state->operator_type, &operator_frozen_info, 0, NULL);
+    if (!state->operator_frozen_type) return -1;
+    state->Add_frozen_type = make_frozen_type("ast.FrozenAdd", state->Add_type, &Add_frozen_info, 0, NULL);
+    if (!state->Add_frozen_type) return -1;
+    state->Sub_frozen_type = make_frozen_type("ast.FrozenSub", state->Sub_type, &Sub_frozen_info, 0, NULL);
+    if (!state->Sub_frozen_type) return -1;
+    state->Mult_frozen_type = make_frozen_type("ast.FrozenMult", state->Mult_type, &Mult_frozen_info, 0, NULL);
+    if (!state->Mult_frozen_type) return -1;
+    state->MatMult_frozen_type = make_frozen_type("ast.FrozenMatMult", state->MatMult_type, &MatMult_frozen_info, 0, NULL);
+    if (!state->MatMult_frozen_type) return -1;
+    state->Div_frozen_type = make_frozen_type("ast.FrozenDiv", state->Div_type, &Div_frozen_info, 0, NULL);
+    if (!state->Div_frozen_type) return -1;
+    state->Mod_frozen_type = make_frozen_type("ast.FrozenMod", state->Mod_type, &Mod_frozen_info, 0, NULL);
+    if (!state->Mod_frozen_type) return -1;
+    state->Pow_frozen_type = make_frozen_type("ast.FrozenPow", state->Pow_type, &Pow_frozen_info, 0, NULL);
+    if (!state->Pow_frozen_type) return -1;
+    state->LShift_frozen_type = make_frozen_type("ast.FrozenLShift", state->LShift_type, &LShift_frozen_info, 0, NULL);
+    if (!state->LShift_frozen_type) return -1;
+    state->RShift_frozen_type = make_frozen_type("ast.FrozenRShift", state->RShift_type, &RShift_frozen_info, 0, NULL);
+    if (!state->RShift_frozen_type) return -1;
+    state->BitOr_frozen_type = make_frozen_type("ast.FrozenBitOr", state->BitOr_type, &BitOr_frozen_info, 0, NULL);
+    if (!state->BitOr_frozen_type) return -1;
+    state->BitXor_frozen_type = make_frozen_type("ast.FrozenBitXor", state->BitXor_type, &BitXor_frozen_info, 0, NULL);
+    if (!state->BitXor_frozen_type) return -1;
+    state->BitAnd_frozen_type = make_frozen_type("ast.FrozenBitAnd", state->BitAnd_type, &BitAnd_frozen_info, 0, NULL);
+    if (!state->BitAnd_frozen_type) return -1;
+    state->FloorDiv_frozen_type = make_frozen_type("ast.FrozenFloorDiv", state->FloorDiv_type, &FloorDiv_frozen_info, 0, NULL);
+    if (!state->FloorDiv_frozen_type) return -1;
+    state->unaryop_frozen_type = make_frozen_type("ast.Frozenunaryop", state->unaryop_type, &unaryop_frozen_info, 0, NULL);
+    if (!state->unaryop_frozen_type) return -1;
+    state->Invert_frozen_type = make_frozen_type("ast.FrozenInvert", state->Invert_type, &Invert_frozen_info, 0, NULL);
+    if (!state->Invert_frozen_type) return -1;
+    state->Not_frozen_type = make_frozen_type("ast.FrozenNot", state->Not_type, &Not_frozen_info, 0, NULL);
+    if (!state->Not_frozen_type) return -1;
+    state->UAdd_frozen_type = make_frozen_type("ast.FrozenUAdd", state->UAdd_type, &UAdd_frozen_info, 0, NULL);
+    if (!state->UAdd_frozen_type) return -1;
+    state->USub_frozen_type = make_frozen_type("ast.FrozenUSub", state->USub_type, &USub_frozen_info, 0, NULL);
+    if (!state->USub_frozen_type) return -1;
+    state->cmpop_frozen_type = make_frozen_type("ast.Frozencmpop", state->cmpop_type, &cmpop_frozen_info, 0, NULL);
+    if (!state->cmpop_frozen_type) return -1;
+    state->Eq_frozen_type = make_frozen_type("ast.FrozenEq", state->Eq_type, &Eq_frozen_info, 0, NULL);
+    if (!state->Eq_frozen_type) return -1;
+    state->NotEq_frozen_type = make_frozen_type("ast.FrozenNotEq", state->NotEq_type, &NotEq_frozen_info, 0, NULL);
+    if (!state->NotEq_frozen_type) return -1;
+    state->Lt_frozen_type = make_frozen_type("ast.FrozenLt", state->Lt_type, &Lt_frozen_info, 0, NULL);
+    if (!state->Lt_frozen_type) return -1;
+    state->LtE_frozen_type = make_frozen_type("ast.FrozenLtE", state->LtE_type, &LtE_frozen_info, 0, NULL);
+    if (!state->LtE_frozen_type) return -1;
+    state->Gt_frozen_type = make_frozen_type("ast.FrozenGt", state->Gt_type, &Gt_frozen_info, 0, NULL);
+    if (!state->Gt_frozen_type) return -1;
+    state->GtE_frozen_type = make_frozen_type("ast.FrozenGtE", state->GtE_type, &GtE_frozen_info, 0, NULL);
+    if (!state->GtE_frozen_type) return -1;
+    state->Is_frozen_type = make_frozen_type("ast.FrozenIs", state->Is_type, &Is_frozen_info, 0, NULL);
+    if (!state->Is_frozen_type) return -1;
+    state->IsNot_frozen_type = make_frozen_type("ast.FrozenIsNot", state->IsNot_type, &IsNot_frozen_info, 0, NULL);
+    if (!state->IsNot_frozen_type) return -1;
+    state->In_frozen_type = make_frozen_type("ast.FrozenIn", state->In_type, &In_frozen_info, 0, NULL);
+    if (!state->In_frozen_type) return -1;
+    state->NotIn_frozen_type = make_frozen_type("ast.FrozenNotIn", state->NotIn_type, &NotIn_frozen_info, 0, NULL);
+    if (!state->NotIn_frozen_type) return -1;
+    state->comprehension_frozen_type = make_frozen_type("ast.Frozencomprehension", state->comprehension_type, &comprehension_frozen_info, 4, comprehension_frozen_getsets);
+    if (!state->comprehension_frozen_type) return -1;
+    state->excepthandler_frozen_type = make_frozen_type("ast.Frozenexcepthandler", state->excepthandler_type, &excepthandler_frozen_info, 4, excepthandler_frozen_getsets);
+    if (!state->excepthandler_frozen_type) return -1;
+    state->ExceptHandler_frozen_type = make_frozen_type("ast.FrozenExceptHandler", state->ExceptHandler_type, &ExceptHandler_frozen_info, 7, ExceptHandler_frozen_getsets);
+    if (!state->ExceptHandler_frozen_type) return -1;
+    state->arguments_frozen_type = make_frozen_type("ast.Frozenarguments", state->arguments_type, &arguments_frozen_info, 7, arguments_frozen_getsets);
+    if (!state->arguments_frozen_type) return -1;
+    state->arg_frozen_type = make_frozen_type("ast.Frozenarg", state->arg_type, &arg_frozen_info, 7, arg_frozen_getsets);
+    if (!state->arg_frozen_type) return -1;
+    state->keyword_frozen_type = make_frozen_type("ast.Frozenkeyword", state->keyword_type, &keyword_frozen_info, 6, keyword_frozen_getsets);
+    if (!state->keyword_frozen_type) return -1;
+    state->alias_frozen_type = make_frozen_type("ast.Frozenalias", state->alias_type, &alias_frozen_info, 6, alias_frozen_getsets);
+    if (!state->alias_frozen_type) return -1;
+    state->withitem_frozen_type = make_frozen_type("ast.Frozenwithitem", state->withitem_type, &withitem_frozen_info, 2, withitem_frozen_getsets);
+    if (!state->withitem_frozen_type) return -1;
+    state->match_case_frozen_type = make_frozen_type("ast.Frozenmatch_case", state->match_case_type, &match_case_frozen_info, 3, match_case_frozen_getsets);
+    if (!state->match_case_frozen_type) return -1;
+    state->pattern_frozen_type = make_frozen_type("ast.Frozenpattern", state->pattern_type, &pattern_frozen_info, 4, pattern_frozen_getsets);
+    if (!state->pattern_frozen_type) return -1;
+    state->MatchValue_frozen_type = make_frozen_type("ast.FrozenMatchValue", state->MatchValue_type, &MatchValue_frozen_info, 5, MatchValue_frozen_getsets);
+    if (!state->MatchValue_frozen_type) return -1;
+    state->MatchSingleton_frozen_type = make_frozen_type("ast.FrozenMatchSingleton", state->MatchSingleton_type, &MatchSingleton_frozen_info, 5, MatchSingleton_frozen_getsets);
+    if (!state->MatchSingleton_frozen_type) return -1;
+    state->MatchSequence_frozen_type = make_frozen_type("ast.FrozenMatchSequence", state->MatchSequence_type, &MatchSequence_frozen_info, 5, MatchSequence_frozen_getsets);
+    if (!state->MatchSequence_frozen_type) return -1;
+    state->MatchMapping_frozen_type = make_frozen_type("ast.FrozenMatchMapping", state->MatchMapping_type, &MatchMapping_frozen_info, 7, MatchMapping_frozen_getsets);
+    if (!state->MatchMapping_frozen_type) return -1;
+    state->MatchClass_frozen_type = make_frozen_type("ast.FrozenMatchClass", state->MatchClass_type, &MatchClass_frozen_info, 8, MatchClass_frozen_getsets);
+    if (!state->MatchClass_frozen_type) return -1;
+    state->MatchStar_frozen_type = make_frozen_type("ast.FrozenMatchStar", state->MatchStar_type, &MatchStar_frozen_info, 5, MatchStar_frozen_getsets);
+    if (!state->MatchStar_frozen_type) return -1;
+    state->MatchAs_frozen_type = make_frozen_type("ast.FrozenMatchAs", state->MatchAs_type, &MatchAs_frozen_info, 6, MatchAs_frozen_getsets);
+    if (!state->MatchAs_frozen_type) return -1;
+    state->MatchOr_frozen_type = make_frozen_type("ast.FrozenMatchOr", state->MatchOr_type, &MatchOr_frozen_info, 5, MatchOr_frozen_getsets);
+    if (!state->MatchOr_frozen_type) return -1;
+    state->type_ignore_frozen_type = make_frozen_type("ast.Frozentype_ignore", state->type_ignore_type, &type_ignore_frozen_info, 0, NULL);
+    if (!state->type_ignore_frozen_type) return -1;
+    state->TypeIgnore_frozen_type = make_frozen_type("ast.FrozenTypeIgnore", state->TypeIgnore_type, &TypeIgnore_frozen_info, 2, TypeIgnore_frozen_getsets);
+    if (!state->TypeIgnore_frozen_type) return -1;
+    state->type_param_frozen_type = make_frozen_type("ast.Frozentype_param", state->type_param_type, &type_param_frozen_info, 4, type_param_frozen_getsets);
+    if (!state->type_param_frozen_type) return -1;
+    state->TypeVar_frozen_type = make_frozen_type("ast.FrozenTypeVar", state->TypeVar_type, &TypeVar_frozen_info, 7, TypeVar_frozen_getsets);
+    if (!state->TypeVar_frozen_type) return -1;
+    state->ParamSpec_frozen_type = make_frozen_type("ast.FrozenParamSpec", state->ParamSpec_type, &ParamSpec_frozen_info, 6, ParamSpec_frozen_getsets);
+    if (!state->ParamSpec_frozen_type) return -1;
+    state->TypeVarTuple_frozen_type = make_frozen_type("ast.FrozenTypeVarTuple", state->TypeVarTuple_type, &TypeVarTuple_frozen_info, 6, TypeVarTuple_frozen_getsets);
+    if (!state->TypeVarTuple_frozen_type) return -1;
+    return 0;
+}
+PyObject *
+_PyAST_mod2obj_frozen(mod_ty t)
+{
+    if (t == NULL) {
+        PyErr_SetString(PyExc_ValueError, "AST must not be NULL");
+        return NULL;
+    }
+    struct ast_state *state = get_ast_state();
+    if (state == NULL) {
+        return NULL;
+    }
+    if (_PyOnceFlag_CallOnce(&state->frozen_once,
+                             (_Py_once_fn_t *)init_frozen_types, state) < 0) {
+        return NULL;
+    }
+    return frozen_ast2obj_mod(state, t);
+}
 
 int
 obj2ast_mod(struct ast_state *state, PyObject* obj, mod_ty* out, const char*
@@ -19466,7 +25256,7 @@ _PyAST_FromAnnotationString(PyArena *arena, PyObject *data,
         error_msg = "constructing annotation";
         goto parsing_err;
     }
-    PyObject *out = PyAST_mod2obj(mod_ast);
+    PyObject *out = _PyAST_mod2obj_frozen(mod_ast);
     if (!out) {
         error_msg = "constructing annotation object";
         goto parsing_err;
