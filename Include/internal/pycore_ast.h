@@ -942,7 +942,7 @@ extern PyObject* _PyAST_ExprAsUnicode(expr_ty);
 extern PyObject* _PyAST_GetAnnotationAST(expr_ty, int);
 
 extern PyObject* _PyAST_FromAnnotationString(
-    PyArena *, PyObject *, PyObject *, PyObject *);
+    PyObject *, PyObject *, PyObject *);
 extern PyObject* _PyAST_FromAnnotationData(
     PyObject *, PyObject *, PyObject *);
 

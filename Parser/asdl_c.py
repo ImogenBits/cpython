@@ -854,37 +854,32 @@ typedef struct FrozenTypeInfo FrozenTypeInfo;
 
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
 } AST_object;
 
 static void
 ast_dealloc(PyObject *op)
 {
-    AST_object *self = (AST_object*)op;
     /* bpo-31095: UnTrack is needed before calling any callbacks */
-    PyTypeObject *tp = Py_TYPE(self);
-    PyObject_GC_UnTrack(self);
-    Py_CLEAR(self->dict);
+    PyTypeObject *tp = Py_TYPE(op);
+    PyObject_GC_UnTrack(op);
+    PyObject_ClearManagedDict(op);
     freefunc free_func = PyType_GetSlot(tp, Py_tp_free);
     assert(free_func != NULL);
-    free_func(self);
+    free_func(op);
     Py_DECREF(tp);
 }
 
 static int
 ast_traverse(PyObject *op, visitproc visit, void *arg)
 {
-    AST_object *self = (AST_object*)op;
-    Py_VISIT(Py_TYPE(self));
-    Py_VISIT(self->dict);
-    return 0;
+    Py_VISIT(Py_TYPE(op));
+    return PyObject_VisitManagedDict(op, visit, arg);
 }
 
 static int
 ast_clear(PyObject *op)
 {
-    AST_object *self = (AST_object*)op;
-    Py_CLEAR(self->dict);
+    PyObject_ClearManagedDict(op);
     return 0;
 }
 
@@ -893,28 +888,34 @@ typedef PyObject *(*frozen_field_converter)(struct ast_state *, void *);
 typedef struct {
     Py_ssize_t index;
     frozen_field_converter convert;
+    const char *name;
 } FrozenFieldInfo;
 
 struct FrozenTypeInfo {
     Py_ssize_t ncache;
-    PyGetSetDef *getsets;
+    FrozenFieldInfo *fields;
 };
 
 typedef struct {
     AST_object base;
-    FrozenTypeInfo *type_info;
     PyObject *fields[1];
 } FrozenASTObject;
 
 static int init_frozen_types(struct ast_state *state);
+
+static Py_ssize_t
+frozen_field_count(PyObject *op)
+{
+    return (Py_TYPE(op)->tp_basicsize -
+            offsetof(FrozenASTObject, fields)) / sizeof(PyObject *);
+}
 
 static int
 frozen_traverse(PyObject *op, visitproc visit, void *arg)
 {
     FrozenASTObject *self = (FrozenASTObject *)op;
     Py_VISIT(Py_TYPE(op));
-    Py_VISIT(self->base.dict);
-    for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+    for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
         Py_VISIT(self->fields[i]);
     }
     return 0;
@@ -924,8 +925,7 @@ static int
 frozen_clear(PyObject *op)
 {
     FrozenASTObject *self = (FrozenASTObject *)op;
-    Py_CLEAR(self->base.dict);
-    for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
+    for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
         Py_CLEAR(self->fields[i]);
     }
     return 0;
@@ -948,75 +948,44 @@ frozen_field_get(PyObject *op, void *closure)
 {
     FrozenASTObject *self = (FrozenASTObject *)op;
     FrozenFieldInfo *field = closure;
-    if (self->base.dict != NULL) {
-        PyObject *value = PyDict_GetItemString(
-            self->base.dict, self->type_info->getsets[field->index].name);
-        if (value != NULL) {
-            return Py_NewRef(value);
-        }
-        PyErr_Format(PyExc_AttributeError, "%s has no attribute '%s'",
-                     _PyType_Name(Py_TYPE(op)),
-                     self->type_info->getsets[field->index].name);
-        return NULL;
-    }
     PyObject *value = self->fields[field->index];
     if (value == NULL) {
         PyErr_Format(PyExc_AttributeError, "%s has no attribute '%s'",
                      _PyType_Name(Py_TYPE(op)),
-                     self->type_info->getsets[field->index].name);
+                     field->name);
         return NULL;
     }
     return Py_NewRef(value);
 }
 
-static PyObject *
-frozen_getattro(PyObject *op, PyObject *name)
+static int
+frozen_field_set(PyObject *op, PyObject *value, void *closure)
 {
     FrozenASTObject *self = (FrozenASTObject *)op;
-    PyObject *descr = _PyType_LookupRef(Py_TYPE(op), name);
-    if (descr == NULL && PyErr_Occurred()) {
-        return NULL;
-    }
-    int is_data = descr != NULL && PyDescr_IsData(descr);
-    Py_XDECREF(descr);
-    if (is_data &&
-        !_PyUnicode_EqualToASCIIString(name, "__dict__")) {
-        return PyObject_GenericGetAttr(op, name);
-    }
-    if (_PyUnicode_EqualToASCIIString(name, "__dict__")) {
-        if (self->base.dict == NULL) {
-            PyObject *dict = PyDict_New();
-            if (dict == NULL) {
-                return NULL;
-            }
-            for (Py_ssize_t i = 0; i < self->type_info->ncache; i++) {
-                PyGetSetDef *field = &self->type_info->getsets[i];
-                if (self->fields[i] != NULL &&
-                    PyDict_SetItemString(dict, field->name,
-                                         self->fields[i]) < 0) {
-                    Py_DECREF(dict);
-                    return NULL;
-                }
-            }
-            self->base.dict = dict;
-        }
-        return Py_NewRef(self->base.dict);
-    }
-    if (self->type_info->getsets != NULL) {
-        for (PyGetSetDef *field = self->type_info->getsets;
-             field->name != NULL; field++) {
-            if (_PyUnicode_EqualToASCIIString(name, field->name)) {
-                return frozen_field_get(op, field->closure);
-            }
-        }
-    }
-    return PyObject_GenericGetAttr(op, name);
+    FrozenFieldInfo *field = closure;
+    Py_XSETREF(self->fields[field->index], Py_XNewRef(value));
+    return 0;
+}
+
+static PyObject *
+frozen_no_dict(PyObject *op, void *closure)
+{
+    PyErr_SetString(PyExc_AttributeError,
+                    "frozen AST objects do not have an instance dictionary");
+    return NULL;
+}
+
+static int
+frozen_set_dict(PyObject *op, PyObject *value, void *closure)
+{
+    PyErr_SetString(PyExc_AttributeError,
+                    "frozen AST objects do not have an instance dictionary");
+    return -1;
 }
 
 static int
 frozen_setattro(PyObject *op, PyObject *name, PyObject *value)
 {
-    FrozenASTObject *self = (FrozenASTObject *)op;
     PyObject *descr = _PyType_LookupRef(Py_TYPE(op), name);
     if (descr == NULL && PyErr_Occurred()) {
         return -1;
@@ -1026,29 +995,9 @@ frozen_setattro(PyObject *op, PyObject *name, PyObject *value)
     if (is_data) {
         return PyObject_GenericSetAttr(op, name, value);
     }
-    if (self->type_info->getsets != NULL) {
-        for (PyGetSetDef *field = self->type_info->getsets;
-             field->name != NULL; field++) {
-            if (_PyUnicode_EqualToASCIIString(name, field->name)) {
-                FrozenFieldInfo *info = field->closure;
-                if (self->base.dict != NULL) {
-                    if (value == NULL) {
-                        if (PyDict_DelItemString(self->base.dict,
-                                                 field->name) < 0) {
-                            return -1;
-                        }
-                    }
-                    else if (PyDict_SetItemString(self->base.dict,
-                                                  field->name, value) < 0) {
-                        return -1;
-                    }
-                }
-                Py_XSETREF(self->fields[info->index], Py_XNewRef(value));
-                return 0;
-            }
-        }
-    }
-    return PyObject_GenericSetAttr(op, name, value);
+    PyErr_Format(PyExc_AttributeError, "'%.100s' object has no attribute '%U'",
+                 _PyType_Name(Py_TYPE(op)), name);
+    return -1;
 }
 
 /*
@@ -1525,7 +1474,6 @@ cleanup:
 }
 
 static PyMemberDef ast_type_members[] = {
-    {"__dictoffset__", Py_T_PYSSIZET, offsetof(AST_object, dict), Py_READONLY},
     {NULL}  /* Sentinel */
 };
 
@@ -1788,7 +1736,8 @@ static PyType_Spec AST_type_spec = {
     "ast.AST",
     sizeof(AST_object),
     0,
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC |
+        Py_TPFLAGS_MANAGED_DICT,
     AST_type_slots
 };
 
@@ -2299,50 +2248,11 @@ ann_ast_set_store_context(expr_ty expr)
             self.visit(value, name)
         self.emit("""
 PyObject *
-_PyAST_FromAnnotationString(PyArena *arena, PyObject *data,
-                            PyObject *private_name, PyObject *mangled_names)
+_PyAST_FromAnnotationString(PyObject *data, PyObject *private_name,
+                            PyObject *mangled_names)
 {
-    if (!data || !PyUnicode_CheckExact(data)) {
-        PyErr_SetString(PyExc_TypeError, "expected a string for data");
-        return NULL;
-    }
-    Py_ssize_t pos = 0;
-    char *error_msg = NULL;
-    expr_ty expr_ast;
-    if (ann_ast_expr(data, &pos, &expr_ast, arena, private_name,
-                     mangled_names) < 0) {
-        error_msg = "parsing annotation expression";
-        goto parsing_err;
-    }
-    mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
-    if (!mod_ast) {
-        error_msg = "constructing annotation";
-        goto parsing_err;
-    }
-    PyObject *out = _PyAST_mod2obj_frozen(mod_ast);
-    if (!out) {
-        error_msg = "constructing annotation object";
-        goto parsing_err;
-    }
-    if (pos != PyUnicode_GET_LENGTH(data)) {
-        PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
-        return NULL;
-    }
-    return out;
-parsing_err:
-    if (!PyErr_Occurred()) {
-        PyObject *repr = PyObject_Repr(data);
-        if (!repr) {
-            PyErr_Format(PyExc_RuntimeError,
-                         "error %s binary AST data", error_msg);
-        }
-        else {
-            PyErr_Format(PyExc_RuntimeError,
-                         "error %s binary AST data: %s",
-                         error_msg, PyUnicode_AsUTF8(repr));
-            Py_DECREF(repr);
-        }
-    }
+    PyErr_SetString(PyExc_RuntimeError,
+                    "the legacy annotation decoder must not be used");
     return NULL;
 }
 """.strip(), 0, reflow=False)
@@ -2672,6 +2582,467 @@ parsing_err:
         return [defaults.get(field.name, "0") for field in attributes]
 
 
+class DirectAnnotationDecoderVisitor(EmitVisitor):
+    """Generate annotation decoders that build frozen Python AST nodes."""
+
+    RAW_ENUMS = {"boolop", "operator", "unaryop"}
+    SKIPPED_FIELDS = {"ctx", "kind"}
+
+    def visitModule(self, mod):
+        self.types = mod.types
+        self.reachable = set()
+        self.builtin_types = set()
+        self.sequences = set()
+        self.optional_types = set()
+        self.visit_type("expr")
+
+        self.emit("""
+static Py_UCS1 ann_ast_next(PyObject *data, Py_ssize_t *pos)
+{
+    if (*pos >= PyUnicode_GET_LENGTH(data)) return 0xFF;
+    return PyUnicode_1BYTE_DATA(data)[(*pos)++];
+}
+
+static int ann_ast_size_t(PyObject *data, Py_ssize_t *pos, Py_ssize_t *out)
+{
+    Py_ssize_t value = 0;
+    size_t shift = 0;
+    Py_UCS1 byte;
+    do {
+        byte = ann_ast_next(data, pos);
+        if (byte == 0xFF || shift >= 8 * sizeof(Py_ssize_t)) return -1;
+        value |= (Py_ssize_t)(byte & 0x3F) << shift;
+        shift += 6;
+    } while (byte & 0x40);
+    *out = value;
+    return 0;
+}
+
+static int ann_ast_double(PyObject *data, Py_ssize_t *pos, double *out)
+{
+    if (*pos < 0 || *pos + 10 > PyUnicode_GET_LENGTH(data)) return -1;
+    unsigned long long bits = 0;
+    for (size_t i = 0; i < 10; i++) {
+        Py_UCS1 byte = ann_ast_next(data, pos);
+        if (byte == 0xFF) return -1;
+        bits |= (unsigned long long)(byte & 0x7F) << (7 * i);
+    }
+    memcpy(out, &bits, sizeof(bits));
+    return 0;
+}
+
+static PyObject *ann_ast_read_string(PyObject *data, Py_ssize_t *pos, int bytes)
+{
+    Py_ssize_t len;
+    if (ann_ast_size_t(data, pos, &len) < 0 || len < 0 ||
+        *pos < 0 || *pos + len > PyUnicode_GET_LENGTH(data)) return NULL;
+    const char *text = (char *)PyUnicode_1BYTE_DATA(data) + *pos;
+    PyObject *result = bytes ? PyBytes_FromStringAndSize(text, len) :
+                               PyUnicode_FromStringAndSize(text, len);
+    if (result != NULL) *pos += len;
+    return result;
+}
+
+static PyObject *ann_ast_constant_kind(PyObject *data, Py_ssize_t *pos,
+                                       Py_UCS1 kind)
+{
+    switch (kind - Slice_kind - 2) {
+        case 0: return Py_NewRef(Py_None);
+        case 1: return ann_ast_read_string(data, pos, 0);
+        case 2: return ann_ast_read_string(data, pos, 1);
+        case 3: {
+            Py_ssize_t value;
+            if (ann_ast_size_t(data, pos, &value) < 0) return NULL;
+            return PyLong_FromSsize_t(value);
+        }
+        case 4: {
+            double value;
+            if (ann_ast_double(data, pos, &value) < 0) return NULL;
+            return PyFloat_FromDouble(value);
+        }
+        case 5: {
+            double real, imag;
+            if (ann_ast_double(data, pos, &real) < 0 ||
+                ann_ast_double(data, pos, &imag) < 0) return NULL;
+            return PyComplex_FromDoubles(real, imag);
+        }
+        case 6: return Py_NewRef(Py_False);
+        case 7: return Py_NewRef(Py_True);
+        case 8: return Py_NewRef(Py_None);
+        case 9: return Py_NewRef(Py_Ellipsis);
+        default: return NULL;
+    }
+}
+
+static int ann_ast_set_store_context(struct ast_state *state, PyObject *node)
+{
+    if (PyObject_TypeCheck(node, (PyTypeObject *)state->Name_type) ||
+        PyObject_TypeCheck(node, (PyTypeObject *)state->Attribute_type) ||
+        PyObject_TypeCheck(node, (PyTypeObject *)state->Subscript_type) ||
+        PyObject_TypeCheck(node, (PyTypeObject *)state->Starred_type) ||
+        PyObject_TypeCheck(node, (PyTypeObject *)state->List_type) ||
+        PyObject_TypeCheck(node, (PyTypeObject *)state->Tuple_type)) {
+        if (PyObject_SetAttrString(node, "ctx", state->Store_singleton) < 0) {
+            return -1;
+        }
+    }
+    if (PyObject_TypeCheck(node, (PyTypeObject *)state->Starred_type)) {
+        PyObject *value = PyObject_GetAttrString(node, "value");
+        if (value == NULL) return -1;
+        int result = ann_ast_set_store_context(state, value);
+        Py_DECREF(value);
+        return result;
+    }
+    if (PyObject_TypeCheck(node, (PyTypeObject *)state->List_type) ||
+        PyObject_TypeCheck(node, (PyTypeObject *)state->Tuple_type)) {
+        PyObject *elts = PyObject_GetAttrString(node, "elts");
+        if (elts == NULL) return -1;
+        Py_ssize_t n = PyList_Check(elts) ? PyList_GET_SIZE(elts) :
+                                           PyTuple_GET_SIZE(elts);
+        for (Py_ssize_t i = 0; i < n; i++) {
+            PyObject *item = PyList_Check(elts) ? PyList_GET_ITEM(elts, i) :
+                                                  PyTuple_GET_ITEM(elts, i);
+            if (ann_ast_set_store_context(state, item) < 0) {
+                Py_DECREF(elts);
+                return -1;
+            }
+        }
+        Py_DECREF(elts);
+    }
+    return 0;
+}
+""".strip(), 0, reflow=False)
+
+        for name in sorted(self.builtin_types):
+            self.emit_builtin(name)
+        for name in sorted(self.reachable):
+            self.emit_decoder_prototype(name)
+        for name in sorted(self.optional_types):
+            self.emit_optional_prototype(name)
+        for name, nullable in sorted(self.sequences):
+            self.emit_sequence_prototype(name, nullable)
+        for name in sorted(self.optional_types):
+            self.emit_optional(name)
+        for name, nullable in sorted(self.sequences):
+            self.emit_sequence(name, nullable)
+        for name in sorted(self.reachable):
+            if isinstance(self.types[name], asdl.Sum) and not is_simple(self.types[name]):
+                for cons in self.types[name].types:
+                    if not (name == "expr" and cons.name == "Constant"):
+                        self.emit_constructor_prototype(cons.name)
+                if name == "expr":
+                    self.emit("static PyObject *ann_ast_constant_node("
+                              "struct ast_state *, PyObject *, Py_ssize_t *, Py_UCS1);", 0)
+        for name in sorted(self.reachable):
+            self.visit(self.types[name], name)
+
+        self.emit("""
+PyObject *
+_PyAST_FromAnnotationString(PyObject *data, PyObject *private_name,
+                            PyObject *mangled_names)
+{
+    if (!data || !PyUnicode_CheckExact(data)) {
+        PyErr_SetString(PyExc_TypeError, "expected a string for data");
+        return NULL;
+    }
+    struct ast_state *state = get_ast_state();
+    if (state == NULL ||
+        _PyOnceFlag_CallOnce(&state->frozen_once,
+                             (_Py_once_fn_t *)init_frozen_types, state) < 0) {
+        return NULL;
+    }
+    Py_ssize_t pos = 0;
+    PyObject *body = ann_ast_expr(state, data, &pos, private_name,
+                                  mangled_names);
+    if (body == NULL) goto parsing_err;
+    if (pos != PyUnicode_GET_LENGTH(data)) {
+        Py_DECREF(body);
+        PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
+        return NULL;
+    }
+    PyObject *values[1] = {body};
+    PyObject *result = frozen_new_node_values(
+        state->Expression_frozen_type, &Expression_frozen_info, values);
+    if (result == NULL) {
+        Py_XDECREF(values[0]);
+        goto parsing_err;
+    }
+    return result;
+parsing_err:
+    if (!PyErr_Occurred()) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "error parsing annotation expression");
+    }
+    return NULL;
+}
+""".strip(), 0, reflow=False)
+
+    def visit_type(self, name):
+        if name in asdl.builtin_types:
+            self.builtin_types.add(name)
+            return
+        if name in self.reachable or name not in self.types:
+            return
+        self.reachable.add(name)
+        value = self.types[name]
+        fields = []
+        if isinstance(value, asdl.Sum):
+            if not is_simple(value):
+                for cons in value.types:
+                    fields.extend(cons.fields)
+        elif isinstance(value, asdl.Product):
+            fields.extend(value.fields)
+        for field in fields:
+            if field.name in self.SKIPPED_FIELDS:
+                continue
+            if field.seq:
+                nullable = (len(field.quantifiers) > 1 and
+                            field.quantifiers[-2] is asdl.Quantifier.OPTIONAL)
+                self.sequences.add((field.type, nullable))
+                if nullable:
+                    self.optional_types.add(field.type)
+            elif field.opt and field.type not in {"constant", "int"}:
+                self.optional_types.add(field.type)
+            self.visit_type(field.type)
+
+    def emit_decoder_prototype(self, name):
+        self.emit("static PyObject *ann_ast_%s(struct ast_state *, PyObject *, "
+                  "Py_ssize_t *, PyObject *, PyObject *);" % name, 0)
+
+    def emit_constructor_prototype(self, name):
+        self.emit("static PyObject *ann_ast_construct_%s(struct ast_state *, "
+                  "PyObject *, Py_ssize_t *, PyObject *, PyObject *);" % name, 0)
+
+    def emit_optional_prototype(self, name):
+        self.emit("static PyObject *ann_ast_%s_opt(struct ast_state *, "
+                  "PyObject *, Py_ssize_t *, PyObject *, PyObject *);" % name, 0)
+
+    def emit_sequence_prototype(self, name, nullable):
+        self.emit("static PyObject *ann_ast_%s_seq%s(struct ast_state *, "
+                  "PyObject *, Py_ssize_t *, PyObject *, PyObject *);" %
+                  (name, "_opt" if nullable else ""), 0)
+
+    def emit_builtin(self, name):
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_%s(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, PyObject *private_name, "
+                  "PyObject *mangled_names)" % name, 0)
+        self.emit("{", 0)
+        if name in {"string", "identifier"}:
+            self.emit("return ann_ast_read_string(data, pos, 0);", 1)
+        elif name == "constant":
+            self.emit("Py_UCS1 kind = ann_ast_next(data, pos);", 1)
+            self.emit("if (kind == 0xFF) return NULL;", 1)
+            self.emit("return ann_ast_constant_kind(data, pos, kind);", 1)
+        elif name == "int":
+            self.emit("Py_ssize_t encoded;", 1)
+            self.emit("if (ann_ast_size_t(data, pos, &encoded) < 0 || encoded < 0) return NULL;", 1)
+            self.emit("Py_ssize_t value = encoded & 1 ? -(encoded >> 1) - 1 : encoded >> 1;", 1)
+            self.emit("if (value < INT_MIN || value > INT_MAX) return NULL;", 1)
+            self.emit("return PyLong_FromLong((long)value);", 1)
+        self.emit("}", 0)
+
+    def visitSum(self, sum, name):
+        if is_simple(sum):
+            self.emit_simple_sum(sum, name)
+            return
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_%s(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, PyObject *private_name, "
+                  "PyObject *mangled_names)" % name, 0)
+        self.emit("{", 0)
+        self.emit("Py_UCS1 kind = ann_ast_next(data, pos);", 1)
+        self.emit("if (kind == 0xFF) return NULL;", 1)
+        self.emit("if (kind == 0) return Py_NewRef(Py_None);", 1)
+        self.emit('if (Py_EnterRecursiveCall(" during ast construction")) return NULL;', 1)
+        self.emit("PyObject *result = NULL;", 1)
+        self.emit("switch (kind) {", 1)
+        for cons in sum.types:
+            if name == "expr" and cons.name == "Constant":
+                continue
+            self.emit("case %s_kind: result = ann_ast_construct_%s("
+                      "state, data, pos, private_name, mangled_names); break;" %
+                      (cons.name, cons.name), 2, reflow=False)
+        if name == "expr":
+            for offset in range(10):
+                self.emit("case Slice_kind + %d: result = ann_ast_constant_node("
+                          "state, data, pos, kind); break;" % (offset + 2), 2)
+        self.emit('default: PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data"); break;',
+                  2, reflow=False)
+        self.emit("}", 1)
+        self.emit("Py_LeaveRecursiveCall();", 1)
+        self.emit("return result;", 1)
+        self.emit("}", 0)
+        for cons in sum.types:
+            if not (name == "expr" and cons.name == "Constant"):
+                self.emit_constructor(cons, name)
+        if name == "expr":
+            self.emit_constant_constructor()
+
+    def emit_simple_sum(self, sum, name):
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_%s(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, PyObject *private_name, "
+                  "PyObject *mangled_names)" % name, 0)
+        self.emit("{", 0)
+        if name in self.RAW_ENUMS:
+            self.emit("Py_ssize_t value = ann_ast_next(data, pos);", 1)
+            self.emit("if (value == 0xFF) return NULL;", 1)
+        else:
+            self.emit("Py_ssize_t value;", 1)
+            self.emit("if (ann_ast_size_t(data, pos, &value) < 0) return NULL;", 1)
+        self.emit("switch (value) {", 1)
+        for i, cons in enumerate(sum.types):
+            self.emit("case %d: return Py_NewRef(state->%s_singleton);" %
+                      (i + 1, cons.name), 2)
+        self.emit('default: PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data"); return NULL;',
+                  2, reflow=False)
+        self.emit("}", 1)
+        self.emit("}", 0)
+
+    def emit_constructor(self, cons, sum_name):
+        fields = list(self.types[sum_name].attributes) + list(cons.fields)
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_construct_%s(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, PyObject *private_name, "
+                  "PyObject *mangled_names)" % cons.name, 0)
+        self.emit("{", 0)
+        self.emit_values_init(fields)
+        for field in cons.fields:
+            if field.name not in self.SKIPPED_FIELDS:
+                self.emit_decode_field(field, fields)
+        if cons.name in {"Name", "Attribute"}:
+            field_name = "id" if cons.name == "Name" else "attr"
+            index = next(i for i, f in enumerate(fields) if f.name == field_name)
+            self.emit_mangle(index)
+        self.emit_finish_node(cons.name, fields)
+        self.emit("}", 0)
+
+    def visitProduct(self, product, name):
+        fields = list(product.attributes) + list(product.fields)
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_%s(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, PyObject *private_name, "
+                  "PyObject *mangled_names)" % name, 0)
+        self.emit("{", 0)
+        self.emit_values_init(fields)
+        for field in product.fields:
+            if field.name not in self.SKIPPED_FIELDS:
+                self.emit_decode_field(field, fields)
+        self.emit_finish_node(name, fields)
+        self.emit("}", 0)
+
+    def emit_values_init(self, fields):
+        self.emit("PyObject *values[%d] = {0};" % max(1, len(fields)), 1)
+        for i, field in enumerate(fields):
+            if field.name == "ctx":
+                expression = "Py_NewRef(state->Load_singleton)"
+            elif field.name == "kind":
+                expression = "Py_NewRef(Py_None)"
+            elif field.name in {"lineno", "end_lineno"}:
+                expression = "PyLong_FromLong(1)"
+            elif field.name in {"col_offset", "end_col_offset"}:
+                expression = "PyLong_FromLong(0)"
+            else:
+                continue
+            self.emit("values[%d] = %s;" % (i, expression), 1)
+            self.emit("if (values[%d] == NULL) goto failed;" % i, 1)
+
+    def emit_decode_field(self, field, all_fields):
+        index = next(i for i, f in enumerate(all_fields) if f.name == field.name)
+        seq_optional = (field.seq and len(field.quantifiers) > 1 and
+                        field.quantifiers[-2] is asdl.Quantifier.OPTIONAL)
+        nullable = field.opt and not field.seq and field.type not in {"constant", "int"}
+        suffix = "_seq_opt" if seq_optional else "_seq" if field.seq else "_opt" if nullable else ""
+        self.emit("values[%d] = ann_ast_%s(state, data, pos, private_name, "
+                  "mangled_names);" % (index, field.type + suffix), 1)
+        self.emit("if (values[%d] == NULL) goto failed;" % index, 1)
+        if field.name == "target" and field.type == "expr":
+            self.emit("if (ann_ast_set_store_context(state, values[%d]) < 0) goto failed;" %
+                      index, 1)
+
+    def emit_mangle(self, index):
+        self.emit("if (private_name != NULL && private_name != Py_None &&", 1)
+        self.emit("    mangled_names != NULL && mangled_names != Py_None) {", 1)
+        self.emit("int contains = PySet_Contains(mangled_names, values[%d]);" % index, 2)
+        self.emit("if (contains < 0) goto failed;", 2)
+        self.emit("if (contains) {", 2)
+        self.emit("PyObject *mangled = _Py_Mangle(private_name, values[%d]);" % index, 3)
+        self.emit("if (mangled == NULL) goto failed;", 3)
+        self.emit("Py_SETREF(values[%d], mangled);" % index, 3)
+        self.emit("}", 2)
+        self.emit("}", 1)
+
+    def emit_finish_node(self, name, fields):
+        self.emit("PyObject *result = frozen_new_node_values("
+                  "state->%s_frozen_type, &%s_frozen_info, values);" %
+                  (name, name), 1)
+        self.emit("if (result == NULL) goto failed;", 1)
+        self.emit("return result;", 1)
+        self.emit("failed:", 1)
+        for i in range(len(fields)):
+            self.emit("Py_XDECREF(values[%d]);" % i, 2)
+        self.emit("return NULL;", 1)
+
+    def emit_constant_constructor(self):
+        cons = next(c for c in self.types["expr"].types if c.name == "Constant")
+        fields = list(self.types["expr"].attributes) + list(cons.fields)
+        value_index = next(i for i, field in enumerate(fields) if field.name == "value")
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_constant_node(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, Py_UCS1 kind)", 0)
+        self.emit("{", 0)
+        self.emit_values_init(fields)
+        self.emit("values[%d] = ann_ast_constant_kind(data, pos, kind);" %
+                  value_index, 1)
+        self.emit("if (values[%d] == NULL) goto failed;" % value_index, 1)
+        self.emit_finish_node("Constant", fields)
+        self.emit("}", 0)
+
+    def emit_optional(self, name):
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_%s_opt(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, PyObject *private_name, "
+                  "PyObject *mangled_names)" % name, 0)
+        self.emit("{", 0)
+        self.emit("Py_UCS1 next = *pos < PyUnicode_GET_LENGTH(data) ? "
+                  "PyUnicode_1BYTE_DATA(data)[*pos] : 0xFF;", 1)
+        self.emit("if (next == 0xFF) return NULL;", 1)
+        self.emit("if (next == 0) { (*pos)++; return Py_NewRef(Py_None); }", 1)
+        if name in {"string", "identifier"}:
+            self.emit("if (next != 1) return NULL;", 1)
+            self.emit("(*pos)++;", 1)
+        self.emit("return ann_ast_%s(state, data, pos, private_name, "
+                  "mangled_names);" % name, 1)
+        self.emit("}", 0)
+
+    def emit_sequence(self, name, nullable):
+        suffix = "_opt" if nullable else ""
+        self.emit("static PyObject *", 0)
+        self.emit("ann_ast_%s_seq%s(struct ast_state *state, PyObject *data, "
+                  "Py_ssize_t *pos, PyObject *private_name, "
+                  "PyObject *mangled_names)" % (name, suffix), 0)
+        self.emit("{", 0)
+        if nullable:
+            self.emit("Py_UCS1 next = *pos < PyUnicode_GET_LENGTH(data) ? "
+                      "PyUnicode_1BYTE_DATA(data)[*pos] : 0xFF;", 1)
+            self.emit("if (next == 0xFF) return NULL;", 1)
+            self.emit("if (next == 0) { (*pos)++; return Py_NewRef(Py_None); }", 1)
+        self.emit("Py_ssize_t len;", 1)
+        self.emit("if (ann_ast_size_t(data, pos, &len) < 0 || len < 0) return NULL;", 1)
+        self.emit("PyObject *result = PyList_New(len);", 1)
+        self.emit("if (result == NULL) return NULL;", 1)
+        decoder = "ann_ast_%s%s" % (name, "_opt" if nullable else "")
+        self.emit("for (Py_ssize_t i = 0; i < len; i++) {", 1)
+        self.emit("PyObject *value = %s(state, data, pos, private_name, "
+                  "mangled_names);" % decoder, 2)
+        self.emit("if (value == NULL) { Py_DECREF(result); return NULL; }", 2)
+        self.emit("PyList_SET_ITEM(result, i, value);", 2)
+        self.emit("}", 1)
+        self.emit("return result;", 1)
+        self.emit("}", 0)
+
+
 class ASTModuleVisitor(PickleVisitor):
 
     def visitModule(self, mod):
@@ -2684,15 +3055,9 @@ _PyAST_FromAnnotationData(PyObject *data, PyObject *private_name,
         PyErr_Format(PyExc_TypeError, "expected a dictionary or string for data, got %R", data);
         return NULL;
     }
-    PyArena *arena = _PyArena_New();
-    if (arena == NULL) {
-        return NULL;
-    }
-
     if (PyUnicode_CheckExact(data)) {
         PyObject *out = _PyAST_FromAnnotationString(
-            arena, data, private_name, mangled_names);
-        _PyArena_Free(arena);
+            data, private_name, mangled_names);
         return out;
     }
     PyObject *out = PyDict_New();
@@ -2703,7 +3068,7 @@ _PyAST_FromAnnotationData(PyObject *data, PyObject *private_name,
     Py_ssize_t pos = 0;
     while (PyDict_Next(data, &pos, &name, &data_string)) {
         PyObject *expr_obj = _PyAST_FromAnnotationString(
-            arena, data_string, private_name, mangled_names);
+            data_string, private_name, mangled_names);
         if (!expr_obj) {
             goto parsing_err;
         }
@@ -2714,10 +3079,8 @@ _PyAST_FromAnnotationData(PyObject *data, PyObject *private_name,
         }
         Py_DECREF(expr_obj);
     }
-    _PyArena_Free(arena);
     return out;
 parsing_err:
-    _PyArena_Free(arena);
     Py_XDECREF(out);
     return NULL;
 }
@@ -2964,9 +3327,8 @@ frozen_new_node(struct ast_state *state, PyObject *type,
         return NULL;
     }
     FrozenASTObject *self = (FrozenASTObject *)result;
-    self->type_info = type_info;
     for (Py_ssize_t i = 0; i < type_info->ncache; i++) {
-        FrozenFieldInfo *field = type_info->getsets[i].closure;
+        FrozenFieldInfo *field = &type_info->fields[i];
         self->fields[i] = field->convert(state, node);
         if (self->fields[i] == NULL) {
             Py_DECREF(result);
@@ -2977,25 +3339,43 @@ frozen_new_node(struct ast_state *state, PyObject *type,
 }
 
 static PyObject *
+frozen_new_node_values(PyObject *type, FrozenTypeInfo *type_info,
+                       PyObject **values)
+{
+    PyObject *result = PyType_GenericAlloc((PyTypeObject *)type, 0);
+    if (result == NULL) {
+        return NULL;
+    }
+    FrozenASTObject *self = (FrozenASTObject *)result;
+    for (Py_ssize_t i = 0; i < type_info->ncache; i++) {
+        self->fields[i] = values[i];
+        values[i] = NULL;
+    }
+    return result;
+}
+
+static PyObject *
 make_frozen_type(const char *name, PyObject *mutable_type,
                  FrozenTypeInfo *type_info,
-                 Py_ssize_t ncache, PyGetSetDef *getsets)
+                 Py_ssize_t ncache, FrozenFieldInfo *fields,
+                 PyGetSetDef *getsets)
 {
     type_info->ncache = ncache;
-    type_info->getsets = getsets;
+    type_info->fields = fields;
     PyType_Slot slots[] = {
         {Py_tp_dealloc, frozen_dealloc},
-        {Py_tp_getattro, frozen_getattro},
         {Py_tp_setattro, frozen_setattro},
         {Py_tp_traverse, frozen_traverse},
         {Py_tp_clear, frozen_clear},
+        {Py_tp_getset, getsets},
         {0, NULL},
     };
     PyType_Spec spec = {
         .name = name,
         .basicsize = offsetof(FrozenASTObject, fields) +
                      ncache * sizeof(PyObject *),
-        .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
+        .flags =         Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC |
+            Py_TPFLAGS_MANAGED_DICT,
         .slots = slots,
     };
     PyObject *bases = PyTuple_Pack(1, mutable_type);
@@ -3042,6 +3422,7 @@ make_frozen_type(const char *name, PyObject *mutable_type,
             self.emit_converter_functions(dfn)
         for dfn in mod.dfns:
             self.emit_type_metadata(dfn)
+        self.emit_class_metadata("AST", [], [], None)
         self.emit_init_types(mod)
         self.emit_frozen_entrypoint()
 
@@ -3178,25 +3559,30 @@ make_frozen_type(const char *name, PyObject *mutable_type,
 
     def emit_class_metadata(self, name, fields, attributes, sum_name):
         all_fields = list(attributes) + list(fields)
-        if not all_fields:
-            return
         self.emit(f"static FrozenFieldInfo {name}_frozen_field_info[] = {{", 0)
+        if not all_fields:
+            self.emit("{0, NULL, NULL},", 1)
         for index, field in enumerate(all_fields):
             converter_owner = sum_name if (
                 sum_name is not None and field in attributes
             ) else name
             self.emit(
-                f"{{{index}, frozen_convert_{converter_owner}_{field.name}}},",
+                f'{{{index}, frozen_convert_{converter_owner}_{field.name}, '
+                f'"{field.name}"}},',
                 1,
             )
         self.emit("};", 0)
         self.emit(f"static PyGetSetDef {name}_frozen_getsets[] = {{", 0)
+        self.emit(
+            '{"__dict__", frozen_no_dict, frozen_set_dict, NULL, NULL},',
+            1,
+        )
         for index, field in enumerate(all_fields):
             converter_owner = sum_name if (
                 sum_name is not None and field in attributes
             ) else name
             self.emit(
-                f'{{"{field.name}", frozen_field_get, NULL, NULL, '
+                f'{{"{field.name}", frozen_field_get, frozen_field_set, NULL, '
                 f'&{name}_frozen_field_info[{index}]}},',
                 1,
             )
@@ -3239,10 +3625,12 @@ make_frozen_type(const char *name, PyObject *mutable_type,
             type_name = "ast.FrozenAST"
         else:
             type_name = f"ast.Frozen{name}"
-        getsets = f"{name}_frozen_getsets" if fields else "NULL"
+        getsets = f"{name}_frozen_getsets"
+        field_info = f"{name}_frozen_field_info"
         self.emit(
             f'state->{name}_frozen_type = make_frozen_type("{type_name}", '
-            f'{mutable_type}, &{name}_frozen_info, {ncache}, {getsets});',
+            f'{mutable_type}, &{name}_frozen_info, {ncache}, '
+            f'{field_info}, {getsets});',
             1,
             reflow=False,
         )
@@ -3506,7 +3894,7 @@ def write_header(mod, metadata, f):
         extern PyObject* _PyAST_GetAnnotationAST(expr_ty, int);
 
         extern PyObject* _PyAST_FromAnnotationString(
-            PyArena *, PyObject *, PyObject *, PyObject *);
+            PyObject *, PyObject *, PyObject *);
         extern PyObject* _PyAST_FromAnnotationData(
             PyObject *, PyObject *, PyObject *);
 
@@ -3561,7 +3949,7 @@ def write_source(mod, metadata, f, internal_h_file):
         ObjVisitor(f),
         FrozenASTVisitor(f),
         Obj2ModVisitor(f),
-        AnnotationDecoderVisitor(f),
+        DirectAnnotationDecoderVisitor(f),
         ASTModuleVisitor(f),
         PartingShots(f),
         metadata=metadata

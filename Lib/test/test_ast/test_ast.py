@@ -59,6 +59,31 @@ class LazyImportTest(unittest.TestCase):
 class AST_Tests(unittest.TestCase):
     maxDiff = None
 
+    def test_frozen_annotation_ast(self):
+        node = _ast._from_annotation_data(chr(26) + chr(1) + "x")
+        self.assertIsInstance(node, ast.Expression)
+        self.assertIsInstance(node.body, ast.Name)
+        self.assertIs(type(node).__bases__[0], ast.Expression)
+        self.assertEqual(node.body.id, "x")
+        self.assertEqual(node.body.lineno, 1)
+        self.assertTrue(hasattr(type(node.body).id, "__set__"))
+
+        with self.assertRaisesRegex(AttributeError, "instance dictionary"):
+            node.__dict__
+        with self.assertRaisesRegex(AttributeError, "no attribute 'extra'"):
+            node.extra = 1
+
+        node.body.id = "changed"
+        self.assertEqual(node.body.id, "changed")
+
+        # BinOp(Name("a"), Add, Constant(2)) in annotation-data encoding.
+        data = chr(3) + chr(26) + chr(1) + "a" + chr(1) + chr(34) + chr(2)
+        nested = _ast._from_annotation_data(data)
+        expected = ("Expression(body=BinOp(left=Name(id='a', ctx=Load()), "
+                    "op=Add(), right=Constant(value=2)))")
+        self.assertEqual(ast.dump(nested), expected)
+        self.assertIs(nested.body.op, nested.body.op)
+
     def _is_ast_node(self, name, node):
         if not isinstance(node, type):
             return False
