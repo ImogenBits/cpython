@@ -1780,7 +1780,6 @@ extern "C" {
     INIT_ID(format_spec), \
     INIT_ID(frame_buffer), \
     INIT_ID(free_threaded), \
-    INIT_ID(from_annotate), \
     INIT_ID(from_param), \
     INIT_ID(fromlist), \
     INIT_ID(fromtimestamp), \

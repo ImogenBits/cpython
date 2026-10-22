@@ -505,7 +505,6 @@ struct _Py_global_strings {
         STRUCT_FOR_ID(format_spec)
         STRUCT_FOR_ID(frame_buffer)
         STRUCT_FOR_ID(free_threaded)
-        STRUCT_FOR_ID(from_annotate)
         STRUCT_FOR_ID(from_param)
         STRUCT_FOR_ID(fromlist)
         STRUCT_FOR_ID(fromtimestamp)
