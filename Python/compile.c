@@ -1101,7 +1101,6 @@ _PyCompile_AnnotateNameData(compiler *c) {
         freevars = PyTuple_New(n);
         if (freevars == NULL) {
             Py_DECREF(global_tuple);
-            Py_DECREF(mangled);
             Py_DECREF(private_name);
             return NULL;
         }
@@ -1111,7 +1110,6 @@ _PyCompile_AnnotateNameData(compiler *c) {
             Py_ssize_t i = PyLong_AsSsize_t(index);
             if (i == -1 && PyErr_Occurred()) {
                 Py_DECREF(global_tuple);
-                Py_DECREF(mangled);
                 Py_DECREF(private_name);
                 Py_DECREF(freevars);
                 return NULL;

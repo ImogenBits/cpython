@@ -24,13 +24,6 @@ build_ast_size_t(PyUnicodeWriter *data, Py_ssize_t value) {
 }
 
 static int
-build_ast_signed_int(PyUnicodeWriter *data, int value) {
-    size_t encoded = value >= 0 ? (size_t)value * 2 :
-                     (size_t)(-(value + 1)) * 2 + 1;
-    return build_ast_size_t(data, (Py_ssize_t)encoded);
-}
-
-static int
 build_ast_string(PyUnicodeWriter *data, PyObject *value) {
     Py_ssize_t len;
     const char *s = NULL;
@@ -168,7 +161,7 @@ build_ast_comprehension(PyUnicodeWriter *data, comprehension_ty comp) {
     RETURN_IF_ERROR(build_ast_expr(data, comp->target));
     RETURN_IF_ERROR(build_ast_expr(data, comp->iter));
     RETURN_IF_ERROR(build_ast_expr_seq(data, comp->ifs));
-    RETURN_IF_ERROR(build_ast_signed_int(data, comp->is_async));
+    RETURN_IF_ERROR(build_ast_size_t(data, comp->is_async));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(comprehension);
@@ -321,7 +314,7 @@ build_ast_expr(PyUnicodeWriter *data, expr_ty expr)
         if (build_ast_expr(data, expr->v.FormattedValue.value)) {
             goto failed;
         }
-        if (build_ast_signed_int(data, expr->v.FormattedValue.conversion)) {
+        if (build_ast_size_t(data, (Py_ssize_t) expr->v.FormattedValue.conversion)) {
             goto failed;
         }
         if (build_ast_expr(data, expr->v.FormattedValue.format_spec)) {
@@ -335,7 +328,7 @@ build_ast_expr(PyUnicodeWriter *data, expr_ty expr)
         if (build_ast_const(data, expr->v.Interpolation.str)) {
             goto failed;
         }
-        if (build_ast_signed_int(data, expr->v.Interpolation.conversion)) {
+        if (build_ast_size_t(data, (Py_ssize_t) expr->v.Interpolation.conversion)) {
             goto failed;
         }
         if (build_ast_expr(data, expr->v.Interpolation.format_spec)) {

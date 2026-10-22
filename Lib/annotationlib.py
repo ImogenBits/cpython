@@ -1476,7 +1476,9 @@ class AnnotationAST:
             ref = ForwardRef(ast.unparse(self.ast), module=module)
             ref.__ast_node__ = self.ast
             ref.__globals__ = self.namespace.globals
-            if len(self.namespace.cells) == 1:
+            if self.namespace.cells is None:
+                ref.__cell__ = None
+            elif len(self.namespace.cells) == 1:
                 ref.__cell__ = next(iter(self.namespace.cells.values()))
             else:
                 ref.__cell__ = self.namespace.cells

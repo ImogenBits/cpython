@@ -18081,34 +18081,38 @@ obj2ast_type_param(struct ast_state *state, PyObject* obj, type_param_ty* out,
 }
 
 
-static Py_UCS1
-ann_ast_next(PyObject *data, Py_ssize_t *pos)
-{
-    if (*pos >= PyUnicode_GET_LENGTH(data)) {
-        return 0xFF;
-    }
-    return PyUnicode_1BYTE_DATA(data)[(*pos)++];
-}
+typedef struct {
+    struct ast_state *state;
+    PyObject *data;
+    Py_ssize_t pos;
+    PyObject *private_name;
+    int in_store_context;
+} AnnotationData;
 
 static Py_UCS1
-ann_ast_peek(PyObject *data, Py_ssize_t *pos)
+ann_ast_next(AnnotationData *data)
 {
-    Py_UCS1 byte = ann_ast_next(data, pos);
-    if (byte != 0xFF) {
-        (*pos)--;
+    if (data->pos >= PyUnicode_GET_LENGTH(data->data)) {
+        PyErr_Format(PyExc_ValueError,
+                    "tried to read past the end of annotation data %R at position %zd",
+                    data->data, data->pos);
+        return 0xFF;
     }
-    return byte;
+    return PyUnicode_1BYTE_DATA(data->data)[(data->pos)++];
 }
 
 static int
-ann_ast_size_t(PyObject *data, Py_ssize_t *pos, Py_ssize_t *out)
+ann_ast_size_t(AnnotationData *data, Py_ssize_t *out)
 {
     Py_ssize_t res = 0;
     Py_UCS1 curr;
     size_t shift = 0;
     do {
-        curr = ann_ast_next(data, pos);
+        curr = ann_ast_next(data);
         if (curr == 0xFF || shift >= 8 * sizeof(Py_ssize_t)) {
+            PyErr_Format(PyExc_ValueError,
+                "invalid size_t encoding in annotation data %R at position %zd",
+                data->data, data->pos);
             return -1;
         }
         res |= (Py_ssize_t)(curr & 0x3F) << shift;
@@ -18118,51 +18122,71 @@ ann_ast_size_t(PyObject *data, Py_ssize_t *pos, Py_ssize_t *out)
     return 0;
 }
 
-static int
-ann_ast_string(PyObject *data, Py_ssize_t *pos, PyObject **out,
-               PyArena *arena)
+static PyObject *
+ann_ast_int(AnnotationData *data)
+{
+    Py_ssize_t value;
+    if (ann_ast_size_t(data, &value) < 0) return NULL;
+    return PyLong_FromSsize_t(value);
+}
+
+static PyObject *
+ann_ast_string(AnnotationData *data)
 {
     Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 ||
-        len < 0 || *pos < 0 || *pos + len > PyUnicode_GET_LENGTH(data)) {
-        return -1;
+    if (ann_ast_size_t(data, &len) < 0 ||
+        len < 0 || data->pos < 0 || data->pos + len > PyUnicode_GET_LENGTH(data->data)) {
+        PyErr_Format(PyExc_ValueError,
+            "invalid length %zd in annotation data %R at position %zd",
+            len, data->data, data->pos);
+        return NULL;
     }
-    *out = PyUnicode_FromStringAndSize(
-        (char *)PyUnicode_1BYTE_DATA(data) + *pos, len);
-    if (*out == NULL) {
-        return -1;
+    PyObject *out = PyUnicode_FromStringAndSize(
+        (char *)PyUnicode_1BYTE_DATA(data->data) + data->pos, len);
+    data->pos += len;
+    return out;
+}
+
+static PyObject *
+ann_ast_identifier(AnnotationData *data) {
+    PyObject *name = ann_ast_string(data);
+    if (!name) {
+        return NULL;
     }
-    *pos += len;
-    return 0;
+    PyObject *mangled = _Py_Mangle(data->private_name, name);
+    Py_DECREF(name);
+    return mangled;
+}
+
+static PyObject *
+ann_ast_bytes(AnnotationData *data)
+{
+    Py_ssize_t len;
+    if (ann_ast_size_t(data, &len) < 0 ||
+        len < 0 || data->pos < 0 || data->pos + len > PyUnicode_GET_LENGTH(data->data)) {
+        PyErr_Format(PyExc_ValueError,
+            "invalid length %zd in annotation data %R at position %zd",
+            len, data->data, data->pos);
+        return NULL;
+    }
+    PyObject *out = PyBytes_FromStringAndSize(
+        (char *)PyUnicode_1BYTE_DATA(data->data) + data->pos, len);
+    data->pos += len;
+    return out;
 }
 
 static int
-ann_ast_bytes(PyObject *data, Py_ssize_t *pos, PyObject **out,
-              PyArena *arena)
+ann_ast_double(AnnotationData *data, double *out)
 {
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 ||
-        len < 0 || *pos < 0 || *pos + len > PyUnicode_GET_LENGTH(data)) {
-        return -1;
-    }
-    *out = PyBytes_FromStringAndSize(
-        (char *)PyUnicode_1BYTE_DATA(data) + *pos, len);
-    if (*out == NULL) {
-        return -1;
-    }
-    *pos += len;
-    return 0;
-}
-
-static int
-ann_ast_double(PyObject *data, Py_ssize_t *pos, double *out)
-{
-    if (*pos < 0 || *pos + 10 > PyUnicode_GET_LENGTH(data)) {
+    if (data->pos < 0 || data->pos + 10 > PyUnicode_GET_LENGTH(data->data)) {
+        PyErr_Format(PyExc_ValueError,
+            "tried to read past the end of annotation data %R at position %zd",
+            data->data, data->pos);
         return -1;
     }
     unsigned long long bits = 0;
     for (size_t i = 0; i < 10; i++) {
-        Py_UCS1 curr = ann_ast_next(data, pos);
+        Py_UCS1 curr = ann_ast_next(data);
         if (curr == 0xFF) {
             return -1;
         }
@@ -18172,1378 +18196,1101 @@ ann_ast_double(PyObject *data, Py_ssize_t *pos, double *out)
     return 0;
 }
 
-static int
-ann_ast_constant_kind(PyObject *data, Py_ssize_t *pos, Py_UCS1 kind,
-                     PyObject **out, PyArena *arena)
+static PyObject *
+ann_ast_constant(AnnotationData *data)
 {
+    Py_UCS1 kind = ann_ast_next(data);
+    if (kind == 0xFF) {
+        return NULL;
+    }
     switch (kind - Slice_kind - 2) {
-        case 0:
-            *out = NULL;
-            return 0;
-        case 1:
-            return ann_ast_string(data, pos, out, arena);
-        case 2:
-            return ann_ast_bytes(data, pos, out, arena);
-        case 3: {
-            Py_ssize_t value;
-            if (ann_ast_size_t(data, pos, &value) < 0) {
-                return -1;
-            }
-            *out = PyLong_FromSsize_t(value);
-            return *out == NULL ? -1 : 0;
-        }
+        case 0: return Py_NewRef(Py_None);
+        case 1: return ann_ast_string(data);
+        case 2: return ann_ast_bytes(data);
+        case 3: return ann_ast_int(data);
         case 4: {
             double value;
-            if (ann_ast_double(data, pos, &value) < 0) {
-                return -1;
-            }
-            *out = PyFloat_FromDouble(value);
-            return *out == NULL ? -1 : 0;
+            if (ann_ast_double(data, &value) < 0) return NULL;
+            return PyFloat_FromDouble(value);
         }
         case 5: {
             double real, imag;
-            if (ann_ast_double(data, pos, &real) < 0 ||
-                ann_ast_double(data, pos, &imag) < 0) {
-                return -1;
+            if (ann_ast_double(data, &real) < 0 ||
+                ann_ast_double(data, &imag) < 0) return NULL;
+            return PyComplex_FromDoubles(real, imag);
+        }
+        case 6: return Py_NewRef(Py_False);
+        case 7: return Py_NewRef(Py_True);
+        case 8: return Py_NewRef(Py_None);
+        case 9: return Py_NewRef(Py_Ellipsis);
+        default: {
+            PyErr_Format(PyExc_ValueError,
+                "invalid constant kind %c in annotation data %R at position %zd",
+                kind, data->data, data->pos);
+            return NULL;
+        }
+    }
+}
+
+static PyObject*
+ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationData *))
+{
+    Py_ssize_t n;
+    if (ann_ast_size_t(data, &n) < 0 || n < 0) {
+        PyErr_Format(PyExc_ValueError,
+            "invalid length encoding in annotation data %R at position %zd",
+            data->data, data->pos);
+        return NULL;
+    }
+    PyObject *result = PyList_New(n);
+    PyObject *value;
+    if (!result) {
+        return NULL;
+    }
+    for (Py_ssize_t i = 0; i < n; i++) {
+        if (optional) {
+            Py_UCS1 c = ann_ast_next(data);
+            if (c == 0xFF) {
+                Py_DECREF(result);
+                return NULL;
             }
-            *out = PyComplex_FromDoubles(real, imag);
-            return *out == NULL ? -1 : 0;
-        }
-        case 6:
-            *out = Py_False;
-            return 0;
-        case 7:
-            *out = Py_True;
-            return 0;
-        case 8:
-            *out = Py_None;
-            return 0;
-        case 9:
-            *out = Py_Ellipsis;
-            return 0;
-        default:
-            return -1;
-    }
-}
-
-static int
-ann_ast_constant(PyObject *data, Py_ssize_t *pos, PyObject **out,
-                 PyArena *arena)
-{
-    Py_UCS1 kind = ann_ast_next(data, pos);
-    if (kind == 0xFF) {
-        return -1;
-    }
-    return ann_ast_constant_kind(data, pos, kind, out, arena);
-}
-
-static int
-ann_ast_identifier(PyObject *data, Py_ssize_t *pos, PyObject **out,
-                   PyArena *arena)
-{
-    return ann_ast_string(data, pos, out, arena);
-}
-
-static int
-ann_ast_int(PyObject *data, Py_ssize_t *pos, int *out, PyArena *arena)
-{
-    Py_ssize_t encoded;
-    if (ann_ast_size_t(data, pos, &encoded) < 0 || encoded < 0) {
-        return -1;
-    }
-    Py_ssize_t value = encoded & 1 ?
-        -(encoded >> 1) - 1 : encoded >> 1;
-    if (value < INT_MIN || value > INT_MAX) {
-        return -1;
-    }
-    *out = (int)value;
-    return 0;
-}
-
-static void
-ann_ast_set_store_context(expr_ty expr)
-{
-    switch (expr->kind) {
-        case Name_kind:
-            expr->v.Name.ctx = Store;
-            break;
-        case Attribute_kind:
-            expr->v.Attribute.ctx = Store;
-            break;
-        case Subscript_kind:
-            expr->v.Subscript.ctx = Store;
-            break;
-        case Starred_kind:
-            expr->v.Starred.ctx = Store;
-            ann_ast_set_store_context(expr->v.Starred.value);
-            break;
-        case List_kind:
-            expr->v.List.ctx = Store;
-            for (Py_ssize_t i = 0; i < asdl_seq_LEN(expr->v.List.elts); i++) {
-                ann_ast_set_store_context(asdl_seq_GET(expr->v.List.elts, i));
+            if (c == 0) {
+                value = Py_NewRef(Py_None);
+            } else {
+                data->pos--;
+                value = func(data);
             }
-            break;
-        case Tuple_kind:
-            expr->v.Tuple.ctx = Store;
-            for (Py_ssize_t i = 0; i < asdl_seq_LEN(expr->v.Tuple.elts); i++) {
-                ann_ast_set_store_context(asdl_seq_GET(expr->v.Tuple.elts, i));
-            }
-            break;
-        default:
-            break;
-    }
-}
-static int ann_ast_constant(PyObject *, Py_ssize_t *, constant *, PyArena *);
-static int ann_ast_identifier(PyObject *, Py_ssize_t *, identifier *, PyArena *);
-static int ann_ast_int(PyObject *, Py_ssize_t *, int *, PyArena *);
-static int ann_ast_string(PyObject *, Py_ssize_t *, string *, PyArena *);
-static int ann_ast_arg(PyObject *, Py_ssize_t *, arg_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_arguments(PyObject *, Py_ssize_t *, arguments_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_boolop(PyObject *, Py_ssize_t *, boolop_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_cmpop(PyObject *, Py_ssize_t *, cmpop_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_comprehension(PyObject *, Py_ssize_t *, comprehension_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_expr(PyObject *, Py_ssize_t *, expr_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_keyword(PyObject *, Py_ssize_t *, keyword_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_operator(PyObject *, Py_ssize_t *, operator_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_unaryop(PyObject *, Py_ssize_t *, unaryop_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_arg_opt(PyObject *, Py_ssize_t *, arg_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_expr_opt(PyObject *, Py_ssize_t *, expr_ty *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_identifier_opt(PyObject *, Py_ssize_t *, identifier *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_string_opt(PyObject *, Py_ssize_t *, string *, PyArena *, PyObject *, PyObject *);
-static int ann_ast_arg_seq(PyObject *, Py_ssize_t *, asdl_arg_seq **, PyArena *, PyObject *, PyObject *);
-static int ann_ast_cmpop_seq(PyObject *, Py_ssize_t *, asdl_int_seq **, PyArena *, PyObject *, PyObject *);
-static int ann_ast_comprehension_seq(PyObject *, Py_ssize_t *, asdl_comprehension_seq **, PyArena *, PyObject *, PyObject *);
-static int ann_ast_expr_seq(PyObject *, Py_ssize_t *, asdl_expr_seq **, PyArena *, PyObject *, PyObject *);
-static int ann_ast_expr_seq_opt(PyObject *, Py_ssize_t *, asdl_expr_seq **, PyArena *, PyObject *, PyObject *);
-static int ann_ast_keyword_seq(PyObject *, Py_ssize_t *, asdl_keyword_seq **, PyArena *, PyObject *, PyObject *);
-static int
-ann_ast_arg_opt(PyObject *data, Py_ssize_t *pos, arg_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 next = ann_ast_peek(data, pos);
-    if (next == 0xFF) {
-        return -1;
-    }
-    if (next == 0) {
-        (void)ann_ast_next(data, pos);
-        *out = NULL;
-        return 0;
-    }
-    return ann_ast_arg(data, pos, out, arena, private_name, mangled_names);
-}
-
-static int
-ann_ast_expr_opt(PyObject *data, Py_ssize_t *pos, expr_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 next = ann_ast_peek(data, pos);
-    if (next == 0xFF) {
-        return -1;
-    }
-    if (next == 0) {
-        (void)ann_ast_next(data, pos);
-        *out = NULL;
-        return 0;
-    }
-    return ann_ast_expr(data, pos, out, arena, private_name, mangled_names);
-}
-
-static int
-ann_ast_identifier_opt(PyObject *data, Py_ssize_t *pos, identifier *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 next = ann_ast_peek(data, pos);
-    if (next == 0xFF) {
-        return -1;
-    }
-    if (next == 0) {
-        (void)ann_ast_next(data, pos);
-        *out = NULL;
-        return 0;
-    }
-    if (next != 1) {
-        return -1;
-    }
-    (void)ann_ast_next(data, pos);
-    return ann_ast_identifier(data, pos, out, arena);
-}
-
-static int
-ann_ast_string_opt(PyObject *data, Py_ssize_t *pos, string *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 next = ann_ast_peek(data, pos);
-    if (next == 0xFF) {
-        return -1;
-    }
-    if (next == 0) {
-        (void)ann_ast_next(data, pos);
-        *out = NULL;
-        return 0;
-    }
-    if (next != 1) {
-        return -1;
-    }
-    (void)ann_ast_next(data, pos);
-    return ann_ast_string(data, pos, out, arena);
-}
-
-static int
-ann_ast_arg_seq(PyObject *data, Py_ssize_t *pos,
-asdl_arg_seq **out, PyArena *arena, PyObject *private_name, PyObject
-*mangled_names)
-{
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 || len < 0) {
-        return -1;
-    }
-    *out = _Py_asdl_arg_seq_new(len, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    for (Py_ssize_t i = 0; i < len; i++) {
-        arg_ty value;
-        if (ann_ast_arg(data, pos, &value, arena, private_name, mangled_names)
-            < 0) {
-            return -1;
+        } else {
+            value = func(data);
         }
-        asdl_seq_SET(*out, i, value);
-    }
-    return 0;
-}
-
-static int
-ann_ast_cmpop_seq(PyObject *data, Py_ssize_t *pos,
-asdl_int_seq **out, PyArena *arena, PyObject *private_name, PyObject
-*mangled_names)
-{
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 || len < 0) {
-        return -1;
-    }
-    *out = _Py_asdl_int_seq_new(len, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    for (Py_ssize_t i = 0; i < len; i++) {
-        cmpop_ty value;
-        if (ann_ast_cmpop(data, pos, &value, arena, private_name,
-            mangled_names) < 0) {
-            return -1;
+        if (!value) {
+            Py_DECREF(result);
+            return NULL;
         }
-        asdl_seq_SET(*out, i, value);
+        PyList_SET_ITEM(result, i, value);
     }
-    return 0;
+    return result;
 }
-
-static int
-ann_ast_comprehension_seq(PyObject *data, Py_ssize_t *pos,
-asdl_comprehension_seq **out, PyArena *arena, PyObject *private_name, PyObject
-*mangled_names)
+static PyObject *ann_ast_arg(AnnotationData *);
+static PyObject *ann_ast_arguments(AnnotationData *);
+static PyObject *ann_ast_boolop(AnnotationData *);
+static PyObject *ann_ast_cmpop(AnnotationData *);
+static PyObject *ann_ast_comprehension(AnnotationData *);
+static PyObject *ann_ast_expr(AnnotationData *);
+static PyObject *ann_ast_expr_context(AnnotationData *);
+static PyObject *ann_ast_keyword(AnnotationData *);
+static PyObject *ann_ast_operator(AnnotationData *);
+static PyObject *ann_ast_unaryop(AnnotationData *);
+static PyObject *
+ann_ast_arg(AnnotationData *data)
 {
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 || len < 0) {
-        return -1;
-    }
-    *out = _Py_asdl_comprehension_seq_new(len, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    for (Py_ssize_t i = 0; i < len; i++) {
-        comprehension_ty value;
-        if (ann_ast_comprehension(data, pos, &value, arena, private_name,
-            mangled_names) < 0) {
-            return -1;
-        }
-        asdl_seq_SET(*out, i, value);
-    }
-    return 0;
-}
-
-static int
-ann_ast_expr_seq(PyObject *data, Py_ssize_t *pos,
-asdl_expr_seq **out, PyArena *arena, PyObject *private_name, PyObject
-*mangled_names)
-{
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 || len < 0) {
-        return -1;
-    }
-    *out = _Py_asdl_expr_seq_new(len, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    for (Py_ssize_t i = 0; i < len; i++) {
-        expr_ty value;
-        if (ann_ast_expr(data, pos, &value, arena, private_name, mangled_names)
-            < 0) {
-            return -1;
-        }
-        asdl_seq_SET(*out, i, value);
-    }
-    return 0;
-}
-
-static int
-ann_ast_expr_seq_opt(PyObject *data, Py_ssize_t *pos,
-asdl_expr_seq **out, PyArena *arena, PyObject *private_name, PyObject
-*mangled_names)
-{
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 || len < 0) {
-        return -1;
-    }
-    *out = _Py_asdl_expr_seq_new(len, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    for (Py_ssize_t i = 0; i < len; i++) {
-        expr_ty value;
-        if (ann_ast_expr_opt(data, pos, &value, arena, private_name,
-            mangled_names) < 0) {
-            return -1;
-        }
-        asdl_seq_SET(*out, i, value);
-    }
-    return 0;
-}
-
-static int
-ann_ast_keyword_seq(PyObject *data, Py_ssize_t *pos,
-asdl_keyword_seq **out, PyArena *arena, PyObject *private_name, PyObject
-*mangled_names)
-{
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, pos, &len) < 0 || len < 0) {
-        return -1;
-    }
-    *out = _Py_asdl_keyword_seq_new(len, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    for (Py_ssize_t i = 0; i < len; i++) {
-        keyword_ty value;
-        if (ann_ast_keyword(data, pos, &value, arena, private_name,
-            mangled_names) < 0) {
-            return -1;
-        }
-        asdl_seq_SET(*out, i, value);
-    }
-    return 0;
-}
-
-static int
-ann_ast_arg(PyObject *data, Py_ssize_t *pos, arg_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    identifier arg;
-    expr_ty annotation;
-    string type_comment;
-    if (ann_ast_identifier(data, pos, &arg, arena) < 0) {
-        return -1;
-    }
-    Py_UCS1 next_annotation = ann_ast_peek(data, pos);
-    if (next_annotation == 0xFF) {
-        return -1;
-    }
-    if (next_annotation == 0) {
-        (void)ann_ast_next(data, pos);
-        annotation = NULL;
-    }
-    else if (ann_ast_expr_opt(data, pos, &annotation, arena, private_name,
-             mangled_names) < 0) {
-        return -1;
-    }
-    Py_UCS1 next_type_comment = ann_ast_peek(data, pos);
-    if (next_type_comment == 0xFF) {
-        return -1;
-    }
-    if (next_type_comment == 0) {
-        (void)ann_ast_next(data, pos);
-        type_comment = NULL;
-    }
-    else if (ann_ast_string_opt(data, pos, &type_comment, arena, private_name,
-             mangled_names) < 0) {
-        return -1;
-    }
-    *out = _PyAST_arg(arg, annotation, type_comment, 1, 0, 1, 0, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    return 0;
-}
-
-static int
-ann_ast_arguments(PyObject *data, Py_ssize_t *pos, arguments_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    asdl_arg_seq * posonlyargs;
-    asdl_arg_seq * args;
-    arg_ty vararg;
-    asdl_arg_seq * kwonlyargs;
-    asdl_expr_seq * kw_defaults;
-    arg_ty kwarg;
-    asdl_expr_seq * defaults;
-    if (ann_ast_arg_seq(data, pos, &posonlyargs, arena, private_name,
-        mangled_names) < 0) {
-        return -1;
-    }
-    if (ann_ast_arg_seq(data, pos, &args, arena, private_name, mangled_names) <
-        0) {
-        return -1;
-    }
-    Py_UCS1 next_vararg = ann_ast_peek(data, pos);
-    if (next_vararg == 0xFF) {
-        return -1;
-    }
-    if (next_vararg == 0) {
-        (void)ann_ast_next(data, pos);
-        vararg = NULL;
-    }
-    else if (ann_ast_arg_opt(data, pos, &vararg, arena, private_name,
-             mangled_names) < 0) {
-        return -1;
-    }
-    if (ann_ast_arg_seq(data, pos, &kwonlyargs, arena, private_name,
-        mangled_names) < 0) {
-        return -1;
-    }
-    if (ann_ast_expr_seq_opt(data, pos, &kw_defaults, arena, private_name,
-        mangled_names) < 0) {
-        return -1;
-    }
-    Py_UCS1 next_kwarg = ann_ast_peek(data, pos);
-    if (next_kwarg == 0xFF) {
-        return -1;
-    }
-    if (next_kwarg == 0) {
-        (void)ann_ast_next(data, pos);
-        kwarg = NULL;
-    }
-    else if (ann_ast_arg_opt(data, pos, &kwarg, arena, private_name,
-             mangled_names) < 0) {
-        return -1;
-    }
-    if (ann_ast_expr_seq(data, pos, &defaults, arena, private_name,
-        mangled_names) < 0) {
-        return -1;
-    }
-    *out = _PyAST_arguments(posonlyargs, args, vararg, kwonlyargs, kw_defaults,
-                            kwarg, defaults, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    return 0;
-}
-
-static int
-ann_ast_boolop(PyObject *data, Py_ssize_t *pos, boolop_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 value = ann_ast_next(data, pos);
-    if (value == 0xFF) {
-        return -1;
-    }
-    *out = (boolop_ty)value;
-    return 0;
-}
-
-static int
-ann_ast_cmpop(PyObject *data, Py_ssize_t *pos, cmpop_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_ssize_t value;
-    if (ann_ast_size_t(data, pos, &value) < 0) {
-        return -1;
-    }
-    *out = (cmpop_ty)value;
-    return 0;
-}
-
-static int
-ann_ast_comprehension(PyObject *data, Py_ssize_t *pos, comprehension_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    expr_ty target;
-    expr_ty iter;
-    asdl_expr_seq * ifs;
-    int is_async;
-    if (ann_ast_expr(data, pos, &target, arena, private_name, mangled_names) <
-        0) {
-        return -1;
-    }
-    ann_ast_set_store_context(target);
-    if (ann_ast_expr(data, pos, &iter, arena, private_name, mangled_names) < 0)
-        {
-        return -1;
-    }
-    if (ann_ast_expr_seq(data, pos, &ifs, arena, private_name, mangled_names) <
-        0) {
-        return -1;
-    }
-    if (ann_ast_int(data, pos, &is_async, arena) < 0) {
-        return -1;
-    }
-    *out = _PyAST_comprehension(target, iter, ifs, is_async, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    return 0;
-}
-
-static int
-ann_ast_expr(PyObject *data, Py_ssize_t *pos, expr_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 kind = ann_ast_next(data, pos);
-    if (kind == 0xFF) {
-        return -1;
-    }
-    if (kind == 0) {
-        *out = NULL;
-        return 0;
-    }
+    PyObject *result = NULL, *value = NULL;
+    PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
-        return -1;
+        return NULL;
     }
-    switch (kind) {
-        case BoolOp_kind: {
-            boolop_ty op;
-            asdl_expr_seq * values;
-            if (ann_ast_boolop(data, pos, &op, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr_seq(data, pos, &values, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_BoolOp(op, values, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case NamedExpr_kind: {
-            expr_ty target;
-            expr_ty value;
-            if (ann_ast_expr(data, pos, &target, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            ann_ast_set_store_context(target);
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_NamedExpr(target, value, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case BinOp_kind: {
-            expr_ty left;
-            operator_ty op;
-            expr_ty right;
-            if (ann_ast_expr(data, pos, &left, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_operator(data, pos, &op, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr(data, pos, &right, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_BinOp(left, op, right, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case UnaryOp_kind: {
-            unaryop_ty op;
-            expr_ty operand;
-            if (ann_ast_unaryop(data, pos, &op, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr(data, pos, &operand, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_UnaryOp(op, operand, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Lambda_kind: {
-            arguments_ty args;
-            expr_ty body;
-            if (ann_ast_arguments(data, pos, &args, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr(data, pos, &body, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Lambda(args, body, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case IfExp_kind: {
-            expr_ty test;
-            expr_ty body;
-            expr_ty orelse;
-            if (ann_ast_expr(data, pos, &test, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr(data, pos, &body, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr(data, pos, &orelse, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_IfExp(test, body, orelse, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Dict_kind: {
-            asdl_expr_seq * keys;
-            asdl_expr_seq * values;
-            if (ann_ast_expr_seq_opt(data, pos, &keys, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr_seq(data, pos, &values, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Dict(keys, values, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Set_kind: {
-            asdl_expr_seq * elts;
-            if (ann_ast_expr_seq(data, pos, &elts, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Set(elts, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case ListComp_kind: {
-            expr_ty elt;
-            asdl_comprehension_seq * generators;
-            if (ann_ast_expr(data, pos, &elt, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_comprehension_seq(data, pos, &generators, arena,
-                private_name, mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_ListComp(elt, generators, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case SetComp_kind: {
-            expr_ty elt;
-            asdl_comprehension_seq * generators;
-            if (ann_ast_expr(data, pos, &elt, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_comprehension_seq(data, pos, &generators, arena,
-                private_name, mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_SetComp(elt, generators, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case DictComp_kind: {
-            expr_ty key;
-            expr_ty value;
-            asdl_comprehension_seq * generators;
-            if (ann_ast_expr(data, pos, &key, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            Py_UCS1 next_value = ann_ast_peek(data, pos);
-            if (next_value == 0xFF) {
-                goto failed;
-            }
-            if (next_value == 0) {
-                (void)ann_ast_next(data, pos);
-                value = NULL;
-            }
-            else if (ann_ast_expr_opt(data, pos, &value, arena, private_name,
-                     mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_comprehension_seq(data, pos, &generators, arena,
-                private_name, mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_DictComp(key, value, generators, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case GeneratorExp_kind: {
-            expr_ty elt;
-            asdl_comprehension_seq * generators;
-            if (ann_ast_expr(data, pos, &elt, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_comprehension_seq(data, pos, &generators, arena,
-                private_name, mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_GeneratorExp(elt, generators, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Await_kind: {
-            expr_ty value;
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Await(value, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Yield_kind: {
-            expr_ty value;
-            Py_UCS1 next_value = ann_ast_peek(data, pos);
-            if (next_value == 0xFF) {
-                goto failed;
-            }
-            if (next_value == 0) {
-                (void)ann_ast_next(data, pos);
-                value = NULL;
-            }
-            else if (ann_ast_expr_opt(data, pos, &value, arena, private_name,
-                     mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Yield(value, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case YieldFrom_kind: {
-            expr_ty value;
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_YieldFrom(value, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Compare_kind: {
-            expr_ty left;
-            asdl_int_seq * ops;
-            asdl_expr_seq * comparators;
-            if (ann_ast_expr(data, pos, &left, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_cmpop_seq(data, pos, &ops, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr_seq(data, pos, &comparators, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Compare(left, ops, comparators, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Call_kind: {
-            expr_ty func;
-            asdl_expr_seq * args;
-            asdl_keyword_seq * keywords;
-            if (ann_ast_expr(data, pos, &func, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr_seq(data, pos, &args, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_keyword_seq(data, pos, &keywords, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Call(func, args, keywords, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case FormattedValue_kind: {
-            expr_ty value;
-            int conversion;
-            expr_ty format_spec;
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_int(data, pos, &conversion, arena) < 0) {
-                goto failed;
-            }
-            Py_UCS1 next_format_spec = ann_ast_peek(data, pos);
-            if (next_format_spec == 0xFF) {
-                goto failed;
-            }
-            if (next_format_spec == 0) {
-                (void)ann_ast_next(data, pos);
-                format_spec = NULL;
-            }
-            else if (ann_ast_expr_opt(data, pos, &format_spec, arena,
-                     private_name, mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_FormattedValue(value, conversion, format_spec, 1, 0,
-                                         1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Interpolation_kind: {
-            expr_ty value;
-            constant str;
-            int conversion;
-            expr_ty format_spec;
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_constant(data, pos, &str, arena) < 0) {
-                goto failed;
-            }
-            if (ann_ast_int(data, pos, &conversion, arena) < 0) {
-                goto failed;
-            }
-            Py_UCS1 next_format_spec = ann_ast_peek(data, pos);
-            if (next_format_spec == 0xFF) {
-                goto failed;
-            }
-            if (next_format_spec == 0) {
-                (void)ann_ast_next(data, pos);
-                format_spec = NULL;
-            }
-            else if (ann_ast_expr_opt(data, pos, &format_spec, arena,
-                     private_name, mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Interpolation(value, str, conversion, format_spec, 1,
-                                        0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case JoinedStr_kind: {
-            asdl_expr_seq * values;
-            if (ann_ast_expr_seq(data, pos, &values, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_JoinedStr(values, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case TemplateStr_kind: {
-            asdl_expr_seq * values;
-            if (ann_ast_expr_seq(data, pos, &values, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_TemplateStr(values, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Attribute_kind: {
-            expr_ty value;
-            identifier attr;
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_identifier(data, pos, &attr, arena) < 0) {
-                goto failed;
-            }
-            if (private_name != NULL && private_name != Py_None &&
-                mangled_names != NULL && mangled_names != Py_None) {
-                int contains = PySet_Contains(mangled_names, attr);
-                if (contains < 0) {
-                    goto failed;
-                }
-                if (contains) {
-                    PyObject *mangled = _Py_Mangle(private_name, attr);
-                    if (mangled == NULL) {
-                        goto failed;
-                    }
-                    if (_PyArena_AddPyObject(arena, mangled) < 0) {
-                        Py_DECREF(mangled);
-                        goto failed;
-                    }
-                    Py_DECREF(attr);
-                    Py_DECREF(mangled);
-                    attr = mangled;
-                }
-            }
-            *out = _PyAST_Attribute(value, attr, Load, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Subscript_kind: {
-            expr_ty value;
-            expr_ty slice;
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            if (ann_ast_expr(data, pos, &slice, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Subscript(value, slice, Load, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Starred_kind: {
-            expr_ty value;
-            if (ann_ast_expr(data, pos, &value, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Starred(value, Load, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Name_kind: {
-            identifier id;
-            if (ann_ast_identifier(data, pos, &id, arena) < 0) {
-                goto failed;
-            }
-            if (private_name != NULL && private_name != Py_None &&
-                mangled_names != NULL && mangled_names != Py_None) {
-                int contains = PySet_Contains(mangled_names, id);
-                if (contains < 0) {
-                    goto failed;
-                }
-                if (contains) {
-                    PyObject *mangled = _Py_Mangle(private_name, id);
-                    if (mangled == NULL) {
-                        goto failed;
-                    }
-                    if (_PyArena_AddPyObject(arena, mangled) < 0) {
-                        Py_DECREF(mangled);
-                        goto failed;
-                    }
-                    Py_DECREF(id);
-                    Py_DECREF(mangled);
-                    id = mangled;
-                }
-            }
-            *out = _PyAST_Name(id, Load, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case List_kind: {
-            asdl_expr_seq * elts;
-            if (ann_ast_expr_seq(data, pos, &elts, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_List(elts, Load, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Tuple_kind: {
-            asdl_expr_seq * elts;
-            if (ann_ast_expr_seq(data, pos, &elts, arena, private_name,
-                mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Tuple(elts, Load, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind: {
-            expr_ty lower;
-            expr_ty upper;
-            expr_ty step;
-            Py_UCS1 next_lower = ann_ast_peek(data, pos);
-            if (next_lower == 0xFF) {
-                goto failed;
-            }
-            if (next_lower == 0) {
-                (void)ann_ast_next(data, pos);
-                lower = NULL;
-            }
-            else if (ann_ast_expr_opt(data, pos, &lower, arena, private_name,
-                     mangled_names) < 0) {
-                goto failed;
-            }
-            Py_UCS1 next_upper = ann_ast_peek(data, pos);
-            if (next_upper == 0xFF) {
-                goto failed;
-            }
-            if (next_upper == 0) {
-                (void)ann_ast_next(data, pos);
-                upper = NULL;
-            }
-            else if (ann_ast_expr_opt(data, pos, &upper, arena, private_name,
-                     mangled_names) < 0) {
-                goto failed;
-            }
-            Py_UCS1 next_step = ann_ast_peek(data, pos);
-            if (next_step == 0xFF) {
-                goto failed;
-            }
-            if (next_step == 0) {
-                (void)ann_ast_next(data, pos);
-                step = NULL;
-            }
-            else if (ann_ast_expr_opt(data, pos, &step, arena, private_name,
-                     mangled_names) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Slice(lower, upper, step, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 2: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 3: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 4: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 5: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 6: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 7: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 8: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 9: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 10: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        case Slice_kind + 11: {
-            PyObject *value;
-            if (ann_ast_constant_kind(data, pos, kind, &value, arena) < 0) {
-                goto failed;
-            }
-            *out = _PyAST_Constant(value, NULL, 1, 0, 1, 0, arena);
-            if (*out == NULL) {
-                goto failed;
-            }
-            break;
-        }
-        default:
+    tp = (PyTypeObject *) data->state->arg_type;
+    result = PyType_GenericNew(tp, NULL, NULL);
+    if (!result) goto failed;
+        value = ann_ast_identifier(data);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->arg, value) == -1) {
             goto failed;
-    }
+        }
+        Py_DECREF(value);
+        {
+            Py_UCS1 c = ann_ast_next(data);
+            if (c == 0xFF) goto failed;
+            if (c == 0) {
+                value = Py_NewRef(Py_None);
+            } else {
+                data->pos--;
+                value = ann_ast_expr(data);
+            }
+        }
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->annotation, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        {
+            Py_UCS1 c = ann_ast_next(data);
+            if (c == 0xFF) goto failed;
+            if (c == 0) {
+                value = Py_NewRef(Py_None);
+            } else {
+                data->pos--;
+                value = ann_ast_string(data);
+            }
+        }
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->type_comment, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+    assert(result != NULL);
+    value = PyLong_FromLong(1);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(0);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(1);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(0);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
+        goto failed;
+    Py_DECREF(value);
     Py_LeaveRecursiveCall();
-    return 0;
+    return result;
     failed:
+    Py_XDECREF(value);
+    Py_XDECREF(result);
     Py_LeaveRecursiveCall();
-    return -1;
-}
-
-static int
-ann_ast_keyword(PyObject *data, Py_ssize_t *pos, keyword_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    identifier arg;
-    expr_ty value;
-    Py_UCS1 next_arg = ann_ast_peek(data, pos);
-    if (next_arg == 0xFF) {
-        return -1;
-    }
-    if (next_arg == 0) {
-        (void)ann_ast_next(data, pos);
-        arg = NULL;
-    }
-    else if (ann_ast_identifier_opt(data, pos, &arg, arena, private_name,
-             mangled_names) < 0) {
-        return -1;
-    }
-    if (ann_ast_expr(data, pos, &value, arena, private_name, mangled_names) <
-        0) {
-        return -1;
-    }
-    *out = _PyAST_keyword(arg, value, 1, 0, 1, 0, arena);
-    if (*out == NULL) {
-        return -1;
-    }
-    return 0;
-}
-
-static int
-ann_ast_operator(PyObject *data, Py_ssize_t *pos, operator_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 value = ann_ast_next(data, pos);
-    if (value == 0xFF) {
-        return -1;
-    }
-    *out = (operator_ty)value;
-    return 0;
-}
-
-static int
-ann_ast_unaryop(PyObject *data, Py_ssize_t *pos, unaryop_ty *out,
-PyArena *arena, PyObject *private_name, PyObject *mangled_names)
-{
-    Py_UCS1 value = ann_ast_next(data, pos);
-    if (value == 0xFF) {
-        return -1;
-    }
-    *out = (unaryop_ty)value;
-    return 0;
-}
-
-PyObject *
-_PyAST_FromAnnotationString(PyArena *arena, PyObject *data,
-                            PyObject *private_name, PyObject *mangled_names)
-{
-    if (!data || !PyUnicode_CheckExact(data)) {
-        PyErr_SetString(PyExc_TypeError, "expected a string for data");
-        return NULL;
-    }
-    Py_ssize_t pos = 0;
-    char *error_msg = NULL;
-    expr_ty expr_ast;
-    if (ann_ast_expr(data, &pos, &expr_ast, arena, private_name,
-                     mangled_names) < 0) {
-        error_msg = "parsing annotation expression";
-        goto parsing_err;
-    }
-    mod_ty mod_ast = _PyAST_Expression(expr_ast, arena);
-    if (!mod_ast) {
-        error_msg = "constructing annotation";
-        goto parsing_err;
-    }
-    PyObject *out = PyAST_mod2obj(mod_ast);
-    if (!out) {
-        error_msg = "constructing annotation object";
-        goto parsing_err;
-    }
-    if (pos != PyUnicode_GET_LENGTH(data)) {
-        PyErr_SetString(PyExc_RuntimeError, "malformed binary AST data");
-        return NULL;
-    }
-    return out;
-parsing_err:
-    if (!PyErr_Occurred()) {
-        PyObject *repr = PyObject_Repr(data);
-        if (!repr) {
-            PyErr_Format(PyExc_RuntimeError,
-                         "error %s binary AST data", error_msg);
-        }
-        else {
-            PyErr_Format(PyExc_RuntimeError,
-                         "error %s binary AST data: %s",
-                         error_msg, PyUnicode_AsUTF8(repr));
-            Py_DECREF(repr);
-        }
-    }
-    return NULL;
-}
-
-PyObject *
-_PyAST_FromAnnotationData(PyObject *data, PyObject *private_name,
-                          PyObject *mangled_names)
-{
-    if (!data || !(PyAnyDict_CheckExact(data) || PyUnicode_CheckExact(data))) {
-        PyErr_Format(PyExc_TypeError, "expected a dictionary or string for data, got %R", data);
-        return NULL;
-    }
-    PyArena *arena = _PyArena_New();
-    if (arena == NULL) {
-        return NULL;
-    }
-
-    if (PyUnicode_CheckExact(data)) {
-        PyObject *out = _PyAST_FromAnnotationString(
-            arena, data, private_name, mangled_names);
-        _PyArena_Free(arena);
-        return out;
-    }
-    PyObject *out = PyDict_New();
-    if (out == NULL) {
-        goto parsing_err;
-    }
-    PyObject *name, *data_string;
-    Py_ssize_t pos = 0;
-    while (PyDict_Next(data, &pos, &name, &data_string)) {
-        PyObject *expr_obj = _PyAST_FromAnnotationString(
-            arena, data_string, private_name, mangled_names);
-        if (!expr_obj) {
-            goto parsing_err;
-        }
-        if (PyDict_SetItem(out, name, expr_obj) < 0) {
-            PyErr_SetString(PyExc_RuntimeError, "error setting annotation in dictionary");
-            Py_DECREF(expr_obj);
-            goto parsing_err;
-        }
-        Py_DECREF(expr_obj);
-    }
-    _PyArena_Free(arena);
-    return out;
-parsing_err:
-    _PyArena_Free(arena);
-    Py_XDECREF(out);
     return NULL;
 }
 
 static PyObject *
-ast_from_annotation_data(PyObject *Py_UNUSED(module), PyObject *data)
+ann_ast_arguments(AnnotationData *data)
 {
-    return _PyAST_FromAnnotationData(data, NULL, NULL);
+    PyObject *result = NULL, *value = NULL;
+    PyTypeObject *tp;
+    if (Py_EnterRecursiveCall(" during ast construction")) {
+        return NULL;
+    }
+    tp = (PyTypeObject *) data->state->arguments_type;
+    result = PyType_GenericNew(tp, NULL, NULL);
+    if (!result) goto failed;
+        value = ann_ast_list(data, 0, ann_ast_arg);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->posonlyargs, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_list(data, 0, ann_ast_arg);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->args, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        {
+            Py_UCS1 c = ann_ast_next(data);
+            if (c == 0xFF) goto failed;
+            if (c == 0) {
+                value = Py_NewRef(Py_None);
+            } else {
+                data->pos--;
+                value = ann_ast_arg(data);
+            }
+        }
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->vararg, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_list(data, 0, ann_ast_arg);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->kwonlyargs, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_list(data, 1, ann_ast_expr);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->kw_defaults, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        {
+            Py_UCS1 c = ann_ast_next(data);
+            if (c == 0xFF) goto failed;
+            if (c == 0) {
+                value = Py_NewRef(Py_None);
+            } else {
+                data->pos--;
+                value = ann_ast_arg(data);
+            }
+        }
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->kwarg, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_list(data, 0, ann_ast_expr);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->defaults, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+    assert(result != NULL);
+    Py_LeaveRecursiveCall();
+    return result;
+    failed:
+    Py_XDECREF(value);
+    Py_XDECREF(result);
+    Py_LeaveRecursiveCall();
+    return NULL;
 }
+
+static PyObject *
+ann_ast_boolop(AnnotationData *data)
+{
+    Py_UCS1 value = ann_ast_next(data);
+    if (value == 0xFF) {
+        return NULL;
+    }
+    switch(value) {
+        case And:
+            return Py_NewRef(data->state->And_singleton);
+        case Or:
+            return Py_NewRef(data->state->Or_singleton);
+    }
+    Py_UNREACHABLE();
+}
+
+static PyObject *
+ann_ast_cmpop(AnnotationData *data)
+{
+    Py_UCS1 value = ann_ast_next(data);
+    if (value == 0xFF) {
+        return NULL;
+    }
+    switch(value) {
+        case Eq:
+            return Py_NewRef(data->state->Eq_singleton);
+        case NotEq:
+            return Py_NewRef(data->state->NotEq_singleton);
+        case Lt:
+            return Py_NewRef(data->state->Lt_singleton);
+        case LtE:
+            return Py_NewRef(data->state->LtE_singleton);
+        case Gt:
+            return Py_NewRef(data->state->Gt_singleton);
+        case GtE:
+            return Py_NewRef(data->state->GtE_singleton);
+        case Is:
+            return Py_NewRef(data->state->Is_singleton);
+        case IsNot:
+            return Py_NewRef(data->state->IsNot_singleton);
+        case In:
+            return Py_NewRef(data->state->In_singleton);
+        case NotIn:
+            return Py_NewRef(data->state->NotIn_singleton);
+    }
+    Py_UNREACHABLE();
+}
+
+static PyObject *
+ann_ast_comprehension(AnnotationData *data)
+{
+    PyObject *result = NULL, *value = NULL;
+    PyTypeObject *tp;
+    if (Py_EnterRecursiveCall(" during ast construction")) {
+        return NULL;
+    }
+    tp = (PyTypeObject *) data->state->comprehension_type;
+    result = PyType_GenericNew(tp, NULL, NULL);
+    if (!result) goto failed;
+        data->in_store_context = 1;
+        value = ann_ast_expr(data);
+        data->in_store_context = 0;
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->target, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_expr(data);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->iter, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_list(data, 0, ann_ast_expr);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->ifs, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_int(data);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->is_async, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+    assert(result != NULL);
+    Py_LeaveRecursiveCall();
+    return result;
+    failed:
+    Py_XDECREF(value);
+    Py_XDECREF(result);
+    Py_LeaveRecursiveCall();
+    return NULL;
+}
+
+static PyObject *
+ann_ast_expr(AnnotationData *data)
+{
+    PyObject *result = NULL, *value = NULL;
+    PyTypeObject *tp;
+    if (Py_EnterRecursiveCall(" during ast construction")) {
+        return NULL;
+    }
+    Py_UCS1 kind = ann_ast_next(data);
+    if (kind == 0xFF) {
+        return NULL;
+    }
+    switch (kind) {
+        case BoolOp_kind: {
+            tp = (PyTypeObject *) data->state->BoolOp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_boolop(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->op, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case NamedExpr_kind: {
+            PyErr_SetString(PyExc_RuntimeError, "annotation expression contains forbidden node type: NamedExpr");
+            goto failed;
+        }
+        case BinOp_kind: {
+            tp = (PyTypeObject *) data->state->BinOp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->left, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_operator(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->op, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->right, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case UnaryOp_kind: {
+            tp = (PyTypeObject *) data->state->UnaryOp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_unaryop(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->op, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->operand, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Lambda_kind: {
+            tp = (PyTypeObject *) data->state->Lambda_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_arguments(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->args, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->body, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case IfExp_kind: {
+            tp = (PyTypeObject *) data->state->IfExp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->test, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->body, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->orelse, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Dict_kind: {
+            tp = (PyTypeObject *) data->state->Dict_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_list(data, 1, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->keys, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Set_kind: {
+            tp = (PyTypeObject *) data->state->Set_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->elts, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case ListComp_kind: {
+            tp = (PyTypeObject *) data->state->ListComp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->elt, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_comprehension);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
+                {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case SetComp_kind: {
+            tp = (PyTypeObject *) data->state->SetComp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->elt, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_comprehension);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
+                {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case DictComp_kind: {
+            tp = (PyTypeObject *) data->state->DictComp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->key, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            {
+                Py_UCS1 c = ann_ast_next(data);
+                if (c == 0xFF) goto failed;
+                if (c == 0) {
+                    value = Py_NewRef(Py_None);
+                } else {
+                    data->pos--;
+                    value = ann_ast_expr(data);
+                }
+            }
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_comprehension);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
+                {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case GeneratorExp_kind: {
+            tp = (PyTypeObject *) data->state->GeneratorExp_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->elt, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_comprehension);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
+                {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Await_kind: {
+            PyErr_SetString(PyExc_RuntimeError, "annotation expression contains forbidden node type: Await");
+            goto failed;
+        }
+        case Yield_kind: {
+            PyErr_SetString(PyExc_RuntimeError, "annotation expression contains forbidden node type: Yield");
+            goto failed;
+        }
+        case YieldFrom_kind: {
+            PyErr_SetString(PyExc_RuntimeError, "annotation expression contains forbidden node type: YieldFrom");
+            goto failed;
+        }
+        case Compare_kind: {
+            tp = (PyTypeObject *) data->state->Compare_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->left, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_cmpop);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->ops, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->comparators, value) ==
+                -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Call_kind: {
+            tp = (PyTypeObject *) data->state->Call_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->func, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->args, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_list(data, 0, ann_ast_keyword);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->keywords, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case FormattedValue_kind: {
+            tp = (PyTypeObject *) data->state->FormattedValue_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_int(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->conversion, value) == -1)
+                {
+                goto failed;
+            }
+            Py_DECREF(value);
+            {
+                Py_UCS1 c = ann_ast_next(data);
+                if (c == 0xFF) goto failed;
+                if (c == 0) {
+                    value = Py_NewRef(Py_None);
+                } else {
+                    data->pos--;
+                    value = ann_ast_expr(data);
+                }
+            }
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->format_spec, value) ==
+                -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Interpolation_kind: {
+            tp = (PyTypeObject *) data->state->Interpolation_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_constant(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->str, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_int(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->conversion, value) == -1)
+                {
+                goto failed;
+            }
+            Py_DECREF(value);
+            {
+                Py_UCS1 c = ann_ast_next(data);
+                if (c == 0xFF) goto failed;
+                if (c == 0) {
+                    value = Py_NewRef(Py_None);
+                } else {
+                    data->pos--;
+                    value = ann_ast_expr(data);
+                }
+            }
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->format_spec, value) ==
+                -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case JoinedStr_kind: {
+            tp = (PyTypeObject *) data->state->JoinedStr_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case TemplateStr_kind: {
+            tp = (PyTypeObject *) data->state->TemplateStr_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Slice_kind + 2:
+        case Slice_kind + 3:
+        case Slice_kind + 4:
+        case Slice_kind + 5:
+        case Slice_kind + 6:
+        case Slice_kind + 7:
+        case Slice_kind + 8:
+        case Slice_kind + 9:
+        case Slice_kind + 10:
+        case Slice_kind + 11:
+            data->pos--;
+            tp = (PyTypeObject *) data->state->Constant_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_constant(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        case Attribute_kind: {
+            tp = (PyTypeObject *) data->state->Attribute_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_identifier(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->attr, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr_context(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Subscript_kind: {
+            tp = (PyTypeObject *) data->state->Subscript_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->slice, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr_context(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Starred_kind: {
+            tp = (PyTypeObject *) data->state->Starred_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_expr(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr_context(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Name_kind: {
+            tp = (PyTypeObject *) data->state->Name_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_identifier(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->id, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr_context(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case List_kind: {
+            tp = (PyTypeObject *) data->state->List_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->elts, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr_context(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Tuple_kind: {
+            tp = (PyTypeObject *) data->state->Tuple_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            value = ann_ast_list(data, 0, ann_ast_expr);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->elts, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            value = ann_ast_expr_context(data);
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        case Slice_kind: {
+            tp = (PyTypeObject *) data->state->Slice_type;
+            result = PyType_GenericNew(tp, NULL, NULL);
+            if (!result) goto failed;
+            {
+                Py_UCS1 c = ann_ast_next(data);
+                if (c == 0xFF) goto failed;
+                if (c == 0) {
+                    value = Py_NewRef(Py_None);
+                } else {
+                    data->pos--;
+                    value = ann_ast_expr(data);
+                }
+            }
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->lower, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            {
+                Py_UCS1 c = ann_ast_next(data);
+                if (c == 0xFF) goto failed;
+                if (c == 0) {
+                    value = Py_NewRef(Py_None);
+                } else {
+                    data->pos--;
+                    value = ann_ast_expr(data);
+                }
+            }
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->upper, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            {
+                Py_UCS1 c = ann_ast_next(data);
+                if (c == 0xFF) goto failed;
+                if (c == 0) {
+                    value = Py_NewRef(Py_None);
+                } else {
+                    data->pos--;
+                    value = ann_ast_expr(data);
+                }
+            }
+            if (!value) goto failed;
+            if (PyObject_SetAttr(result, data->state->step, value) == -1) {
+                goto failed;
+            }
+            Py_DECREF(value);
+            break;
+        }
+        default: {
+            PyErr_Format(PyExc_RuntimeError, "invalid sum kind %c", kind);
+            goto failed;
+        }
+    }
+    assert(result != NULL);
+    value = PyLong_FromLong(1);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(0);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(1);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(0);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    Py_LeaveRecursiveCall();
+    return result;
+    failed:
+    Py_XDECREF(value);
+    Py_XDECREF(result);
+    Py_LeaveRecursiveCall();
+    return NULL;
+}
+
+static PyObject *
+ann_ast_expr_context(AnnotationData *data)
+{
+    if (data->in_store_context) {
+        return Py_NewRef(data->state->Store_singleton);
+    } else {
+        return Py_NewRef(data->state->Load_singleton);
+    }
+}
+static PyObject *
+ann_ast_keyword(AnnotationData *data)
+{
+    PyObject *result = NULL, *value = NULL;
+    PyTypeObject *tp;
+    if (Py_EnterRecursiveCall(" during ast construction")) {
+        return NULL;
+    }
+    tp = (PyTypeObject *) data->state->keyword_type;
+    result = PyType_GenericNew(tp, NULL, NULL);
+    if (!result) goto failed;
+        {
+            Py_UCS1 c = ann_ast_next(data);
+            if (c == 0xFF) goto failed;
+            if (c == 0) {
+                value = Py_NewRef(Py_None);
+            } else {
+                data->pos--;
+                value = ann_ast_identifier(data);
+            }
+        }
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->arg, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+        value = ann_ast_expr(data);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, data->state->value, value) == -1) {
+            goto failed;
+        }
+        Py_DECREF(value);
+    assert(result != NULL);
+    value = PyLong_FromLong(1);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(0);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(1);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    value = PyLong_FromLong(0);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
+        goto failed;
+    Py_DECREF(value);
+    Py_LeaveRecursiveCall();
+    return result;
+    failed:
+    Py_XDECREF(value);
+    Py_XDECREF(result);
+    Py_LeaveRecursiveCall();
+    return NULL;
+}
+
+static PyObject *
+ann_ast_operator(AnnotationData *data)
+{
+    Py_UCS1 value = ann_ast_next(data);
+    if (value == 0xFF) {
+        return NULL;
+    }
+    switch(value) {
+        case Add:
+            return Py_NewRef(data->state->Add_singleton);
+        case Sub:
+            return Py_NewRef(data->state->Sub_singleton);
+        case Mult:
+            return Py_NewRef(data->state->Mult_singleton);
+        case MatMult:
+            return Py_NewRef(data->state->MatMult_singleton);
+        case Div:
+            return Py_NewRef(data->state->Div_singleton);
+        case Mod:
+            return Py_NewRef(data->state->Mod_singleton);
+        case Pow:
+            return Py_NewRef(data->state->Pow_singleton);
+        case LShift:
+            return Py_NewRef(data->state->LShift_singleton);
+        case RShift:
+            return Py_NewRef(data->state->RShift_singleton);
+        case BitOr:
+            return Py_NewRef(data->state->BitOr_singleton);
+        case BitXor:
+            return Py_NewRef(data->state->BitXor_singleton);
+        case BitAnd:
+            return Py_NewRef(data->state->BitAnd_singleton);
+        case FloorDiv:
+            return Py_NewRef(data->state->FloorDiv_singleton);
+    }
+    Py_UNREACHABLE();
+}
+
+static PyObject *
+ann_ast_unaryop(AnnotationData *data)
+{
+    Py_UCS1 value = ann_ast_next(data);
+    if (value == 0xFF) {
+        return NULL;
+    }
+    switch(value) {
+        case Invert:
+            return Py_NewRef(data->state->Invert_singleton);
+        case Not:
+            return Py_NewRef(data->state->Not_singleton);
+        case UAdd:
+            return Py_NewRef(data->state->UAdd_singleton);
+        case USub:
+            return Py_NewRef(data->state->USub_singleton);
+    }
+    Py_UNREACHABLE();
+}
+
 
 /* Helper for checking if a node class is abstract in the tests. */
 static PyObject *
@@ -19563,7 +19310,6 @@ ast_is_abstract(PyObject *Py_UNUSED(module), PyObject *cls) {
 }
 
 static struct PyMethodDef astmodule_methods[] = {
-    {"_from_annotation_data", ast_from_annotation_data, METH_O, NULL},
     {"_is_abstract", ast_is_abstract, METH_O, NULL},
     {NULL}  /* Sentinel */
 };
@@ -20073,6 +19819,85 @@ int PyAST_Check(PyObject* obj)
         return -1;
     }
     return PyObject_IsInstance(obj, state->AST_type);
+}
+
+static PyObject *
+_PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
+{
+    if (!data || !PyUnicode_CheckExact(data)) {
+        PyErr_SetString(PyExc_TypeError, "expected a string for data");
+        return NULL;
+    }
+    struct ast_state *state = get_ast_state();
+    if (state == NULL) {
+        return NULL;
+    }
+    AnnotationData ann_data = {
+        .state = state,
+        .data = data,
+        .pos = 0,
+        .private_name = private_name,
+        .in_store_context = 0,
+    };
+    PyObject *expr = ann_ast_expr(&ann_data);
+    if (!expr) {
+        if (!PyErr_Occurred()) {
+            PyErr_Format(PyExc_RuntimeError,
+                "error parsing binary AST data: %R", data);
+        }
+        return NULL;
+    }
+    if (ann_data.pos != PyUnicode_GET_LENGTH(data)) {
+        PyErr_Format(PyExc_RuntimeError,
+            "malformed binary AST data: %R", data);
+        return NULL;
+    }
+    PyTypeObject *tp = (PyTypeObject *)state->Expression_type;
+    PyObject *result = PyType_GenericNew(tp, NULL, NULL);
+    if (!result) {
+        return NULL;
+    }
+    if (PyObject_SetAttr(result, state->body, expr) == -1) {
+        Py_DECREF(result);
+        return NULL;
+    }
+    Py_DECREF(expr);
+    return result;
+}
+
+PyObject *
+_PyAST_FromAnnotationData(PyObject *data, PyObject *private_name)
+{
+    if (!data || !(PyAnyDict_CheckExact(data) || PyUnicode_CheckExact(data))) {
+        PyErr_Format(PyExc_TypeError, "expected a dictionary or string for data, got %R", data);
+        return NULL;
+    }
+    if (PyUnicode_CheckExact(data)) {
+        PyObject *out = _PyAST_FromAnnotationString(data, private_name);
+        return out;
+    }
+    PyObject *out = PyDict_New();
+    if (out == NULL) {
+        goto parsing_err;
+    }
+    PyObject *name, *data_string;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(data, &pos, &name, &data_string)) {
+        PyObject *expr_obj = _PyAST_FromAnnotationString(data_string, private_name);
+        if (!expr_obj) {
+            goto parsing_err;
+        }
+        if (PyDict_SetItem(out, name, expr_obj) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "error setting annotation in dictionary");
+            Py_DECREF(expr_obj);
+            goto parsing_err;
+        }
+        Py_DECREF(expr_obj);
+    }
+    return out;
+parsing_err:
+    Py_XDECREF(out);
+    return NULL;
 }
 
 
