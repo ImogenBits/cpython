@@ -740,6 +740,7 @@ codegen_annotate(compiler *c, location loc, void *key, PyObject *name) {
         ADDOP_I(c, loc, BUILD_TUPLE, 4);
     }
     ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_MAKE_ANNOTATE);
+    Py_DECREF(name_data);
     return SUCCESS;
 }
 

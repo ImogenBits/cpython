@@ -228,7 +228,6 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
         goto failed;
     }
     if (is_evaluate) {
-        assert(PyUnicode_Check(parsed_asts));
         result = _eval_ast(annASTClass, format, parsed_asts, namespace);
     } else {
         assert(PyDict_Check(parsed_asts));

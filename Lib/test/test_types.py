@@ -50,7 +50,7 @@ class TypesTests(unittest.TestCase):
                 self.assertIs(getattr(c_types, name), getattr(py_types, name))
 
         all_names = ignored | {
-            'AsyncGeneratorType', 'BuiltinFunctionType', 'BuiltinMethodType',
+            'AnnotateObjectType', 'AsyncGeneratorType', 'BuiltinFunctionType', 'BuiltinMethodType',
             'CapsuleType', 'CellType', 'ClassMethodDescriptorType', 'CodeType',
             'CoroutineType', 'EllipsisType', 'FrameType', 'FunctionType',
             'FrameLocalsProxyType',

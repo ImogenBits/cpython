@@ -398,6 +398,7 @@ class TypeParamsAccessTest(unittest.TestCase):
         T, = Alias.__type_params__
         self.assertIs(Alias.__value__(), T)
 
+    # XXX: new test from sully's branch
     def test_type_alias_value_keeps_live_namespaces(self):
         ns = run_code("""
             value = 1
@@ -799,6 +800,7 @@ class TypeParamsClassScopeTest(unittest.TestCase):
         cls = ns["outer"]()
         self.assertEqual(cls.Alias.__value__, "class")
 
+    # XXX: new test from sully's branch
     def test_explicit_nonlocal_assignment(self):
         ns = run_code("""
             x = "global"

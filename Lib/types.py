@@ -73,13 +73,16 @@ except ImportError:
     NoneType = type(None)
     NotImplementedType = type(NotImplemented)
 
+    def _a(x: int): pass
+    AnnotateObjectType = type(_a.__annotate__)
+
     # CapsuleType cannot be accessed from pure Python,
     # so there is no fallback definition.
 
     # LazyImportType in pure Python cannot be guaranteed
     # without overriding the filter, so there is no fallback.
 
-    del sys, _f, _g, _C, _c, _ag, _cell_factory  # Not for export
+    del sys, _f, _g, _C, _c, _ag, _a, _cell_factory  # Not for export
 
 
 # Provide a PEP 3115 compliant mechanism for class creation

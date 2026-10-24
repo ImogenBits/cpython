@@ -19,6 +19,10 @@ __all__ = [
     "get_annotations",
     "annotations_to_string",
     "type_repr",
+    "AnnotationAST",
+    "AnnotationNamespace",
+    "annotation_to_ast",
+    "annotations_to_ast",
 ]
 
 
@@ -652,7 +656,11 @@ def _template_to_ast(template):
 
 class _StringifierDict(dict):
     def __init__(self, namespace, *, globals=None, owner=None, is_class=False, format):
-        super().__init__(namespace)
+        # N.B: This is a dict subtype because it is required to be for
+        # passing to eval, but we actually route *all* accesses
+        # through __missing__ so we can delegate to namespace without
+        # copying.
+        super().__init__()
         self.namespace = namespace
         self.globals = globals
         self.owner = owner
@@ -662,8 +670,19 @@ class _StringifierDict(dict):
         self.format = format
 
     def __missing__(self, key):
+        try:
+            return self.namespace[key]
+        except (KeyError, NameError):
+            pass
+
+        # this case is a missing cell contents, and we want to point the _Stringifier at the cell.
+        cell = None
+        if cells := getattr(self.namespace, 'cells', None):
+            cell = cells.get(key)
+
         fwdref = _Stringifier(
             key,
+            cell=cell,
             globals=self.globals,
             owner=self.owner,
             is_class=self.is_class,
@@ -687,6 +706,9 @@ class _StringifierDict(dict):
         self.next_id += 1
         return name
 
+    def __repr__(self):
+        return f"_StringifierDict({self.namespace})"
+
 
 def call_evaluate_function(evaluate, format, *, owner=None):
     """Call an evaluate function. Evaluate functions are normally generated for
@@ -694,6 +716,13 @@ def call_evaluate_function(evaluate, format, *, owner=None):
     type parameter objects.
     """
     return call_annotate_function(evaluate, format, owner=owner, _is_evaluate=True)
+
+
+def _try_ast(annotate):
+    try:
+        return annotate(Format.AST)
+    except NotImplementedError:
+        pass
 
 
 def call_annotate_function(annotate, format, *, owner=None, _is_evaluate=False):
@@ -761,6 +790,54 @@ def call_annotate_function(annotate, format, *, owner=None, _is_evaluate=False):
             key: _stringify_single(val)
             for key, val in annos.items()
         }
+    elif format == Format.FORWARDREF and (asts := _try_ast(annotate)):
+        def _eval_one(ann_ast):
+            # this makes inner scopes work properly when eval'd
+            namespace = ann_ast.namespace
+            code = compile(ann_ast.adjust_asts(), "<annotation>", "eval")
+            # XXX: We do a copy because test_forward_equality_and_hash_with_cells wants
+            # the dicts to be unique... but does that matter?
+            cell_dict = dict(namespace.cells) if namespace.cells is not None else None
+
+            is_class = isinstance(owner, type)
+            globals = _StringifierDict(
+                namespace,
+                globals=namespace.globals,
+                owner=owner,
+                is_class=is_class,
+                format=format,
+            )
+            try:
+                result = eval(code, globals)
+            except Exception as e:
+                pass
+            else:
+                globals.transmogrify(cell_dict)
+                return result
+
+            # Try again, but do not provide any globals. This allows us to return
+            # a value in certain cases where an exception gets raised during evaluation.
+            globals = _StringifierDict(
+                {},
+                globals=namespace.globals,
+                owner=owner,
+                is_class=is_class,
+                format=format,
+            )
+            result = eval(code, globals)
+            globals.transmogrify(cell_dict)
+
+            if isinstance(result, ForwardRef):
+                return result.evaluate(format=Format.FORWARDREF)
+            else:
+                return result
+
+        if _is_evaluate:
+            return _eval_one(asts)
+        else:
+            return {key: _eval_one(val) for key, val in asts.items()}
+
+    # XXX: Is it worth keeping any of the VALUE_WITH_FAKE_GLOBALS stuff?
     elif format == Format.FORWARDREF:
         # FORWARDREF is implemented similarly to STRING, but there are two changes,
         # at the beginning and the end of the process.
@@ -849,7 +926,13 @@ def call_annotate_function(annotate, format, *, owner=None, _is_evaluate=False):
         # NotImplementedError for this format.
         raise RuntimeError("annotate function does not support VALUE format")
     elif format == Format.AST:
-        raise RuntimeError("annotate function does not support AST format")
+        # Fall back to parsing the STRING format output.
+        result = call_annotate_function(
+            annotate, Format.STRING, owner=owner, _is_evaluate=_is_evaluate
+        )
+        return _string_annotations_to_ast(
+            result, getattr(annotate, "__globals__", None)
+        )
     else:
         raise ValueError(f"Invalid format: {format!r}")
 
@@ -1004,6 +1087,15 @@ def get_annotations(
             ann = _get_and_call_annotate(obj, format)
             if ann is not None:
                 return dict(ann)
+            # If there's no __annotate__, fall back to __annotations__,
+            # parsing any stringified annotations.
+            ann = _get_dunder_annotations(obj)
+            if ann is not None:
+                # For classes, the "locals" are the class namespace.
+                obj_globals, classdict = _get_obj_namespaces(obj)
+                if globals is None:
+                    globals = obj_globals
+                return _string_annotations_to_ast(ann, globals, classdict)
         case _:
             raise ValueError(f"Unsupported format {format!r}")
 
@@ -1019,57 +1111,7 @@ def get_annotations(
         return dict(ann)
 
     if globals is None or locals is None:
-        if isinstance(obj, type):
-            # class
-            obj_globals = None
-            module_name = getattr(obj, "__module__", None)
-            if module_name:
-                module = sys.modules.get(module_name, None)
-                if module:
-                    obj_globals = getattr(module, "__dict__", None)
-            obj_locals = dict(vars(obj))
-            unwrap = obj
-        elif isinstance(obj, types.ModuleType):
-            # module
-            obj_globals = getattr(obj, "__dict__")
-            obj_locals = None
-            unwrap = None
-        elif callable(obj):
-            # this includes types.Function, types.BuiltinFunctionType,
-            # types.BuiltinMethodType, functools.partial, functools.singledispatch,
-            # "class funclike" from Lib/test/test_inspect... on and on it goes.
-            obj_globals = getattr(obj, "__globals__", None)
-            obj_locals = None
-            unwrap = obj
-        else:
-            obj_globals = obj_locals = unwrap = None
-
-        if unwrap is not None:
-            # Use an id-based visited set to detect cycles in the __wrapped__
-            # and functools.partial.func chain (e.g. f.__wrapped__ = f).
-            # On cycle detection we stop and use whatever __globals__ we have
-            # found so far, mirroring the approach of inspect.unwrap().
-            _seen_ids = {id(unwrap)}
-            while True:
-                if hasattr(unwrap, "__wrapped__"):
-                    candidate = unwrap.__wrapped__
-                    if id(candidate) in _seen_ids:
-                        break
-                    _seen_ids.add(id(candidate))
-                    unwrap = candidate
-                    continue
-                if functools := sys.modules.get("functools"):
-                    if isinstance(unwrap, functools.partial):
-                        candidate = unwrap.func
-                        if id(candidate) in _seen_ids:
-                            break
-                        _seen_ids.add(id(candidate))
-                        unwrap = candidate
-                        continue
-                break
-            if hasattr(unwrap, "__globals__"):
-                obj_globals = unwrap.__globals__
-
+        obj_globals, obj_locals = _get_obj_namespaces(obj)
         if globals is None:
             globals = obj_globals
         if locals is None:
@@ -1089,6 +1131,65 @@ def get_annotations(
         for key, value in ann.items()
     }
     return return_value
+
+
+def _get_obj_namespaces(obj):
+    """Return the default (globals, locals) for evaluating obj's annotations.
+
+    Either may be None if it can't be determined.
+    """
+    if isinstance(obj, type):
+        # class
+        obj_globals = None
+        module_name = getattr(obj, "__module__", None)
+        if module_name:
+            module = sys.modules.get(module_name, None)
+            if module:
+                obj_globals = getattr(module, "__dict__", None)
+        obj_locals = dict(vars(obj))
+        unwrap = obj
+    elif isinstance(obj, types.ModuleType):
+        # module
+        obj_globals = getattr(obj, "__dict__")
+        obj_locals = None
+        unwrap = None
+    elif callable(obj):
+        # this includes types.Function, types.BuiltinFunctionType,
+        # types.BuiltinMethodType, functools.partial, functools.singledispatch,
+        # "class funclike" from Lib/test/test_inspect... on and on it goes.
+        obj_globals = getattr(obj, "__globals__", None)
+        obj_locals = None
+        unwrap = obj
+    else:
+        obj_globals = obj_locals = unwrap = None
+
+    if unwrap is not None:
+        # Use an id-based visited set to detect cycles in the __wrapped__
+        # and functools.partial.func chain (e.g. f.__wrapped__ = f).
+        # On cycle detection we stop and use whatever __globals__ we have
+        # found so far, mirroring the approach of inspect.unwrap().
+        _seen_ids = {id(unwrap)}
+        while True:
+            if hasattr(unwrap, "__wrapped__"):
+                candidate = unwrap.__wrapped__
+                if id(candidate) in _seen_ids:
+                    break
+                _seen_ids.add(id(candidate))
+                unwrap = candidate
+                continue
+            if functools := sys.modules.get("functools"):
+                if isinstance(unwrap, functools.partial):
+                    candidate = unwrap.func
+                    if id(candidate) in _seen_ids:
+                        break
+                    _seen_ids.add(id(candidate))
+                    unwrap = candidate
+                    continue
+            break
+        if hasattr(unwrap, "__globals__"):
+            obj_globals = unwrap.__globals__
+
+    return obj_globals, obj_locals
 
 
 def type_repr(value):
@@ -1138,6 +1239,33 @@ def annotations_to_ast(annotations):
         n: annotation_to_ast(t)
         for n, t in annotations.items()
     }
+
+
+def _string_annotations_to_ast(annotations, globals=None, classdict=None):
+    """Convert STRING format results to the AST format by parsing them.
+
+    *annotations* is either a dict (from an annotate function) or a single
+    annotation (from an evaluate function). Non-string values are wrapped
+    using annotation_to_ast(). *globals* and *classdict* are used for name
+    lookups when the resulting ASTs are evaluated.
+    """
+    namespace = AnnotationNamespace(classdict=classdict, globals=globals)
+
+    def convert(value):
+        if not isinstance(value, str):
+            return annotation_to_ast(value)
+        if value.lstrip().startswith("*"):
+            # A bare star unpack like '*Ts' isn't a valid expression, so parse
+            # it inside a tuple and pull the Starred node back out.
+            node = ast.parse(f"({value},)", mode="eval")
+            node.body = node.body.elts[0]
+        else:
+            node = ast.parse(value, mode="eval")
+        return AnnotationAST(node, namespace)
+
+    if isinstance(annotations, dict):
+        return {key: convert(value) for key, value in annotations.items()}
+    return convert(annotations)
 
 def _rewrite_star_unpack(arg):
     """If the given argument annotation expression is a star unpack e.g. `'*Ts'`
@@ -1243,7 +1371,8 @@ class _InsertAnnotations(ast.NodeTransformer):
             node = ast.fix_missing_locations(node)
         return node
 
-def create_annotate_function(annotations):
+# XXX: dead code?
+def _create_annotate_function(annotations):
     # Annotations is a mapping from names to (object, namespace) tuples.
     # Each object either is an AST already, or we try to convert it to one by
     # getting its repr and parsing it. We also try to evaluate it in the given
@@ -1313,17 +1442,16 @@ class _AnnotationASTTransformer(ast.NodeTransformer):
         super().__init__()
 
     def visit_Name(self, node):
-        node.id = self.maybe_mangle(node.id)
         if self.scope > 0:
-            new = ast.Subscript(ast.Name(_ANNOTATION_AST_SKIP_CLASS), node)
+            new = ast.Subscript(ast.Name(_ANNOTATION_AST_SKIP_CLASS), ast.Constant(node.id))
             return ast.copy_location(new, node)
         return node
 
     def visit_Lambda(self, node):
         node.args = self.visit(node.args)
         self.scope += 1
-        body = self.visit(node.body)
-        node.self.scope -= 1
+        node.body = self.visit(node.body)
+        self.scope -= 1
         return node
 
     def _visit_comprehension(self, node):
@@ -1344,10 +1472,25 @@ class _AnnotationASTTransformer(ast.NodeTransformer):
     visit_GeneratorExp = _visit_comprehension
 
 
+class _GlobalsWithFallback(dict):
+    """A globals overlay that preserves a dict subclass's __missing__."""
+
+    __slots__ = ("fallback",)
+
+    def __init__(self, fallback):
+        super().__init__()
+        self.fallback = fallback
+
+    def __missing__(self, key):
+        if self.fallback is None:
+            raise KeyError(key)
+        return self.fallback[key]
+
+
 class AnnotationNamespace(collections.abc.Mapping):
     """A mapping that combines globals, closure and classdict for an annotation."""
 
-    __slots__ = ("locals", "classdict", "cells", "globals", "explicit_globals")
+    __slots__ = ("locals", "classdict", "cells", "globals", "explicit_globals", "builtins")
 
     def __init__(self, locals=None, classdict=None, cells=None, globals=None, explicit_globals=None):
         self.locals = locals
@@ -1355,8 +1498,17 @@ class AnnotationNamespace(collections.abc.Mapping):
         self.cells = cells
         self.globals = globals or {}
         self.explicit_globals = explicit_globals
+        # apparently in __main__, __builtins__ is a module, but
+        # everywhere else it is a dict!
+        builtins_ns = self.globals.get("__builtins__", builtins.__dict__)
+        if isinstance(builtins_ns, types.ModuleType):
+            builtins_ns = builtins_ns.__dict__
+        self.builtins = builtins_ns
 
     def __getitem__(self, key):
+        if key == _ANNOTATION_AST_SKIP_CLASS:
+            return self.as_inner_scope()
+
         if self.explicit_globals is None or key not in self.explicit_globals:
             if self.locals is not None:
                 try:
@@ -1384,7 +1536,7 @@ class AnnotationNamespace(collections.abc.Mapping):
         except KeyError:
             pass
         try:
-            return self.globals.get("__builtins__", builtins.__dict__)[key]
+            return self.builtins[key]
         except KeyError:
             pass
         raise KeyError(key)
@@ -1421,11 +1573,21 @@ class AnnotationNamespace(collections.abc.Mapping):
 
     def keys(self):
         names = set()
-        for namespace in (self.locals, self.classdict, self.cells):
+        for namespace in (self.locals, self.classdict):
             if namespace is not None:
                 names.update(namespace.keys())
-        names -= self.explicit_globals
+        if self.cells:
+            for k, v in self.cells.items():
+                try:
+                    v.cell_contents
+                except ValueError:
+                    pass
+                else:
+                    names.add(k)
+        if self.explicit_globals:
+            names -= self.explicit_globals
         names.update(self.globals.keys())
+        names.update(self.builtins.keys())
         return names
 
     def __iter__(self):
@@ -1466,53 +1628,50 @@ class AnnotationAST:
     def __repr__(self):
         return f"AnnotationAST(ast={self.ast!r}, namespace={self.namespace!r})"
 
-    def evaluate(self, format):
-        if format == Format.AST:
-            return self
-        elif format == Format.STRING:
-            return ast.unparse(self.ast)
-        elif format == Format.FORWARDREF:
-            module = self.namespace.globals.get("__name__", None)
-            ref = ForwardRef(ast.unparse(self.ast), module=module)
-            ref.__ast_node__ = self.ast
-            ref.__globals__ = self.namespace.globals
-            if self.namespace.cells is None:
-                ref.__cell__ = None
-            elif len(self.namespace.cells) == 1:
-                ref.__cell__ = next(iter(self.namespace.cells.values()))
-            else:
-                ref.__cell__ = self.namespace.cells
-            return ref
-        elif format == Format.VALUE_WITH_FAKE_GLOBALS:
-            raise NotImplementedError
-
-        # we need this so that stringified annotations aren't quoted twice
-        # i.e. 'a: int' with the future import or 'a: "int"' without
-        # should result in just the string "int" and not "'int'"
-        if isinstance(self.ast.body, ast.Constant):
-            return self.ast.body.value
-
-        # this makes inner scopes work properly when eval'd
+    def adjust_asts(self):
         if self.namespace.classdict is not None:
             transformer = _AnnotationASTTransformer()
             ann_ast = transformer.visit(self.ast)
-            namespace = self.namespace.as_inner_scope()
+            ast.fix_missing_locations(ann_ast)
         else:
             ann_ast = self.ast
-            namespace = self.namespace
+        return ann_ast
+
+    def evaluate(self, format):
+        if not isinstance(format, int):
+            raise TypeError(
+                f"format must be an int, not {type(format).__name__}"
+            )
+        if format == Format.AST:
+            return self
+        elif format == Format.STRING:
+            # we need this so that stringified annotations aren't quoted twice
+            # i.e. 'a: int' with the future import or 'a: "int"' without
+            # should result in just the string "int" and not "'int'"
+            if isinstance(self.ast.body, ast.Constant) and isinstance(self.ast.body.value, str):
+                return self.ast.body.value
+
+            return ast.unparse(self.ast)
+        elif format != Format.VALUE:
+            # Includes VALUE_WITH_FAKE_GLOBALS and unknown formats.
+            raise NotImplementedError
+
+        # this makes inner scopes work properly when eval'd
+        ann_ast = self.adjust_asts()
 
         # this makes things like 'def f[*T](*args: *T): ...' be eval'able,
         # otherwise a bare unpack is a syntax error
         if isinstance(ann_ast.body, ast.Starred):
             ann_ast = ast.Expression(
                 ast.Subscript(
-                    ast.Tuple(elts=[ann_ast.body.value], ctx=ast.Load()),
+                    ast.Tuple(elts=[ann_ast.body], ctx=ast.Load()),
                     ast.Constant(0),
                     ast.Load(),
                 )
             )
+            ast.fix_missing_locations(ann_ast)
 
-        return eval(compile(ann_ast, "<annotation>", "eval"), globals={}, locals=namespace)
+        return eval(compile(ann_ast, "<annotation>", "eval"), globals=_GlobalsWithFallback(self.namespace))
 
     def evaluate_type(self, format):
         return typing.eval_annotation_AST(self.ast, self.namespace, format=format)
