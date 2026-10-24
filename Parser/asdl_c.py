@@ -161,6 +161,7 @@ class MetadataVisitor(asdl.VisitorBase):
             identifiers=set(),
             singletons=set(),
             types={self.ROOT_TYPE},
+            expr_types={"expr"},
         )
 
     def visitModule(self, mod):
@@ -172,6 +173,12 @@ class MetadataVisitor(asdl.VisitorBase):
 
     def visitSum(self, sum, name):
         self.metadata.types.add(name)
+        if name in self.metadata.expr_types:
+            self.metadata.expr_types.add(name)
+            for cons in sum.types:
+                self.metadata.expr_types.add(cons.name)
+                for field in cons.fields:
+                    self.metadata.expr_types.add(field.type)
 
         simple_sum = is_simple(sum)
         if simple_sum:
@@ -189,6 +196,9 @@ class MetadataVisitor(asdl.VisitorBase):
 
     def visitProduct(self, product, name):
         self.metadata.types.add(name)
+        if name in self.metadata.expr_types:
+            for field in product.fields:
+                self.metadata.expr_types.add(field.type)
         self.visitFields(product.attributes)
         self.visitFields(product.fields)
 
@@ -1892,8 +1902,6 @@ class AnnotationDecoderVisitor(EmitVisitor):
 
     def visitModule(self, mod):
         self.types = mod.types
-        self.reachable = set()
-        self.visit_type("expr")
 
         self.emit("""
 typedef struct {
@@ -2088,32 +2096,16 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 }
 """.strip(), 0, reflow=False)
 
-        for name in sorted(self.reachable):
+        expr_types = sorted(self.metadata.expr_types & self.types.keys())
+        for name in expr_types:
             self.emit(
                 f"static PyObject *ann_ast_{name}(AnnotationData *);",
                 0,
                 reflow=False,
             )
-        for name in sorted(self.reachable):
+        for name in expr_types:
             value = self.types[name]
             self.visit(value, name)
-
-    def visit_type(self, name):
-        if name in asdl.builtin_types:
-            return
-        if name in self.reachable or name not in self.types:
-            return
-        self.reachable.add(name)
-        value = self.types[name]
-        fields = []
-        if isinstance(value, asdl.Sum):
-            if not is_simple(value):
-                for cons in value.types:
-                    fields.extend(cons.fields)
-        elif isinstance(value, asdl.Product):
-            fields.extend(value.fields)
-        for field in fields:
-            self.visit_type(field.type)
 
     def func_begin(self, name):
         self.emit("static PyObject *", 0)
