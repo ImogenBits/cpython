@@ -793,8 +793,8 @@ def call_annotate_function(annotate, format, *, owner=None, _is_evaluate=False):
     elif format == Format.FORWARDREF and (asts := _try_ast(annotate)):
         def _eval_one(ann_ast):
             # this makes inner scopes work properly when eval'd
-            namespace = ann_ast.namespace
-            code = compile(ann_ast.adjust_asts(), "<annotation>", "eval")
+            ast_node, namespace = ann_ast.make_evalable()
+            code = compile(ast_node, "<annotation>", "eval")
             # XXX: We do a copy because test_forward_equality_and_hash_with_cells wants
             # the dicts to be unique... but does that matter?
             cell_dict = dict(namespace.cells) if namespace.cells is not None else None
@@ -1474,7 +1474,8 @@ class AnnotationNamespace(dict):
     __slots__ = ("locals", "classdict", "cells", "globals", "explicit_globals", "builtins")
 
     def __init__(self, locals=None, classdict=None, cells=None, globals=None, explicit_globals=None):
-        self.locals = locals
+        super().__init__()
+        self.locals = dict(locals) if locals is not None else None
         self.classdict = classdict
         self.cells = cells
         self.globals = globals or {}
@@ -1487,9 +1488,6 @@ class AnnotationNamespace(dict):
         self.builtins = builtins_ns
 
     def __getitem__(self, key):
-        if key == _ANNOTATION_AST_SKIP_CLASS:
-            return self.as_inner_scope()
-
         if self.explicit_globals is None or key not in self.explicit_globals:
             if self.locals is not None:
                 try:
@@ -1521,6 +1519,11 @@ class AnnotationNamespace(dict):
         except KeyError:
             pass
         raise KeyError(key)
+
+    def __setitem__(self, key, value):
+        if self.locals is None:
+            self.locals = {}
+        self.locals[key] = value
 
     def __hash__(self):
         return hash((
@@ -1583,8 +1586,11 @@ class AnnotationNamespace(dict):
             cells=dict(self.cells) if self.cells is not None else None,
             classdict=dict(self.classdict) if self.classdict is not None else None,
             globals=dict(self.globals),
-            explicit_globals=set(self.explicit_globals),
+            explicit_globals=set(self.explicit_globals) if self.explicit_globals is not None else None,
         )
+
+    def copy(self):
+        return self.__copy__()
 
     def as_inner_scope(self):
         return type(self)(
@@ -1609,14 +1615,30 @@ class AnnotationAST:
     def __repr__(self):
         return f"AnnotationAST(ast={self.ast!r}, namespace={self.namespace!r})"
 
-    def adjust_asts(self):
+    def make_evalable(self):
+        # this makes inner scopes work properly when eval'd
         if self.namespace.classdict is not None:
             transformer = _AnnotationASTTransformer()
             ann_ast = transformer.visit(self.ast)
             ast.fix_missing_locations(ann_ast)
+            namespace = self.namespace.copy()
+            namespace[_ANNOTATION_AST_SKIP_CLASS] = self.namespace.as_inner_scope()
         else:
             ann_ast = self.ast
-        return ann_ast
+            namespace = self.namespace
+
+        # this makes things like 'def f[*T](*args: *T): ...' be eval'able,
+        # otherwise a bare unpack is a syntax error
+        if isinstance(ann_ast.body, ast.Starred):
+            ann_ast = ast.Expression(
+                ast.Subscript(
+                    ast.Tuple(elts=[ann_ast.body], ctx=ast.Load()),
+                    ast.Constant(0),
+                    ast.Load(),
+                )
+            )
+            ast.fix_missing_locations(ann_ast)
+        return ann_ast, namespace
 
     def evaluate(self, format):
         if not isinstance(format, int):
@@ -1637,22 +1659,8 @@ class AnnotationAST:
             # Includes VALUE_WITH_FAKE_GLOBALS and unknown formats.
             raise NotImplementedError
 
-        # this makes inner scopes work properly when eval'd
-        ann_ast = self.adjust_asts()
-
-        # this makes things like 'def f[*T](*args: *T): ...' be eval'able,
-        # otherwise a bare unpack is a syntax error
-        if isinstance(ann_ast.body, ast.Starred):
-            ann_ast = ast.Expression(
-                ast.Subscript(
-                    ast.Tuple(elts=[ann_ast.body], ctx=ast.Load()),
-                    ast.Constant(0),
-                    ast.Load(),
-                )
-            )
-            ast.fix_missing_locations(ann_ast)
-
-        return eval(compile(ann_ast, "<annotation>", "eval"), globals=self.namespace)
+        ann_ast, namespace = self.make_evalable()
+        return eval(compile(ann_ast, "<annotation>", "eval"), globals=namespace)
 
     def evaluate_type(self, format):
         return typing.eval_annotation_AST(self.ast, self.namespace, format=format)
