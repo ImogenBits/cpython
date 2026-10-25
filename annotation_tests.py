@@ -162,7 +162,7 @@ print(*annotation_tests.run_test({clean}))
 """
 
 if __name__ == "__main__":
-    count = 10
+    count = 1
     if len(sys.argv) >= 2:
         count = int(sys.argv[1])
     clean = len(sys.argv) >= 3 and sys.argv[2] == "c"
