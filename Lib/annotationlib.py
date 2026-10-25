@@ -1088,14 +1088,10 @@ def get_annotations(
             if ann is not None:
                 return dict(ann)
             # If there's no __annotate__, fall back to __annotations__,
-            # parsing any stringified annotations.
+            # which is in VALUE format, so we convert that to ASTs
             ann = _get_dunder_annotations(obj)
             if ann is not None:
-                # For classes, the "locals" are the class namespace.
-                obj_globals, classdict = _get_obj_namespaces(obj)
-                if globals is None:
-                    globals = obj_globals
-                return _string_annotations_to_ast(ann, globals, classdict)
+                return annotations_to_ast(ann)
         case _:
             raise ValueError(f"Unsupported format {format!r}")
 
