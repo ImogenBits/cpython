@@ -1468,22 +1468,7 @@ class _AnnotationASTTransformer(ast.NodeTransformer):
     visit_GeneratorExp = _visit_comprehension
 
 
-class _GlobalsWithFallback(dict):
-    """A globals overlay that preserves a dict subclass's __missing__."""
-
-    __slots__ = ("fallback",)
-
-    def __init__(self, fallback):
-        super().__init__()
-        self.fallback = fallback
-
-    def __missing__(self, key):
-        if self.fallback is None:
-            raise KeyError(key)
-        return self.fallback[key]
-
-
-class AnnotationNamespace(collections.abc.Mapping):
+class AnnotationNamespace(dict):
     """A mapping that combines globals, closure and classdict for an annotation."""
 
     __slots__ = ("locals", "classdict", "cells", "globals", "explicit_globals", "builtins")
@@ -1667,7 +1652,7 @@ class AnnotationAST:
             )
             ast.fix_missing_locations(ann_ast)
 
-        return eval(compile(ann_ast, "<annotation>", "eval"), globals=_GlobalsWithFallback(self.namespace))
+        return eval(compile(ann_ast, "<annotation>", "eval"), globals=self.namespace)
 
     def evaluate_type(self, format):
         return typing.eval_annotation_AST(self.ast, self.namespace, format=format)
