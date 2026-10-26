@@ -7,7 +7,6 @@ import abc
 from reprlib import recursive_repr
 lazy import copy
 lazy import re
-
 lazy import ast
 
 
@@ -539,8 +538,9 @@ def _make_annotate_function(__class__, method_name, annotation_fields, return_ty
             case Format.VALUE | Format.FORWARDREF | Format.STRING | Format.AST:
                 cls_annotations = {}
                 for base in reversed(__class__.__mro__):
-                    base_annotations = annotationlib.get_annotations(base, format=format)
-                    cls_annotations.update(base_annotations)
+                    cls_annotations.update(
+                        annotationlib.get_annotations(base, format=format)
+                    )
 
                 new_annotations = {}
                 for k in annotation_fields:
@@ -809,7 +809,11 @@ def _get_type_from_annotation(annotation, cls):
     path = match[1].split(".")
     root = sys.modules.get(cls.__module__)
     for path_item in path:
-        root = getattr(root, path_item.strip(), None)
+        try:
+            root = getattr(root, path_item.strip(), None)
+        except Exception:
+            # Like annotationlib, ignore lazy imports that cannot be resolved.
+            return None
         if root is None:
             return None
 
