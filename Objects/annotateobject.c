@@ -110,7 +110,7 @@ annotate_repr(PyObject *op)
     PyAnnotateObject *self = PyAnnotateObject_CAST(op);
     return PyUnicode_FromFormat(
         "<%s %U at %p>",
-        (PyUnicode_Check(self->ann_asts)) ? "evaluate function"
+        (PyTuple_Check(self->ann_asts)) ? "evaluate function"
                                           : "annotate function",
         self->ann_qualname, op);
 }
@@ -139,7 +139,7 @@ static PyObject *
 annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
 {
     PyAnnotateObject *self = PyAnnotateObject_CAST(op);
-    int is_evaluate = PyUnicode_Check(self->ann_asts);
+    int is_evaluate = PyTuple_Check(self->ann_asts);
 
     if (kwargs != NULL && PyDict_GET_SIZE(kwargs) != 0) {
         PyErr_Format(PyExc_TypeError, "%U() takes no keyword arguments",
@@ -299,7 +299,7 @@ static PyObject *
 annotate_get_text_signature(PyObject *op, void *Py_UNUSED(closure))
 {
     PyAnnotateObject *self = PyAnnotateObject_CAST(op);
-    const char *signature = PyUnicode_Check(self->ann_asts)
+    const char *signature = PyTuple_Check(self->ann_asts)
         ? "(format=1, /)"
         : "(format, /)";
     return PyUnicode_FromString(signature);

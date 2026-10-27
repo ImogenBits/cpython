@@ -1967,6 +1967,7 @@ typedef struct {
     struct ast_state *state;
     PyObject *data;
     Py_ssize_t pos;
+    PyObject *consts;
     PyObject *private_name;
     int in_store_context;
 } AnnotationData;
@@ -1977,7 +1978,7 @@ ann_ast_next(AnnotationData *data)
     if (data->pos >= PyUnicode_GET_LENGTH(data->data)) {
         PyErr_Format(PyExc_ValueError,
                     "tried to read past the end of annotation data %R at position %zd",
-                    data->data, data->pos);
+                    data->consts, data->pos);
         return 0xFF;
     }
     return PyUnicode_1BYTE_DATA(data->data)[(data->pos)++];
@@ -2005,113 +2006,42 @@ ann_ast_size_t(AnnotationData *data, Py_ssize_t *out)
 }
 
 static PyObject *
+ann_ast_constant(AnnotationData *data)
+{
+    Py_ssize_t kind;
+    if (ann_ast_size_t(data, &kind) < 0) {
+        return NULL;
+    }
+    switch (kind) {
+        case 0: return Py_NewRef(Py_None);
+        case 1: return Py_NewRef(Py_False);
+        case 2: return Py_NewRef(Py_True);
+        case 3: return Py_NewRef(Py_Ellipsis);
+    }
+    return Py_NewRef(PyTuple_GET_ITEM(data->consts, kind - 3));
+}
+
+static PyObject *
 ann_ast_int(AnnotationData *data)
 {
-    Py_ssize_t value;
-    if (ann_ast_size_t(data, &value) < 0) return NULL;
-    return PyLong_FromSsize_t(value);
+    return ann_ast_constant(data);
 }
 
 static PyObject *
 ann_ast_string(AnnotationData *data)
 {
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, &len) < 0 ||
-        len < 0 || data->pos < 0 || data->pos + len > PyUnicode_GET_LENGTH(data->data)) {
-        PyErr_Format(PyExc_ValueError,
-            "invalid length %zd in annotation data %R at position %zd",
-            len, data->data, data->pos);
-        return NULL;
-    }
-    PyObject *out = PyUnicode_FromStringAndSize(
-        (char *)PyUnicode_1BYTE_DATA(data->data) + data->pos, len);
-    data->pos += len;
-    return out;
+    return ann_ast_constant(data);
 }
 
 static PyObject *
 ann_ast_identifier(AnnotationData *data) {
-    PyObject *name = ann_ast_string(data);
+    PyObject *name = ann_ast_constant(data);
     if (!name) {
         return NULL;
     }
     PyObject *mangled = _Py_Mangle(data->private_name, name);
     Py_DECREF(name);
     return mangled;
-}
-
-static PyObject *
-ann_ast_bytes(AnnotationData *data)
-{
-    Py_ssize_t len;
-    if (ann_ast_size_t(data, &len) < 0 ||
-        len < 0 || data->pos < 0 || data->pos + len > PyUnicode_GET_LENGTH(data->data)) {
-        PyErr_Format(PyExc_ValueError,
-            "invalid length %zd in annotation data %R at position %zd",
-            len, data->data, data->pos);
-        return NULL;
-    }
-    PyObject *out = PyBytes_FromStringAndSize(
-        (char *)PyUnicode_1BYTE_DATA(data->data) + data->pos, len);
-    data->pos += len;
-    return out;
-}
-
-static int
-ann_ast_double(AnnotationData *data, double *out)
-{
-    if (data->pos < 0 || data->pos + 10 > PyUnicode_GET_LENGTH(data->data)) {
-        PyErr_Format(PyExc_ValueError,
-            "tried to read past the end of annotation data %R at position %zd",
-            data->data, data->pos);
-        return -1;
-    }
-    unsigned long long bits = 0;
-    for (size_t i = 0; i < 10; i++) {
-        Py_UCS1 curr = ann_ast_next(data);
-        if (curr == 0xFF) {
-            return -1;
-        }
-        bits |= (unsigned long long)(curr & 0x7F) << (7 * i);
-    }
-    memcpy(out, &bits, sizeof(bits));
-    return 0;
-}
-
-static PyObject *
-ann_ast_constant(AnnotationData *data)
-{
-    Py_UCS1 kind = ann_ast_next(data);
-    if (kind == 0xFF) {
-        return NULL;
-    }
-    switch (kind - Slice_kind - 2) {
-        case 0: return Py_NewRef(Py_None);
-        case 1: return ann_ast_string(data);
-        case 2: return ann_ast_bytes(data);
-        case 3: return ann_ast_int(data);
-        case 4: {
-            double value;
-            if (ann_ast_double(data, &value) < 0) return NULL;
-            return PyFloat_FromDouble(value);
-        }
-        case 5: {
-            double real, imag;
-            if (ann_ast_double(data, &real) < 0 ||
-                ann_ast_double(data, &imag) < 0) return NULL;
-            return PyComplex_FromDoubles(real, imag);
-        }
-        case 6: return Py_NewRef(Py_False);
-        case 7: return Py_NewRef(Py_True);
-        case 8: return Py_NewRef(Py_None);
-        case 9: return Py_NewRef(Py_Ellipsis);
-        default: {
-            PyErr_Format(PyExc_ValueError,
-                "invalid constant kind %c in annotation data %R at position %zd",
-                kind, data->data, data->pos);
-            return NULL;
-        }
-    }
 }
 
 static PyObject*
@@ -2225,14 +2155,6 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
                 )
                 self.emit("goto failed;", 3)
                 self.emit("}", 2)
-                continue
-            # constants have their python type folded into the enum value
-            if name == "expr" and cons.name == "Constant":
-                for offset in range(10):
-                    self.emit("case Slice_kind + %d:" % (offset + 2), 2)
-                self.emit("data->pos--;", 3)
-                self.visitConstructor(cons, name, 3)
-                self.emit("break;", 3)
             else:
                 self.emit("case %s_kind: {" % cons.name, 2)
                 self.visitConstructor(cons, name, 3)
@@ -2270,29 +2192,28 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
         self.emit("}", 0)
         self.emit("", 0)
 
+    def emitCreateResult(self, name, fields, depth):
+        self.emit(f"tp = (PyTypeObject *) data->state->{name}_type;", depth)
+        self.emit("result = PyType_GenericNew(tp, NULL, NULL);", depth);
+        self.emit("if (!result) goto failed;", depth)
+        for field in fields:
+            self.visitField(name, field, depth)
+
     def visitProduct(self, product, name):
         self.func_begin(name)
-        self.emit(f"tp = (PyTypeObject *) data->state->{name}_type;", 1)
-        self.emit("result = PyType_GenericNew(tp, NULL, NULL);", 1);
-        self.emit("if (!result) goto failed;", 1)
-        for field in product.fields:
-            self.visitField(name, field, 2)
+        self.emitCreateResult(name, product.fields, 1)
         self.func_end(name, product.attributes)
 
     def visitConstructor(self, cons, name, depth):
-        self.emit("tp = (PyTypeObject *) data->state->%s_type;" % cons.name, depth)
-        self.emit("result = PyType_GenericNew(tp, NULL, NULL);", depth)
-        self.emit("if (!result) goto failed;", depth)
-        for field in cons.fields:
-            self.visitField(cons.name, field, depth)
+        self.emitCreateResult(cons.name, cons.fields, depth)
 
     def visitField(self, name, field, depth):
         optional = asdl.Quantifier.OPTIONAL in field.quantifiers
-        if name == "Constant" and field.name == "kind":
-            return
         if name == "comprehension" and field.name == "target":
             self.emit("data->in_store_context = 1;", depth)
-        if field.seq:
+        if name == "Constant" and field.name == "kind":
+            self.emit("value = Py_NewRef(Py_None);", depth)
+        elif field.seq:
             self.emit(
                 f"value = ann_ast_list(data, {str(int(optional))}, ann_ast_{field.type});",
                 depth,
@@ -2627,18 +2548,15 @@ int PyAST_Check(PyObject* obj)
 static PyObject *
 _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
 {
-    if (!data || !PyUnicode_CheckExact(data)) {
-        PyErr_SetString(PyExc_TypeError, "expected a string for data");
-        return NULL;
-    }
     struct ast_state *state = get_ast_state();
     if (state == NULL) {
         return NULL;
     }
     AnnotationData ann_data = {
         .state = state,
-        .data = data,
+        .data = PyTuple_GET_ITEM(data, 0),
         .pos = 0,
+        .consts = data,
         .private_name = private_name,
         .in_store_context = 0,
     };
@@ -2650,7 +2568,7 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
         }
         return NULL;
     }
-    if (ann_data.pos != PyUnicode_GET_LENGTH(data)) {
+    if (ann_data.pos != PyUnicode_GET_LENGTH(ann_data.data)) {
         PyErr_Format(PyExc_RuntimeError,
             "malformed binary AST data: %R", data);
         return NULL;
@@ -2671,11 +2589,11 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
 PyObject *
 _PyAST_FromAnnotationData(PyObject *data, PyObject *private_name)
 {
-    if (!data || !(PyAnyDict_CheckExact(data) || PyUnicode_CheckExact(data))) {
-        PyErr_Format(PyExc_TypeError, "expected a dictionary or string for data, got %R", data);
+    if (!data || !(PyAnyDict_CheckExact(data) || PyTuple_CheckExact(data))) {
+        PyErr_Format(PyExc_TypeError, "expected a dictionary or tuple for data, got %R", data);
         return NULL;
     }
-    if (PyUnicode_CheckExact(data)) {
+    if (PyTuple_CheckExact(data)) {
         PyObject *out = _PyAST_FromAnnotationString(data, private_name);
         return out;
     }
