@@ -162,6 +162,7 @@ class MetadataVisitor(asdl.VisitorBase):
             singletons=set(),
             types={self.ROOT_TYPE},
             expr_types={"expr"},
+            frozen_types=set(),
         )
 
     def visitModule(self, mod):
@@ -173,14 +174,17 @@ class MetadataVisitor(asdl.VisitorBase):
 
     def visitSum(self, sum, name):
         self.metadata.types.add(name)
+        simple_sum = is_simple(sum)
+
         if name in self.metadata.expr_types:
             self.metadata.expr_types.add(name)
             for cons in sum.types:
                 self.metadata.expr_types.add(cons.name)
+                if not simple_sum:
+                    self.metadata.frozen_types.add(cons.name)
                 for field in cons.fields:
                     self.metadata.expr_types.add(field.type)
 
-        simple_sum = is_simple(sum)
         if simple_sum:
             self.metadata.simple_sums.add(name)
 
@@ -197,6 +201,7 @@ class MetadataVisitor(asdl.VisitorBase):
     def visitProduct(self, product, name):
         self.metadata.types.add(name)
         if name in self.metadata.expr_types:
+            self.metadata.frozen_types.add(name)
             for field in product.fields:
                 self.metadata.expr_types.add(field.type)
         self.visitFields(product.attributes)
@@ -760,6 +765,17 @@ class SequenceConstructorVisitor(EmitVisitor):
 
 class PyTypesDeclareVisitor(PickleVisitor):
 
+    def visitModule(self, mod):
+        self.emit("""
+typedef struct {
+    PyObject_HEAD
+    PyObject *dict;
+    PyObject *fields[1];
+} FrozenASTObject;
+""", 0)
+        for dfn in mod.dfns:
+            self.visit(dfn)
+
     def visitProduct(self, prod, name):
         self.emit("static PyObject* ast2obj_%s(struct ast_state *state, void*);" % name, 0)
         if prod.attributes:
@@ -772,6 +788,8 @@ class PyTypesDeclareVisitor(PickleVisitor):
             for f in prod.fields:
                 self.emit('"%s",' % f.name, 1)
             self.emit("};", 0)
+        if name in self.metadata.frozen_types:
+            self.emitFrozenType(name, prod)
 
     def visitSum(self, sum, name):
         if sum.attributes:
@@ -792,6 +810,19 @@ class PyTypesDeclareVisitor(PickleVisitor):
             for t in cons.fields:
                 self.emit('"%s",' % t.name, 1)
             self.emit("};",0)
+        if cons.name in self.metadata.frozen_types:
+            self.emitFrozenType(cons.name, cons)
+
+    def emitFrozenType(self, name, tp):
+        self.emit(f"static const PyMemberDef {name}_frozen_members[] = {{", 0)
+        for i, field in enumerate(tp.fields):
+            self.emit(
+                f"{{\"{field.name}\", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[{i}]), 0, NULL}},",
+                1,
+            )
+        self.emit("{NULL}  /* Sentinel */", 1)
+        self.emit("};", 0)
+        self.emit("", 0)
 
 
 class AnnotationsVisitor(PickleVisitor):
@@ -1862,6 +1893,85 @@ static int add_ast_fields(struct ast_state *state)
     return 0;
 }
 
+static Py_ssize_t
+frozen_field_count(PyObject *op)
+{
+    return (Py_TYPE(op)->tp_basicsize -
+            offsetof(FrozenASTObject, fields)) / sizeof(PyObject *);
+}
+
+static int
+frozen_traverse(PyObject *op, visitproc visit, void *arg)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_VISIT(Py_TYPE(op));
+    Py_VISIT(self->dict);
+    for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
+        Py_VISIT(self->fields[i]);
+    }
+    return 0;
+}
+
+static int
+frozen_clear(PyObject *op)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_CLEAR(self->dict);
+    for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
+        Py_CLEAR(self->fields[i]);
+    }
+    return 0;
+}
+
+static void
+frozen_dealloc(PyObject *op)
+{
+    PyObject_GC_UnTrack(op);
+    frozen_clear(op);
+    Py_TYPE(op)->tp_free(op);
+}
+
+static PyObject *
+make_frozen_type(struct ast_state *state, char *type_name, Py_ssize_t num_fields,
+    PyObject* base, const PyMemberDef *members, int default_attrs)
+{
+    PySlot slots[] = {
+        PySlot_STATIC_DATA(Py_tp_name, type_name),
+        PySlot_SIZE(Py_tp_basicsize, offsetof(FrozenASTObject, fields) + sizeof(PyObject*) * num_fields),
+        PySlot_DATA(Py_tp_bases, base),
+        PySlot_FUNC(Py_tp_traverse, frozen_traverse),
+        PySlot_FUNC(Py_tp_clear, frozen_clear),
+        PySlot_FUNC(Py_tp_dealloc, frozen_dealloc),
+        PySlot_UINT64(Py_tp_flags, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC
+                   | Py_TPFLAGS_DISALLOW_INSTANTIATION),
+        PySlot_STATIC_DATA(Py_tp_members, (void *) members),
+        PySlot_END
+    };
+    PyObject *tp = PyType_FromSlots(slots);
+    if (!tp) {
+        return NULL;
+    }
+    if (default_attrs) {
+        if (PyObject_SetAttr(tp, state->lineno, PyLong_FromLong(1)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+        if (PyObject_SetAttr(tp, state->col_offset, PyLong_FromLong(0)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+        if (PyObject_SetAttr(tp, state->end_lineno, PyLong_FromLong(1)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+        if (PyObject_SetAttr(tp, state->end_col_offset, PyLong_FromLong(0)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+    }
+    return tp;
+}
+
 """, 0, reflow=False)
 
         self.file.write(textwrap.dedent('''
@@ -1913,6 +2023,8 @@ static int add_ast_fields(struct ast_state *state)
             self.emit("if (add_attributes(state, state->%s_type, NULL, 0) < 0) return -1;" % name, 1)
         self.emit_defaults(name, prod.fields, 1)
         self.emit_defaults(name, prod.attributes, 1)
+        if name in self.metadata.frozen_types:
+            self.emitFrozenType(name, prod, bool(prod.attributes))
 
     def visitSum(self, sum, name):
         self.emit('state->%s_type = make_type(state, "%s", state->AST_type, NULL, 0,' %
@@ -1928,9 +2040,9 @@ static int add_ast_fields(struct ast_state *state)
         self.emit_defaults(name, sum.attributes, 1)
         simple = is_simple(sum)
         for t in sum.types:
-            self.visitConstructor(t, name, simple)
+            self.visitConstructor(t, name, simple, bool(sum.attributes))
 
-    def visitConstructor(self, cons, name, simple):
+    def visitConstructor(self, cons, name, simple, has_attributes):
         if cons.fields:
             fields = cons.name+"_fields"
         else:
@@ -1945,6 +2057,8 @@ static int add_ast_fields(struct ast_state *state)
                       "state->%s_type, NULL, NULL);" %
                              (cons.name, cons.name), 1)
             self.emit("if (!state->%s_singleton) return -1;" % cons.name, 1)
+        elif cons.name in self.metadata.frozen_types:
+            self.emitFrozenType(cons.name, cons, has_attributes)
 
     def emit_defaults(self, name, fields, depth):
         for field in fields:
@@ -1952,6 +2066,13 @@ static int add_ast_fields(struct ast_state *state)
                 self.emit('if (PyObject_SetAttr(state->%s_type, state->%s, Py_None) == -1)' %
                             (name, field.name), depth)
                 self.emit("return -1;", depth+1)
+
+    def emitFrozenType(self, name, prod, has_attributes):
+        num_fields = len(prod.fields)
+        self.emit(f"state->{name}_frozen_type = make_frozen_type(", 1)
+        self.emit(f"state, \"ast.{name}_frozen\", {num_fields},", 2)
+        self.emit(f"state->{name}_type, {name}_frozen_members, {int(has_attributes)});", 2)
+        self.emit("if (!state->%s_frozen_type) return -1;" % name, 1)
 
 
 class AnnotationDecoderVisitor(EmitVisitor):
@@ -2100,7 +2221,8 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
         self.emit("static PyObject *", 0)
         self.emit("ann_ast_%s(AnnotationData *data)" % name, 0)
         self.emit("{", 0)
-        self.emit("PyObject *result = NULL, *value = NULL;", 1)
+        self.emit("FrozenASTObject *result = NULL;", 1)
+        self.emit("PyObject *value = NULL;", 1)
         self.emit("PyTypeObject *tp;", 1)
         self.emit('if (Py_EnterRecursiveCall(" during ast construction")) {', 1)
         self.emit("return NULL;", 2)
@@ -2108,23 +2230,9 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 
     def func_end(self, name, attributes):
         self.emit("assert(result != NULL);", 1)
-        for attr in attributes:
-            if attr.name in ("lineno", "end_lineno"):
-                val = 1
-            elif attr.name in ("col_offset", "end_col_offset"):
-                val = 0
-            else:
-                raise RuntimeError(f"Unknown attribute {attr.name} in {name}")
-            self.emit(f"value = PyLong_FromLong({val});", 1)
-            self.emit("if (!value) goto failed;", 1)
-            self.emit(
-                f"if (PyObject_SetAttr(result, data->state->{attr.name}, value) < 0)",
-                1,
-            )
-            self.emit("goto failed;", 2)
-            self.emit("Py_DECREF(value);", 1)
+        self.emit("PyObject_GC_Track(result);", 1)
         self.emit("Py_LeaveRecursiveCall();", 1)
-        self.emit("return result;", 1)
+        self.emit("return (PyObject *) result;", 1)
         self.emit("failed:", 1)
         self.emit("Py_XDECREF(value);", 1)
         self.emit("Py_XDECREF(result);", 1)
@@ -2193,11 +2301,13 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
         self.emit("", 0)
 
     def emitCreateResult(self, name, fields, depth):
-        self.emit(f"tp = (PyTypeObject *) data->state->{name}_type;", depth)
-        self.emit("result = PyType_GenericNew(tp, NULL, NULL);", depth);
+        self.emit(f"tp = (PyTypeObject *) data->state->{name}_frozen_type;", depth)
+        self.emit("result = PyObject_GC_New(FrozenASTObject, tp);", depth)
         self.emit("if (!result) goto failed;", depth)
-        for field in fields:
-            self.visitField(name, field, depth)
+        self.emit("result->dict = NULL;", depth)
+        self.emit(f"memset(result->fields, 0, sizeof(PyObject *) * {len(fields)});", depth)
+        for i, field in enumerate(fields):
+            self.visitField(name, i, field, depth)
 
     def visitProduct(self, product, name):
         self.func_begin(name)
@@ -2207,7 +2317,7 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
     def visitConstructor(self, cons, name, depth):
         self.emitCreateResult(cons.name, cons.fields, depth)
 
-    def visitField(self, name, field, depth):
+    def visitField(self, name, index, field, depth):
         optional = asdl.Quantifier.OPTIONAL in field.quantifiers
         if name == "comprehension" and field.name == "target":
             self.emit("data->in_store_context = 1;", depth)
@@ -2236,13 +2346,7 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
         if name == "comprehension" and field.name == "target":
             self.emit("data->in_store_context = 0;", depth)
         self.emit("if (!value) goto failed;", depth)
-        self.emit(
-            f"if (PyObject_SetAttr(result, data->state->{field.name}, value) == -1) {{",
-            depth,
-        )
-        self.emit("goto failed;", depth + 1)
-        self.emit("}", depth)
-        self.emit("Py_DECREF(value);", depth)
+        self.emit(f"result->fields[{index}] = value;", depth)
 
 
 class ASTModuleVisitor(PickleVisitor):
@@ -2326,6 +2430,8 @@ PyInit__ast(void)
 
     def visitProduct(self, prod, name):
         self.addObj(name)
+        if name in self.metadata.frozen_types:
+            self.addObj(name + "_frozen")
 
     def visitSum(self, sum, name):
         self.addObj(name)
@@ -2334,6 +2440,8 @@ PyInit__ast(void)
 
     def visitConstructor(self, cons, name):
         self.addObj(cons.name)
+        if cons.name in self.metadata.frozen_types:
+            self.addObj(cons.name + "_frozen")
 
     def addObj(self, name):
         self.emit("if (PyModule_AddObjectRef(m, \"%s\", "
@@ -2687,6 +2795,10 @@ def generate_module_def(mod, metadata, f, internal_h):
     module_state.update(
         "%s_type" % type
         for type in metadata.types
+    )
+    module_state.update(
+        "%s_frozen_type" % type
+        for type in metadata.frozen_types
     )
     module_state.add("abstract_types")
 

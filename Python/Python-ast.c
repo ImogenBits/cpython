@@ -46,9 +46,12 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, AsyncFor_type),
         offsetof(struct ast_state, AsyncFunctionDef_type),
         offsetof(struct ast_state, AsyncWith_type),
+        offsetof(struct ast_state, Attribute_frozen_type),
         offsetof(struct ast_state, Attribute_type),
         offsetof(struct ast_state, AugAssign_type),
+        offsetof(struct ast_state, Await_frozen_type),
         offsetof(struct ast_state, Await_type),
+        offsetof(struct ast_state, BinOp_frozen_type),
         offsetof(struct ast_state, BinOp_type),
         offsetof(struct ast_state, BitAnd_singleton),
         offsetof(struct ast_state, BitAnd_type),
@@ -56,17 +59,23 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, BitOr_type),
         offsetof(struct ast_state, BitXor_singleton),
         offsetof(struct ast_state, BitXor_type),
+        offsetof(struct ast_state, BoolOp_frozen_type),
         offsetof(struct ast_state, BoolOp_type),
         offsetof(struct ast_state, Break_type),
+        offsetof(struct ast_state, Call_frozen_type),
         offsetof(struct ast_state, Call_type),
         offsetof(struct ast_state, ClassDef_type),
+        offsetof(struct ast_state, Compare_frozen_type),
         offsetof(struct ast_state, Compare_type),
+        offsetof(struct ast_state, Constant_frozen_type),
         offsetof(struct ast_state, Constant_type),
         offsetof(struct ast_state, Continue_type),
         offsetof(struct ast_state, Del_singleton),
         offsetof(struct ast_state, Del_type),
         offsetof(struct ast_state, Delete_type),
+        offsetof(struct ast_state, DictComp_frozen_type),
         offsetof(struct ast_state, DictComp_type),
+        offsetof(struct ast_state, Dict_frozen_type),
         offsetof(struct ast_state, Dict_type),
         offsetof(struct ast_state, Div_singleton),
         offsetof(struct ast_state, Div_type),
@@ -78,15 +87,18 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, FloorDiv_singleton),
         offsetof(struct ast_state, FloorDiv_type),
         offsetof(struct ast_state, For_type),
+        offsetof(struct ast_state, FormattedValue_frozen_type),
         offsetof(struct ast_state, FormattedValue_type),
         offsetof(struct ast_state, FunctionDef_type),
         offsetof(struct ast_state, FunctionType_type),
+        offsetof(struct ast_state, GeneratorExp_frozen_type),
         offsetof(struct ast_state, GeneratorExp_type),
         offsetof(struct ast_state, Global_type),
         offsetof(struct ast_state, GtE_singleton),
         offsetof(struct ast_state, GtE_type),
         offsetof(struct ast_state, Gt_singleton),
         offsetof(struct ast_state, Gt_type),
+        offsetof(struct ast_state, IfExp_frozen_type),
         offsetof(struct ast_state, IfExp_type),
         offsetof(struct ast_state, If_type),
         offsetof(struct ast_state, ImportFrom_type),
@@ -94,6 +106,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, In_singleton),
         offsetof(struct ast_state, In_type),
         offsetof(struct ast_state, Interactive_type),
+        offsetof(struct ast_state, Interpolation_frozen_type),
         offsetof(struct ast_state, Interpolation_type),
         offsetof(struct ast_state, Invert_singleton),
         offsetof(struct ast_state, Invert_type),
@@ -101,11 +114,15 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, IsNot_type),
         offsetof(struct ast_state, Is_singleton),
         offsetof(struct ast_state, Is_type),
+        offsetof(struct ast_state, JoinedStr_frozen_type),
         offsetof(struct ast_state, JoinedStr_type),
         offsetof(struct ast_state, LShift_singleton),
         offsetof(struct ast_state, LShift_type),
+        offsetof(struct ast_state, Lambda_frozen_type),
         offsetof(struct ast_state, Lambda_type),
+        offsetof(struct ast_state, ListComp_frozen_type),
         offsetof(struct ast_state, ListComp_type),
+        offsetof(struct ast_state, List_frozen_type),
         offsetof(struct ast_state, List_type),
         offsetof(struct ast_state, Load_singleton),
         offsetof(struct ast_state, Load_type),
@@ -129,7 +146,9 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, Module_type),
         offsetof(struct ast_state, Mult_singleton),
         offsetof(struct ast_state, Mult_type),
+        offsetof(struct ast_state, Name_frozen_type),
         offsetof(struct ast_state, Name_type),
+        offsetof(struct ast_state, NamedExpr_frozen_type),
         offsetof(struct ast_state, NamedExpr_type),
         offsetof(struct ast_state, Nonlocal_type),
         offsetof(struct ast_state, NotEq_singleton),
@@ -148,18 +167,25 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, RShift_type),
         offsetof(struct ast_state, Raise_type),
         offsetof(struct ast_state, Return_type),
+        offsetof(struct ast_state, SetComp_frozen_type),
         offsetof(struct ast_state, SetComp_type),
+        offsetof(struct ast_state, Set_frozen_type),
         offsetof(struct ast_state, Set_type),
+        offsetof(struct ast_state, Slice_frozen_type),
         offsetof(struct ast_state, Slice_type),
+        offsetof(struct ast_state, Starred_frozen_type),
         offsetof(struct ast_state, Starred_type),
         offsetof(struct ast_state, Store_singleton),
         offsetof(struct ast_state, Store_type),
         offsetof(struct ast_state, Sub_singleton),
         offsetof(struct ast_state, Sub_type),
+        offsetof(struct ast_state, Subscript_frozen_type),
         offsetof(struct ast_state, Subscript_type),
+        offsetof(struct ast_state, TemplateStr_frozen_type),
         offsetof(struct ast_state, TemplateStr_type),
         offsetof(struct ast_state, TryStar_type),
         offsetof(struct ast_state, Try_type),
+        offsetof(struct ast_state, Tuple_frozen_type),
         offsetof(struct ast_state, Tuple_type),
         offsetof(struct ast_state, TypeAlias_type),
         offsetof(struct ast_state, TypeIgnore_type),
@@ -169,10 +195,13 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, UAdd_type),
         offsetof(struct ast_state, USub_singleton),
         offsetof(struct ast_state, USub_type),
+        offsetof(struct ast_state, UnaryOp_frozen_type),
         offsetof(struct ast_state, UnaryOp_type),
         offsetof(struct ast_state, While_type),
         offsetof(struct ast_state, With_type),
+        offsetof(struct ast_state, YieldFrom_frozen_type),
         offsetof(struct ast_state, YieldFrom_type),
+        offsetof(struct ast_state, Yield_frozen_type),
         offsetof(struct ast_state, Yield_type),
         offsetof(struct ast_state, __dict__),
         offsetof(struct ast_state, __doc__),
@@ -184,9 +213,11 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, alias_type),
         offsetof(struct ast_state, annotation),
         offsetof(struct ast_state, arg),
+        offsetof(struct ast_state, arg_frozen_type),
         offsetof(struct ast_state, arg_type),
         offsetof(struct ast_state, args),
         offsetof(struct ast_state, argtypes),
+        offsetof(struct ast_state, arguments_frozen_type),
         offsetof(struct ast_state, arguments_type),
         offsetof(struct ast_state, asname),
         offsetof(struct ast_state, ast),
@@ -201,6 +232,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, cmpop_type),
         offsetof(struct ast_state, col_offset),
         offsetof(struct ast_state, comparators),
+        offsetof(struct ast_state, comprehension_frozen_type),
         offsetof(struct ast_state, comprehension_type),
         offsetof(struct ast_state, context_expr),
         offsetof(struct ast_state, conversion),
@@ -230,6 +262,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
         offsetof(struct ast_state, iter),
         offsetof(struct ast_state, key),
         offsetof(struct ast_state, keys),
+        offsetof(struct ast_state, keyword_frozen_type),
         offsetof(struct ast_state, keyword_type),
         offsetof(struct ast_state, keywords),
         offsetof(struct ast_state, kind),
@@ -402,6 +435,14 @@ GENERATE_ASDL_SEQ_CONSTRUCTOR(pattern, pattern_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(type_ignore, type_ignore_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(type_param, type_param_ty)
 
+
+typedef struct {
+    PyObject_HEAD
+    PyObject *dict;
+    PyObject
+                  *fields[1];
+} FrozenASTObject;
+
 static PyObject* ast2obj_mod(struct ast_state *state, void*);
 static const char * const Module_fields[]={
     "body",
@@ -565,123 +606,311 @@ static const char * const BoolOp_fields[]={
     "op",
     "values",
 };
+static const PyMemberDef BoolOp_frozen_members[] = {
+    {"op", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"values", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const NamedExpr_fields[]={
     "target",
     "value",
 };
+static const PyMemberDef NamedExpr_frozen_members[] = {
+    {"target", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const BinOp_fields[]={
     "left",
     "op",
     "right",
 };
+static const PyMemberDef BinOp_frozen_members[] = {
+    {"left", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"op", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"right", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const UnaryOp_fields[]={
     "op",
     "operand",
 };
+static const PyMemberDef UnaryOp_frozen_members[] = {
+    {"op", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"operand", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Lambda_fields[]={
     "args",
     "body",
 };
+static const PyMemberDef Lambda_frozen_members[] = {
+    {"args", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"body", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const IfExp_fields[]={
     "test",
     "body",
     "orelse",
 };
+static const PyMemberDef IfExp_frozen_members[] = {
+    {"test", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"body", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"orelse", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Dict_fields[]={
     "keys",
     "values",
 };
+static const PyMemberDef Dict_frozen_members[] = {
+    {"keys", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"values", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Set_fields[]={
     "elts",
 };
+static const PyMemberDef Set_frozen_members[] = {
+    {"elts", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const ListComp_fields[]={
     "elt",
     "generators",
 };
+static const PyMemberDef ListComp_frozen_members[] = {
+    {"elt", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"generators", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const SetComp_fields[]={
     "elt",
     "generators",
 };
+static const PyMemberDef SetComp_frozen_members[] = {
+    {"elt", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"generators", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const DictComp_fields[]={
     "key",
     "value",
     "generators",
 };
+static const PyMemberDef DictComp_frozen_members[] = {
+    {"key", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"generators", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const GeneratorExp_fields[]={
     "elt",
     "generators",
 };
+static const PyMemberDef GeneratorExp_frozen_members[] = {
+    {"elt", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"generators", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Await_fields[]={
     "value",
 };
+static const PyMemberDef Await_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Yield_fields[]={
     "value",
 };
+static const PyMemberDef Yield_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const YieldFrom_fields[]={
     "value",
 };
+static const PyMemberDef YieldFrom_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Compare_fields[]={
     "left",
     "ops",
     "comparators",
 };
+static const PyMemberDef Compare_frozen_members[] = {
+    {"left", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"ops", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"comparators", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Call_fields[]={
     "func",
     "args",
     "keywords",
 };
+static const PyMemberDef Call_frozen_members[] = {
+    {"func", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"args", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"keywords", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const FormattedValue_fields[]={
     "value",
     "conversion",
     "format_spec",
 };
+static const PyMemberDef FormattedValue_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"conversion", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0,
+      NULL},
+    {"format_spec", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Interpolation_fields[]={
     "value",
     "str",
     "conversion",
     "format_spec",
 };
+static const PyMemberDef Interpolation_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"str", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"conversion", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0,
+      NULL},
+    {"format_spec", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[3]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const JoinedStr_fields[]={
     "values",
 };
+static const PyMemberDef JoinedStr_frozen_members[] = {
+    {"values", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const TemplateStr_fields[]={
     "values",
 };
+static const PyMemberDef TemplateStr_frozen_members[] = {
+    {"values", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Constant_fields[]={
     "value",
     "kind",
 };
+static const PyMemberDef Constant_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"kind", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Attribute_fields[]={
     "value",
     "attr",
     "ctx",
 };
+static const PyMemberDef Attribute_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"attr", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"ctx", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Subscript_fields[]={
     "value",
     "slice",
     "ctx",
 };
+static const PyMemberDef Subscript_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"slice", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"ctx", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Starred_fields[]={
     "value",
     "ctx",
 };
+static const PyMemberDef Starred_frozen_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"ctx", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Name_fields[]={
     "id",
     "ctx",
 };
+static const PyMemberDef Name_frozen_members[] = {
+    {"id", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"ctx", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const List_fields[]={
     "elts",
     "ctx",
 };
+static const PyMemberDef List_frozen_members[] = {
+    {"elts", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"ctx", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Tuple_fields[]={
     "elts",
     "ctx",
 };
+static const PyMemberDef Tuple_frozen_members[] = {
+    {"elts", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"ctx", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const Slice_fields[]={
     "lower",
     "upper",
     "step",
 };
+static const PyMemberDef Slice_frozen_members[] = {
+    {"lower", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"upper", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"step", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static PyObject* ast2obj_expr_context(struct ast_state *state, expr_context_ty);
 static PyObject* ast2obj_boolop(struct ast_state *state, boolop_ty);
 static PyObject* ast2obj_operator(struct ast_state *state, operator_ty);
@@ -694,6 +923,14 @@ static const char * const comprehension_fields[]={
     "ifs",
     "is_async",
 };
+static const PyMemberDef comprehension_frozen_members[] = {
+    {"target", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"iter", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"ifs", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {"is_async", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[3]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static const char * const excepthandler_attributes[] = {
     "lineno",
     "col_offset",
@@ -716,6 +953,20 @@ static const char * const arguments_fields[]={
     "kwarg",
     "defaults",
 };
+static const PyMemberDef arguments_frozen_members[] = {
+    {"posonlyargs", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0,
+      NULL},
+    {"args", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {"vararg", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0, NULL},
+    {"kwonlyargs", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[3]), 0,
+      NULL},
+    {"kw_defaults", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[4]), 0,
+      NULL},
+    {"kwarg", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[5]), 0, NULL},
+    {"defaults", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[6]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static PyObject* ast2obj_arg(struct ast_state *state, void*);
 static const char * const arg_attributes[] = {
     "lineno",
@@ -728,6 +979,15 @@ static const char * const arg_fields[]={
     "annotation",
     "type_comment",
 };
+static const PyMemberDef arg_frozen_members[] = {
+    {"arg", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"annotation", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0,
+      NULL},
+    {"type_comment", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[2]), 0,
+      NULL},
+    {NULL}  /* Sentinel */
+};
+
 static PyObject* ast2obj_keyword(struct ast_state *state, void*);
 static const char * const keyword_attributes[] = {
     "lineno",
@@ -739,6 +999,12 @@ static const char * const keyword_fields[]={
     "arg",
     "value",
 };
+static const PyMemberDef keyword_frozen_members[] = {
+    {"arg", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[0]), 0, NULL},
+    {"value", Py_T_OBJECT_EX, offsetof(FrozenASTObject, fields[1]), 0, NULL},
+    {NULL}  /* Sentinel */
+};
+
 static PyObject* ast2obj_alias(struct ast_state *state, void*);
 static const char * const alias_attributes[] = {
     "lineno",
@@ -2354,6 +2620,85 @@ static int add_ast_fields(struct ast_state *state)
     return 0;
 }
 
+static Py_ssize_t
+frozen_field_count(PyObject *op)
+{
+    return (Py_TYPE(op)->tp_basicsize -
+            offsetof(FrozenASTObject, fields)) / sizeof(PyObject *);
+}
+
+static int
+frozen_traverse(PyObject *op, visitproc visit, void *arg)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_VISIT(Py_TYPE(op));
+    Py_VISIT(self->dict);
+    for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
+        Py_VISIT(self->fields[i]);
+    }
+    return 0;
+}
+
+static int
+frozen_clear(PyObject *op)
+{
+    FrozenASTObject *self = (FrozenASTObject *)op;
+    Py_CLEAR(self->dict);
+    for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
+        Py_CLEAR(self->fields[i]);
+    }
+    return 0;
+}
+
+static void
+frozen_dealloc(PyObject *op)
+{
+    PyObject_GC_UnTrack(op);
+    frozen_clear(op);
+    Py_TYPE(op)->tp_free(op);
+}
+
+static PyObject *
+make_frozen_type(struct ast_state *state, char *type_name, Py_ssize_t num_fields,
+    PyObject* base, const PyMemberDef *members, int default_attrs)
+{
+    PySlot slots[] = {
+        PySlot_STATIC_DATA(Py_tp_name, type_name),
+        PySlot_SIZE(Py_tp_basicsize, offsetof(FrozenASTObject, fields) + sizeof(PyObject*) * num_fields),
+        PySlot_DATA(Py_tp_bases, base),
+        PySlot_FUNC(Py_tp_traverse, frozen_traverse),
+        PySlot_FUNC(Py_tp_clear, frozen_clear),
+        PySlot_FUNC(Py_tp_dealloc, frozen_dealloc),
+        PySlot_UINT64(Py_tp_flags, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC
+                   | Py_TPFLAGS_DISALLOW_INSTANTIATION),
+        PySlot_STATIC_DATA(Py_tp_members, (void *) members),
+        PySlot_END
+    };
+    PyObject *tp = PyType_FromSlots(slots);
+    if (!tp) {
+        return NULL;
+    }
+    if (default_attrs) {
+        if (PyObject_SetAttr(tp, state->lineno, PyLong_FromLong(1)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+        if (PyObject_SetAttr(tp, state->col_offset, PyLong_FromLong(0)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+        if (PyObject_SetAttr(tp, state->end_lineno, PyLong_FromLong(1)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+        if (PyObject_SetAttr(tp, state->end_col_offset, PyLong_FromLong(0)) < 0) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+    }
+    return tp;
+}
+
 
 
 static int
@@ -2634,74 +2979,142 @@ init_types(void *arg)
                                    BoolOp_fields, 2,
         "BoolOp(boolop op, expr* values)");
     if (!state->BoolOp_type) return -1;
+    state->BoolOp_frozen_type = make_frozen_type(
+        state, "ast.BoolOp_frozen", 2,
+        state->BoolOp_type, BoolOp_frozen_members, 1);
+    if (!state->BoolOp_frozen_type) return -1;
     state->NamedExpr_type = make_type(state, "NamedExpr", state->expr_type,
                                       NamedExpr_fields, 2,
         "NamedExpr(expr target, expr value)");
     if (!state->NamedExpr_type) return -1;
+    state->NamedExpr_frozen_type = make_frozen_type(
+        state, "ast.NamedExpr_frozen", 2,
+        state->NamedExpr_type, NamedExpr_frozen_members, 1);
+    if (!state->NamedExpr_frozen_type) return -1;
     state->BinOp_type = make_type(state, "BinOp", state->expr_type,
                                   BinOp_fields, 3,
         "BinOp(expr left, operator op, expr right)");
     if (!state->BinOp_type) return -1;
+    state->BinOp_frozen_type = make_frozen_type(
+        state, "ast.BinOp_frozen", 3,
+        state->BinOp_type, BinOp_frozen_members, 1);
+    if (!state->BinOp_frozen_type) return -1;
     state->UnaryOp_type = make_type(state, "UnaryOp", state->expr_type,
                                     UnaryOp_fields, 2,
         "UnaryOp(unaryop op, expr operand)");
     if (!state->UnaryOp_type) return -1;
+    state->UnaryOp_frozen_type = make_frozen_type(
+        state, "ast.UnaryOp_frozen", 2,
+        state->UnaryOp_type, UnaryOp_frozen_members, 1);
+    if (!state->UnaryOp_frozen_type) return -1;
     state->Lambda_type = make_type(state, "Lambda", state->expr_type,
                                    Lambda_fields, 2,
         "Lambda(arguments args, expr body)");
     if (!state->Lambda_type) return -1;
+    state->Lambda_frozen_type = make_frozen_type(
+        state, "ast.Lambda_frozen", 2,
+        state->Lambda_type, Lambda_frozen_members, 1);
+    if (!state->Lambda_frozen_type) return -1;
     state->IfExp_type = make_type(state, "IfExp", state->expr_type,
                                   IfExp_fields, 3,
         "IfExp(expr test, expr body, expr orelse)");
     if (!state->IfExp_type) return -1;
+    state->IfExp_frozen_type = make_frozen_type(
+        state, "ast.IfExp_frozen", 3,
+        state->IfExp_type, IfExp_frozen_members, 1);
+    if (!state->IfExp_frozen_type) return -1;
     state->Dict_type = make_type(state, "Dict", state->expr_type, Dict_fields,
                                  2,
         "Dict(expr?* keys, expr* values)");
     if (!state->Dict_type) return -1;
+    state->Dict_frozen_type = make_frozen_type(
+        state, "ast.Dict_frozen", 2,
+        state->Dict_type, Dict_frozen_members, 1);
+    if (!state->Dict_frozen_type) return -1;
     state->Set_type = make_type(state, "Set", state->expr_type, Set_fields, 1,
         "Set(expr* elts)");
     if (!state->Set_type) return -1;
+    state->Set_frozen_type = make_frozen_type(
+        state, "ast.Set_frozen", 1,
+        state->Set_type, Set_frozen_members, 1);
+    if (!state->Set_frozen_type) return -1;
     state->ListComp_type = make_type(state, "ListComp", state->expr_type,
                                      ListComp_fields, 2,
         "ListComp(expr elt, comprehension* generators)");
     if (!state->ListComp_type) return -1;
+    state->ListComp_frozen_type = make_frozen_type(
+        state, "ast.ListComp_frozen", 2,
+        state->ListComp_type, ListComp_frozen_members, 1);
+    if (!state->ListComp_frozen_type) return -1;
     state->SetComp_type = make_type(state, "SetComp", state->expr_type,
                                     SetComp_fields, 2,
         "SetComp(expr elt, comprehension* generators)");
     if (!state->SetComp_type) return -1;
+    state->SetComp_frozen_type = make_frozen_type(
+        state, "ast.SetComp_frozen", 2,
+        state->SetComp_type, SetComp_frozen_members, 1);
+    if (!state->SetComp_frozen_type) return -1;
     state->DictComp_type = make_type(state, "DictComp", state->expr_type,
                                      DictComp_fields, 3,
         "DictComp(expr key, expr? value, comprehension* generators)");
     if (!state->DictComp_type) return -1;
     if (PyObject_SetAttr(state->DictComp_type, state->value, Py_None) == -1)
         return -1;
+    state->DictComp_frozen_type = make_frozen_type(
+        state, "ast.DictComp_frozen", 3,
+        state->DictComp_type, DictComp_frozen_members, 1);
+    if (!state->DictComp_frozen_type) return -1;
     state->GeneratorExp_type = make_type(state, "GeneratorExp",
                                          state->expr_type, GeneratorExp_fields,
                                          2,
         "GeneratorExp(expr elt, comprehension* generators)");
     if (!state->GeneratorExp_type) return -1;
+    state->GeneratorExp_frozen_type = make_frozen_type(
+        state, "ast.GeneratorExp_frozen", 2,
+        state->GeneratorExp_type, GeneratorExp_frozen_members, 1);
+    if (!state->GeneratorExp_frozen_type) return -1;
     state->Await_type = make_type(state, "Await", state->expr_type,
                                   Await_fields, 1,
         "Await(expr value)");
     if (!state->Await_type) return -1;
+    state->Await_frozen_type = make_frozen_type(
+        state, "ast.Await_frozen", 1,
+        state->Await_type, Await_frozen_members, 1);
+    if (!state->Await_frozen_type) return -1;
     state->Yield_type = make_type(state, "Yield", state->expr_type,
                                   Yield_fields, 1,
         "Yield(expr? value)");
     if (!state->Yield_type) return -1;
     if (PyObject_SetAttr(state->Yield_type, state->value, Py_None) == -1)
         return -1;
+    state->Yield_frozen_type = make_frozen_type(
+        state, "ast.Yield_frozen", 1,
+        state->Yield_type, Yield_frozen_members, 1);
+    if (!state->Yield_frozen_type) return -1;
     state->YieldFrom_type = make_type(state, "YieldFrom", state->expr_type,
                                       YieldFrom_fields, 1,
         "YieldFrom(expr value)");
     if (!state->YieldFrom_type) return -1;
+    state->YieldFrom_frozen_type = make_frozen_type(
+        state, "ast.YieldFrom_frozen", 1,
+        state->YieldFrom_type, YieldFrom_frozen_members, 1);
+    if (!state->YieldFrom_frozen_type) return -1;
     state->Compare_type = make_type(state, "Compare", state->expr_type,
                                     Compare_fields, 3,
         "Compare(expr left, cmpop* ops, expr* comparators)");
     if (!state->Compare_type) return -1;
+    state->Compare_frozen_type = make_frozen_type(
+        state, "ast.Compare_frozen", 3,
+        state->Compare_type, Compare_frozen_members, 1);
+    if (!state->Compare_frozen_type) return -1;
     state->Call_type = make_type(state, "Call", state->expr_type, Call_fields,
                                  3,
         "Call(expr func, expr* args, keyword* keywords)");
     if (!state->Call_type) return -1;
+    state->Call_frozen_type = make_frozen_type(
+        state, "ast.Call_frozen", 3,
+        state->Call_type, Call_frozen_members, 1);
+    if (!state->Call_frozen_type) return -1;
     state->FormattedValue_type = make_type(state, "FormattedValue",
                                            state->expr_type,
                                            FormattedValue_fields, 3,
@@ -2710,6 +3123,10 @@ init_types(void *arg)
     if (PyObject_SetAttr(state->FormattedValue_type, state->format_spec,
         Py_None) == -1)
         return -1;
+    state->FormattedValue_frozen_type = make_frozen_type(
+        state, "ast.FormattedValue_frozen", 3,
+        state->FormattedValue_type, FormattedValue_frozen_members, 1);
+    if (!state->FormattedValue_frozen_type) return -1;
     state->Interpolation_type = make_type(state, "Interpolation",
                                           state->expr_type,
                                           Interpolation_fields, 4,
@@ -2718,44 +3135,84 @@ init_types(void *arg)
     if (PyObject_SetAttr(state->Interpolation_type, state->format_spec,
         Py_None) == -1)
         return -1;
+    state->Interpolation_frozen_type = make_frozen_type(
+        state, "ast.Interpolation_frozen", 4,
+        state->Interpolation_type, Interpolation_frozen_members, 1);
+    if (!state->Interpolation_frozen_type) return -1;
     state->JoinedStr_type = make_type(state, "JoinedStr", state->expr_type,
                                       JoinedStr_fields, 1,
         "JoinedStr(expr* values)");
     if (!state->JoinedStr_type) return -1;
+    state->JoinedStr_frozen_type = make_frozen_type(
+        state, "ast.JoinedStr_frozen", 1,
+        state->JoinedStr_type, JoinedStr_frozen_members, 1);
+    if (!state->JoinedStr_frozen_type) return -1;
     state->TemplateStr_type = make_type(state, "TemplateStr", state->expr_type,
                                         TemplateStr_fields, 1,
         "TemplateStr(expr* values)");
     if (!state->TemplateStr_type) return -1;
+    state->TemplateStr_frozen_type = make_frozen_type(
+        state, "ast.TemplateStr_frozen", 1,
+        state->TemplateStr_type, TemplateStr_frozen_members, 1);
+    if (!state->TemplateStr_frozen_type) return -1;
     state->Constant_type = make_type(state, "Constant", state->expr_type,
                                      Constant_fields, 2,
         "Constant(constant value, string? kind)");
     if (!state->Constant_type) return -1;
     if (PyObject_SetAttr(state->Constant_type, state->kind, Py_None) == -1)
         return -1;
+    state->Constant_frozen_type = make_frozen_type(
+        state, "ast.Constant_frozen", 2,
+        state->Constant_type, Constant_frozen_members, 1);
+    if (!state->Constant_frozen_type) return -1;
     state->Attribute_type = make_type(state, "Attribute", state->expr_type,
                                       Attribute_fields, 3,
         "Attribute(expr value, identifier attr, expr_context ctx)");
     if (!state->Attribute_type) return -1;
+    state->Attribute_frozen_type = make_frozen_type(
+        state, "ast.Attribute_frozen", 3,
+        state->Attribute_type, Attribute_frozen_members, 1);
+    if (!state->Attribute_frozen_type) return -1;
     state->Subscript_type = make_type(state, "Subscript", state->expr_type,
                                       Subscript_fields, 3,
         "Subscript(expr value, expr slice, expr_context ctx)");
     if (!state->Subscript_type) return -1;
+    state->Subscript_frozen_type = make_frozen_type(
+        state, "ast.Subscript_frozen", 3,
+        state->Subscript_type, Subscript_frozen_members, 1);
+    if (!state->Subscript_frozen_type) return -1;
     state->Starred_type = make_type(state, "Starred", state->expr_type,
                                     Starred_fields, 2,
         "Starred(expr value, expr_context ctx)");
     if (!state->Starred_type) return -1;
+    state->Starred_frozen_type = make_frozen_type(
+        state, "ast.Starred_frozen", 2,
+        state->Starred_type, Starred_frozen_members, 1);
+    if (!state->Starred_frozen_type) return -1;
     state->Name_type = make_type(state, "Name", state->expr_type, Name_fields,
                                  2,
         "Name(identifier id, expr_context ctx)");
     if (!state->Name_type) return -1;
+    state->Name_frozen_type = make_frozen_type(
+        state, "ast.Name_frozen", 2,
+        state->Name_type, Name_frozen_members, 1);
+    if (!state->Name_frozen_type) return -1;
     state->List_type = make_type(state, "List", state->expr_type, List_fields,
                                  2,
         "List(expr* elts, expr_context ctx)");
     if (!state->List_type) return -1;
+    state->List_frozen_type = make_frozen_type(
+        state, "ast.List_frozen", 2,
+        state->List_type, List_frozen_members, 1);
+    if (!state->List_frozen_type) return -1;
     state->Tuple_type = make_type(state, "Tuple", state->expr_type,
                                   Tuple_fields, 2,
         "Tuple(expr* elts, expr_context ctx)");
     if (!state->Tuple_type) return -1;
+    state->Tuple_frozen_type = make_frozen_type(
+        state, "ast.Tuple_frozen", 2,
+        state->Tuple_type, Tuple_frozen_members, 1);
+    if (!state->Tuple_frozen_type) return -1;
     state->Slice_type = make_type(state, "Slice", state->expr_type,
                                   Slice_fields, 3,
         "Slice(expr? lower, expr? upper, expr? step)");
@@ -2766,6 +3223,10 @@ init_types(void *arg)
         return -1;
     if (PyObject_SetAttr(state->Slice_type, state->step, Py_None) == -1)
         return -1;
+    state->Slice_frozen_type = make_frozen_type(
+        state, "ast.Slice_frozen", 3,
+        state->Slice_type, Slice_frozen_members, 1);
+    if (!state->Slice_frozen_type) return -1;
     state->expr_context_type = make_type(state, "expr_context",
                                          state->AST_type, NULL, 0,
         "expr_context = Load | Store | Del");
@@ -3009,6 +3470,10 @@ init_types(void *arg)
     if (!state->comprehension_type) return -1;
     if (add_attributes(state, state->comprehension_type, NULL, 0) < 0) return
         -1;
+    state->comprehension_frozen_type = make_frozen_type(
+        state, "ast.comprehension_frozen", 4,
+        state->comprehension_type, comprehension_frozen_members, 0);
+    if (!state->comprehension_frozen_type) return -1;
     state->excepthandler_type = make_type(state, "excepthandler",
                                           state->AST_type, NULL, 0,
         "excepthandler = ExceptHandler(expr? type, identifier? name, stmt* body)");
@@ -3041,6 +3506,10 @@ init_types(void *arg)
         return -1;
     if (PyObject_SetAttr(state->arguments_type, state->kwarg, Py_None) == -1)
         return -1;
+    state->arguments_frozen_type = make_frozen_type(
+        state, "ast.arguments_frozen", 7,
+        state->arguments_type, arguments_frozen_members, 0);
+    if (!state->arguments_frozen_type) return -1;
     state->arg_type = make_type(state, "arg", state->AST_type, arg_fields, 3,
         "arg(identifier arg, expr? annotation, string? type_comment)");
     if (!state->arg_type) return -1;
@@ -3054,6 +3523,10 @@ init_types(void *arg)
         return -1;
     if (PyObject_SetAttr(state->arg_type, state->end_col_offset, Py_None) == -1)
         return -1;
+    state->arg_frozen_type = make_frozen_type(
+        state, "ast.arg_frozen", 3,
+        state->arg_type, arg_frozen_members, 1);
+    if (!state->arg_frozen_type) return -1;
     state->keyword_type = make_type(state, "keyword", state->AST_type,
                                     keyword_fields, 2,
         "keyword(identifier? arg, expr value)");
@@ -3067,6 +3540,10 @@ init_types(void *arg)
     if (PyObject_SetAttr(state->keyword_type, state->end_col_offset, Py_None)
         == -1)
         return -1;
+    state->keyword_frozen_type = make_frozen_type(
+        state, "ast.keyword_frozen", 2,
+        state->keyword_type, keyword_frozen_members, 1);
+    if (!state->keyword_frozen_type) return -1;
     state->alias_type = make_type(state, "alias", state->AST_type,
                                   alias_fields, 2,
         "alias(identifier name, identifier? asname)");
@@ -14462,20 +14939,20 @@ static PyObject *ann_ast_unaryop(AnnotationData *);
 static PyObject *
 ann_ast_arg(AnnotationData *data)
 {
-    PyObject *result = NULL, *value = NULL;
+    FrozenASTObject *result = NULL;
+    PyObject *value = NULL;
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
     }
-    tp = (PyTypeObject *) data->state->arg_type;
-    result = PyType_GenericNew(tp, NULL, NULL);
+    tp = (PyTypeObject *) data->state->arg_frozen_type;
+    result = PyObject_GC_New(FrozenASTObject, tp);
     if (!result) goto failed;
+    result->dict = NULL;
+    memset(result->fields, 0, sizeof(PyObject *) * 3);
     value = ann_ast_identifier(data);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->arg, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[0] = value;
     {
         Py_UCS1 c = ann_ast_next(data);
         if (c == 0xFF) goto failed;
@@ -14487,10 +14964,7 @@ ann_ast_arg(AnnotationData *data)
         }
     }
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->annotation, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[1] = value;
     {
         Py_UCS1 c = ann_ast_next(data);
         if (c == 0xFF) goto failed;
@@ -14502,33 +14976,11 @@ ann_ast_arg(AnnotationData *data)
         }
     }
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->type_comment, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[2] = value;
     assert(result != NULL);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
+    PyObject_GC_Track(result);
     Py_LeaveRecursiveCall();
-    return result;
+    return (PyObject *) result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
@@ -14539,26 +14991,23 @@ ann_ast_arg(AnnotationData *data)
 static PyObject *
 ann_ast_arguments(AnnotationData *data)
 {
-    PyObject *result = NULL, *value = NULL;
+    FrozenASTObject *result = NULL;
+    PyObject *value = NULL;
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
     }
-    tp = (PyTypeObject *) data->state->arguments_type;
-    result = PyType_GenericNew(tp, NULL, NULL);
+    tp = (PyTypeObject *) data->state->arguments_frozen_type;
+    result = PyObject_GC_New(FrozenASTObject, tp);
     if (!result) goto failed;
+    result->dict = NULL;
+    memset(result->fields, 0, sizeof(PyObject *) * 7);
     value = ann_ast_list(data, 0, ann_ast_arg);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->posonlyargs, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[0] = value;
     value = ann_ast_list(data, 0, ann_ast_arg);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->args, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[1] = value;
     {
         Py_UCS1 c = ann_ast_next(data);
         if (c == 0xFF) goto failed;
@@ -14570,22 +15019,13 @@ ann_ast_arguments(AnnotationData *data)
         }
     }
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->vararg, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[2] = value;
     value = ann_ast_list(data, 0, ann_ast_arg);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->kwonlyargs, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[3] = value;
     value = ann_ast_list(data, 1, ann_ast_expr);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->kw_defaults, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[4] = value;
     {
         Py_UCS1 c = ann_ast_next(data);
         if (c == 0xFF) goto failed;
@@ -14597,19 +15037,14 @@ ann_ast_arguments(AnnotationData *data)
         }
     }
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->kwarg, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[5] = value;
     value = ann_ast_list(data, 0, ann_ast_expr);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->defaults, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[6] = value;
     assert(result != NULL);
+    PyObject_GC_Track(result);
     Py_LeaveRecursiveCall();
-    return result;
+    return (PyObject *) result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
@@ -14668,43 +15103,35 @@ ann_ast_cmpop(AnnotationData *data)
 static PyObject *
 ann_ast_comprehension(AnnotationData *data)
 {
-    PyObject *result = NULL, *value = NULL;
+    FrozenASTObject *result = NULL;
+    PyObject *value = NULL;
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
     }
-    tp = (PyTypeObject *) data->state->comprehension_type;
-    result = PyType_GenericNew(tp, NULL, NULL);
+    tp = (PyTypeObject *) data->state->comprehension_frozen_type;
+    result = PyObject_GC_New(FrozenASTObject, tp);
     if (!result) goto failed;
+    result->dict = NULL;
+    memset(result->fields, 0, sizeof(PyObject *) * 4);
     data->in_store_context = 1;
     value = ann_ast_expr(data);
     data->in_store_context = 0;
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->target, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[0] = value;
     value = ann_ast_expr(data);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->iter, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[1] = value;
     value = ann_ast_list(data, 0, ann_ast_expr);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->ifs, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[2] = value;
     value = ann_ast_int(data);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->is_async, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[3] = value;
     assert(result != NULL);
+    PyObject_GC_Track(result);
     Py_LeaveRecursiveCall();
-    return result;
+    return (PyObject *) result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
@@ -14715,7 +15142,8 @@ ann_ast_comprehension(AnnotationData *data)
 static PyObject *
 ann_ast_expr(AnnotationData *data)
 {
-    PyObject *result = NULL, *value = NULL;
+    FrozenASTObject *result = NULL;
+    PyObject *value = NULL;
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
@@ -14726,21 +15154,17 @@ ann_ast_expr(AnnotationData *data)
     }
     switch (kind) {
         case BoolOp_kind: {
-            tp = (PyTypeObject *) data->state->BoolOp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->BoolOp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_boolop(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->op, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case NamedExpr_kind: {
@@ -14748,167 +15172,129 @@ ann_ast_expr(AnnotationData *data)
             goto failed;
         }
         case BinOp_kind: {
-            tp = (PyTypeObject *) data->state->BinOp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->BinOp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->left, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_operator(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->op, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->right, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case UnaryOp_kind: {
-            tp = (PyTypeObject *) data->state->UnaryOp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->UnaryOp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_unaryop(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->op, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->operand, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case Lambda_kind: {
-            tp = (PyTypeObject *) data->state->Lambda_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Lambda_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_arguments(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->args, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->body, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case IfExp_kind: {
-            tp = (PyTypeObject *) data->state->IfExp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->IfExp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->test, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->body, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->orelse, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case Dict_kind: {
-            tp = (PyTypeObject *) data->state->Dict_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Dict_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_list(data, 1, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->keys, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case Set_kind: {
-            tp = (PyTypeObject *) data->state->Set_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Set_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 1);
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->elts, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             break;
         }
         case ListComp_kind: {
-            tp = (PyTypeObject *) data->state->ListComp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->ListComp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->elt, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_list(data, 0, ann_ast_comprehension);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
-                {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case SetComp_kind: {
-            tp = (PyTypeObject *) data->state->SetComp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->SetComp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->elt, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_list(data, 0, ann_ast_comprehension);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
-                {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case DictComp_kind: {
-            tp = (PyTypeObject *) data->state->DictComp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->DictComp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->key, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             {
                 Py_UCS1 c = ann_ast_next(data);
                 if (c == 0xFF) goto failed;
@@ -14920,36 +15306,24 @@ ann_ast_expr(AnnotationData *data)
                 }
             }
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_list(data, 0, ann_ast_comprehension);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
-                {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case GeneratorExp_kind: {
-            tp = (PyTypeObject *) data->state->GeneratorExp_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->GeneratorExp_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->elt, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_list(data, 0, ann_ast_comprehension);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->generators, value) == -1)
-                {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case Await_kind: {
@@ -14965,71 +15339,51 @@ ann_ast_expr(AnnotationData *data)
             goto failed;
         }
         case Compare_kind: {
-            tp = (PyTypeObject *) data->state->Compare_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Compare_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->left, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_list(data, 0, ann_ast_cmpop);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->ops, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->comparators, value) ==
-                -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case Call_kind: {
-            tp = (PyTypeObject *) data->state->Call_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Call_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->func, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->args, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_list(data, 0, ann_ast_keyword);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->keywords, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case FormattedValue_kind: {
-            tp = (PyTypeObject *) data->state->FormattedValue_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->FormattedValue_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_int(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->conversion, value) == -1)
-                {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             {
                 Py_UCS1 c = ann_ast_next(data);
                 if (c == 0xFF) goto failed;
@@ -15041,36 +15395,24 @@ ann_ast_expr(AnnotationData *data)
                 }
             }
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->format_spec, value) ==
-                -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case Interpolation_kind: {
-            tp = (PyTypeObject *) data->state->Interpolation_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Interpolation_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 4);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_constant(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->str, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_int(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->conversion, value) == -1)
-                {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             {
                 Py_UCS1 c = ann_ast_next(data);
                 if (c == 0xFF) goto failed;
@@ -15082,179 +15424,141 @@ ann_ast_expr(AnnotationData *data)
                 }
             }
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->format_spec, value) ==
-                -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[3] = value;
             break;
         }
         case JoinedStr_kind: {
-            tp = (PyTypeObject *) data->state->JoinedStr_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->JoinedStr_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 1);
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             break;
         }
         case TemplateStr_kind: {
-            tp = (PyTypeObject *) data->state->TemplateStr_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->TemplateStr_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 1);
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->values, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             break;
         }
         case Constant_kind: {
-            tp = (PyTypeObject *) data->state->Constant_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Constant_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_constant(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = Py_NewRef(Py_None);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->kind, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case Attribute_kind: {
-            tp = (PyTypeObject *) data->state->Attribute_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Attribute_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_identifier(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->attr, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_expr_context(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case Subscript_kind: {
-            tp = (PyTypeObject *) data->state->Subscript_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Subscript_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->slice, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             value = ann_ast_expr_context(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         case Starred_kind: {
-            tp = (PyTypeObject *) data->state->Starred_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Starred_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_expr(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr_context(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case Name_kind: {
-            tp = (PyTypeObject *) data->state->Name_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Name_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_identifier(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->id, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr_context(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case List_kind: {
-            tp = (PyTypeObject *) data->state->List_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->List_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->elts, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr_context(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case Tuple_kind: {
-            tp = (PyTypeObject *) data->state->Tuple_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Tuple_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 2);
             value = ann_ast_list(data, 0, ann_ast_expr);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->elts, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             value = ann_ast_expr_context(data);
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->ctx, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             break;
         }
         case Slice_kind: {
-            tp = (PyTypeObject *) data->state->Slice_type;
-            result = PyType_GenericNew(tp, NULL, NULL);
+            tp = (PyTypeObject *) data->state->Slice_frozen_type;
+            result = PyObject_GC_New(FrozenASTObject, tp);
             if (!result) goto failed;
+            result->dict = NULL;
+            memset(result->fields, 0, sizeof(PyObject *) * 3);
             {
                 Py_UCS1 c = ann_ast_next(data);
                 if (c == 0xFF) goto failed;
@@ -15266,10 +15570,7 @@ ann_ast_expr(AnnotationData *data)
                 }
             }
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->lower, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[0] = value;
             {
                 Py_UCS1 c = ann_ast_next(data);
                 if (c == 0xFF) goto failed;
@@ -15281,10 +15582,7 @@ ann_ast_expr(AnnotationData *data)
                 }
             }
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->upper, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[1] = value;
             {
                 Py_UCS1 c = ann_ast_next(data);
                 if (c == 0xFF) goto failed;
@@ -15296,10 +15594,7 @@ ann_ast_expr(AnnotationData *data)
                 }
             }
             if (!value) goto failed;
-            if (PyObject_SetAttr(result, data->state->step, value) == -1) {
-                goto failed;
-            }
-            Py_DECREF(value);
+            result->fields[2] = value;
             break;
         }
         default: {
@@ -15308,28 +15603,9 @@ ann_ast_expr(AnnotationData *data)
         }
     }
     assert(result != NULL);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
+    PyObject_GC_Track(result);
     Py_LeaveRecursiveCall();
-    return result;
+    return (PyObject *) result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
@@ -15349,14 +15625,17 @@ ann_ast_expr_context(AnnotationData *data)
 static PyObject *
 ann_ast_keyword(AnnotationData *data)
 {
-    PyObject *result = NULL, *value = NULL;
+    FrozenASTObject *result = NULL;
+    PyObject *value = NULL;
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
     }
-    tp = (PyTypeObject *) data->state->keyword_type;
-    result = PyType_GenericNew(tp, NULL, NULL);
+    tp = (PyTypeObject *) data->state->keyword_frozen_type;
+    result = PyObject_GC_New(FrozenASTObject, tp);
     if (!result) goto failed;
+    result->dict = NULL;
+    memset(result->fields, 0, sizeof(PyObject *) * 2);
     {
         Py_UCS1 c = ann_ast_next(data);
         if (c == 0xFF) goto failed;
@@ -15368,39 +15647,14 @@ ann_ast_keyword(AnnotationData *data)
         }
     }
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->arg, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[0] = value;
     value = ann_ast_expr(data);
     if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->value, value) == -1) {
-        goto failed;
-    }
-    Py_DECREF(value);
+    result->fields[1] = value;
     assert(result != NULL);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
+    PyObject_GC_Track(result);
     Py_LeaveRecursiveCall();
-    return result;
+    return (PyObject *) result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
@@ -15621,91 +15875,202 @@ astmodule_exec(PyObject *m)
     if (PyModule_AddObjectRef(m, "BoolOp", state->BoolOp_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "BoolOp_frozen", state->BoolOp_frozen_type) <
+        0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "NamedExpr", state->NamedExpr_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "NamedExpr_frozen",
+        state->NamedExpr_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "BinOp", state->BinOp_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "BinOp_frozen", state->BinOp_frozen_type) < 0)
+        {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "UnaryOp", state->UnaryOp_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "UnaryOp_frozen", state->UnaryOp_frozen_type)
+        < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Lambda", state->Lambda_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Lambda_frozen", state->Lambda_frozen_type) <
+        0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "IfExp", state->IfExp_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "IfExp_frozen", state->IfExp_frozen_type) < 0)
+        {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Dict", state->Dict_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Dict_frozen", state->Dict_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Set", state->Set_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Set_frozen", state->Set_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "ListComp", state->ListComp_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "ListComp_frozen",
+        state->ListComp_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "SetComp", state->SetComp_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "SetComp_frozen", state->SetComp_frozen_type)
+        < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "DictComp", state->DictComp_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "DictComp_frozen",
+        state->DictComp_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "GeneratorExp", state->GeneratorExp_type) < 0)
         {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "GeneratorExp_frozen",
+        state->GeneratorExp_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Await", state->Await_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Await_frozen", state->Await_frozen_type) < 0)
+        {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Yield", state->Yield_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Yield_frozen", state->Yield_frozen_type) < 0)
+        {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "YieldFrom", state->YieldFrom_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "YieldFrom_frozen",
+        state->YieldFrom_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Compare", state->Compare_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Compare_frozen", state->Compare_frozen_type)
+        < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Call", state->Call_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Call_frozen", state->Call_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "FormattedValue", state->FormattedValue_type)
         < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "FormattedValue_frozen",
+        state->FormattedValue_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Interpolation", state->Interpolation_type) <
         0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Interpolation_frozen",
+        state->Interpolation_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "JoinedStr", state->JoinedStr_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "JoinedStr_frozen",
+        state->JoinedStr_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "TemplateStr", state->TemplateStr_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "TemplateStr_frozen",
+        state->TemplateStr_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Constant", state->Constant_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Constant_frozen",
+        state->Constant_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Attribute", state->Attribute_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Attribute_frozen",
+        state->Attribute_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Subscript", state->Subscript_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Subscript_frozen",
+        state->Subscript_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Starred", state->Starred_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Starred_frozen", state->Starred_frozen_type)
+        < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Name", state->Name_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Name_frozen", state->Name_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "List", state->List_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "List_frozen", state->List_frozen_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Tuple", state->Tuple_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Tuple_frozen", state->Tuple_frozen_type) < 0)
+        {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Slice", state->Slice_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Slice_frozen", state->Slice_frozen_type) < 0)
+        {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "expr_context", state->expr_context_type) < 0)
@@ -15824,6 +16189,10 @@ astmodule_exec(PyObject *m)
         0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "comprehension_frozen",
+        state->comprehension_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "excepthandler", state->excepthandler_type) <
         0) {
         return -1;
@@ -15835,10 +16204,21 @@ astmodule_exec(PyObject *m)
     if (PyModule_AddObjectRef(m, "arguments", state->arguments_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "arguments_frozen",
+        state->arguments_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "arg", state->arg_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "arg_frozen", state->arg_frozen_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "keyword", state->keyword_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "keyword_frozen", state->keyword_frozen_type)
+        < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "alias", state->alias_type) < 0) {
