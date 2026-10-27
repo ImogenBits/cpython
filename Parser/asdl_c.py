@@ -769,7 +769,6 @@ class PyTypesDeclareVisitor(PickleVisitor):
         self.emit("""
 typedef struct {
     PyObject_HEAD
-    PyObject *dict;
     PyObject *fields[1];
 } FrozenASTObject;
 """, 0)
@@ -1897,7 +1896,6 @@ frozen_traverse(PyObject *op, visitproc visit, void *arg)
 {
     FrozenASTObject *self = (FrozenASTObject *)op;
     Py_VISIT(Py_TYPE(op));
-    Py_VISIT(self->dict);
     for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
         Py_VISIT(self->fields[i]);
     }
@@ -1908,7 +1906,6 @@ static int
 frozen_clear(PyObject *op)
 {
     FrozenASTObject *self = (FrozenASTObject *)op;
-    Py_CLEAR(self->dict);
     for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
         Py_CLEAR(self->fields[i]);
     }
@@ -1935,7 +1932,7 @@ make_frozen_type(struct ast_state *state, char *type_name, Py_ssize_t num_fields
         PySlot_FUNC(Py_tp_clear, frozen_clear),
         PySlot_FUNC(Py_tp_dealloc, frozen_dealloc),
         PySlot_UINT64(Py_tp_flags, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC
-                   | Py_TPFLAGS_DISALLOW_INSTANTIATION),
+                   | Py_TPFLAGS_MANAGED_DICT| Py_TPFLAGS_DISALLOW_INSTANTIATION),
         PySlot_STATIC_DATA(Py_tp_members, (void *) members),
         PySlot_END
     };
@@ -2296,7 +2293,6 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
         self.emit(f"tp = (PyTypeObject *) data->state->{name}_frozen_type;", depth)
         self.emit("result = PyObject_GC_New(FrozenASTObject, tp);", depth)
         self.emit("if (!result) goto failed;", depth)
-        self.emit("result->dict = NULL;", depth)
         self.emit(f"memset(result->fields, 0, sizeof(PyObject *) * {len(fields)});", depth)
         for i, field in enumerate(fields):
             self.visitField(name, i, field, depth)
