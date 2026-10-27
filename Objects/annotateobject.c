@@ -123,12 +123,15 @@ _eval_ast(PyObject *ann_ast_class, PyObject *format, PyObject *ast, PyObject *na
     if (!ann_ast) {
         return NULL;
     }
+    PyObject *ast_format = PyLong_FromLong(_Py_ANNOTATE_FORMAT_AST);
+    if (PyObject_RichCompareBool(format, ast_format, Py_EQ) == 1) {
+        Py_DECREF(ast_format);
+        return ann_ast;
+    }
+    Py_DECREF(ast_format);
     PyObject *result = PyObject_CallMethodObjArgs(
         ann_ast, &_Py_ID(evaluate), format, NULL);
     Py_DECREF(ann_ast);
-    if (!result) {
-        return NULL;
-    }
     return result;
 }
 
