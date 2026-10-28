@@ -1734,7 +1734,7 @@ make_type(struct ast_state *state, const char *type, PyObject* base,
         }
         PyTuple_SET_ITEM(fnames, i, field);
     }
-    result = PyObject_CallFunction((PyObject*)&PyType_Type, "s(O){OOOOOOOs}",
+    result = PyObject_CallFunction(state->AST_meta, "s(O){OOOOOOOs}",
                     type, base,
                     state->_fields, fnames,
                     state->__match_args__, fnames,
@@ -1884,6 +1884,82 @@ static int add_ast_fields(struct ast_state *state)
     return 0;
 }
 
+static PyObject *
+get_ast_class(struct ast_state *state, PyObject *class);
+
+static PyObject *
+ast_meta_subclasscheck(PyObject *cls, PyObject *subclass)
+{
+    if (!PyType_Check(subclass) || !PyType_Check(cls)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "issubclass() arg 1 and arg 2 must be classes");
+        return NULL;
+    }
+    PyObject *normal_class = get_ast_class(get_ast_state(), subclass);
+    int result = PyType_IsSubtype((PyTypeObject *)normal_class, (PyTypeObject *)cls);
+    if (result < 0) {
+        return NULL;
+    }
+    return Py_NewRef(result ? Py_True : Py_False);
+}
+
+static PyMethodDef ast_meta_subclasscheck_def = {
+    "__subclasscheck__",
+    _PyCFunction_CAST(ast_meta_subclasscheck),
+    METH_O,
+    NULL,
+};
+
+static PyObject *
+ast_meta_instancecheck(PyObject *cls, PyObject *obj)
+{
+    PyObject *obj_type = Py_NewRef((PyObject *)Py_TYPE(obj));
+    return ast_meta_subclasscheck(cls, obj_type);
+}
+
+static PyMethodDef ast_meta_instancecheck_def = {
+    "__instancecheck__",
+    _PyCFunction_CAST(ast_meta_instancecheck),
+    METH_O,
+    NULL,
+};
+
+static PyObject *
+make_ast_meta(struct ast_state *state) {
+    PyObject *meta = PyObject_CallFunction(
+        (PyObject*)&PyType_Type, "s(O){OOOs}",
+        "ASTMeta", (PyObject*)&PyType_Type,
+        state->__module__, state->ast,
+        state->__doc__, "Metaclass for the AST objects."
+    );
+    if (!meta) {
+        return NULL;
+    }
+    PyObject *func = PyDescr_NewMethod((PyTypeObject *)meta, &ast_meta_subclasscheck_def);
+    if (!func) {
+        Py_DECREF(meta);
+        return NULL;
+    }
+    if (PyObject_SetAttrString(meta, "__subclasscheck__", func) < 0) {
+        Py_DECREF(meta);
+        Py_DECREF(func);
+        return NULL;
+    }
+    Py_DECREF(func);
+    func = PyDescr_NewMethod((PyTypeObject *)meta, &ast_meta_instancecheck_def);
+    if (!func) {
+        Py_DECREF(meta);
+        return NULL;
+    }
+    if (PyObject_SetAttrString(meta, "__instancecheck__", func) < 0) {
+        Py_DECREF(meta);
+        Py_DECREF(func);
+        return NULL;
+    }
+    Py_DECREF(func);
+    return meta;
+}
+
 static Py_ssize_t
 frozen_field_count(PyObject *op)
 {
@@ -1891,48 +1967,29 @@ frozen_field_count(PyObject *op)
             offsetof(FrozenASTObject, fields)) / sizeof(PyObject *);
 }
 
-static int
-frozen_traverse(PyObject *op, visitproc visit, void *arg)
-{
-    FrozenASTObject *self = (FrozenASTObject *)op;
-    Py_VISIT(Py_TYPE(op));
-    for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
-        Py_VISIT(self->fields[i]);
-    }
-    return 0;
-}
-
-static int
-frozen_clear(PyObject *op)
+static void
+frozen_dealloc(PyObject *op)
 {
     FrozenASTObject *self = (FrozenASTObject *)op;
     for (Py_ssize_t i = 0; i < frozen_field_count(op); i++) {
         Py_CLEAR(self->fields[i]);
     }
-    return 0;
-}
-
-static void
-frozen_dealloc(PyObject *op)
-{
-    PyObject_GC_UnTrack(op);
-    frozen_clear(op);
     Py_TYPE(op)->tp_free(op);
 }
 
 static PyObject *
 make_frozen_type(struct ast_state *state, char *type_name, Py_ssize_t num_fields,
-    PyObject* base, const PyMemberDef *members, int default_attrs)
+    PyObject* orig_type, const PyMemberDef *members, int default_attrs)
 {
     PySlot slots[] = {
         PySlot_STATIC_DATA(Py_tp_name, type_name),
         PySlot_SIZE(Py_tp_basicsize, offsetof(FrozenASTObject, fields) + sizeof(PyObject*) * num_fields),
-        PySlot_DATA(Py_tp_bases, base),
-        PySlot_FUNC(Py_tp_traverse, frozen_traverse),
-        PySlot_FUNC(Py_tp_clear, frozen_clear),
+        PySlot_FUNC(Py_tp_repr, ast_repr),
+        PySlot_FUNC(Py_tp_getattro, PyObject_GenericGetAttr),
+        PySlot_FUNC(Py_tp_setattro, PyObject_GenericSetAttr),
         PySlot_FUNC(Py_tp_dealloc, frozen_dealloc),
-        PySlot_UINT64(Py_tp_flags, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC
-                   | Py_TPFLAGS_MANAGED_DICT| Py_TPFLAGS_DISALLOW_INSTANTIATION),
+        PySlot_FUNC(Py_tp_free, PyObject_Free),
+        PySlot_UINT64(Py_tp_flags, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_DISALLOW_INSTANTIATION),
         PySlot_STATIC_DATA(Py_tp_members, (void *) members),
         PySlot_END
     };
@@ -1940,7 +1997,41 @@ make_frozen_type(struct ast_state *state, char *type_name, Py_ssize_t num_fields
     if (!tp) {
         return NULL;
     }
+    PyObject *orig = PyObject_GetAttr(orig_type, state->_fields);
+    if (!orig) {
+        Py_DECREF(tp);
+        return NULL;
+    }
+    if (PyObject_SetAttr(tp, state->_fields, orig) < 0) {
+        Py_DECREF(tp);
+        Py_DECREF(orig);
+        return NULL;
+    }
+    Py_DECREF(orig);
+    orig = PyObject_GetAttr(orig_type, state->__match_args__);
+    if (!orig) {
+        Py_DECREF(tp);
+        return NULL;
+    }
+    if (PyObject_SetAttr(tp, state->__match_args__, orig) < 0) {
+        Py_DECREF(tp);
+        Py_DECREF(orig);
+        return NULL;
+    }
+    Py_DECREF(orig);
+
     if (default_attrs) {
+        orig = PyObject_GetAttr(orig_type, state->_attributes);
+        if (!orig) {
+            Py_DECREF(tp);
+            return NULL;
+        }
+        if (PyObject_SetAttr(tp, state->_attributes, orig) < 0) {
+            Py_DECREF(tp);
+            Py_DECREF(orig);
+            return NULL;
+        }
+        Py_DECREF(orig);
         if (PyObject_SetAttr(tp, state->lineno, PyLong_FromLong(1)) < 0) {
             Py_DECREF(tp);
             return NULL;
@@ -1963,6 +2054,13 @@ make_frozen_type(struct ast_state *state, char *type_name, Py_ssize_t num_fields
 
 """, 0, reflow=False)
 
+        self.emit("static PyObject *get_ast_class(struct ast_state *state, PyObject *class) {", 0)
+        for type_name in self.metadata.frozen_types:
+            self.emit(f"if (class == state->{type_name}_frozen_type)", 1)
+            self.emit(f"return state->{type_name}_type;", 2)
+        self.emit("return class;", 1)
+        self.emit("}", 0)
+
         self.file.write(textwrap.dedent('''
             static int
             init_types(void *arg)
@@ -1971,7 +2069,12 @@ make_frozen_type(struct ast_state *state, char *type_name, Py_ssize_t num_fields
                 if (init_identifiers(state) < 0) {
                     return -1;
                 }
-                state->AST_type = PyType_FromSpec(&AST_type_spec);
+                state->AST_meta = make_ast_meta(state);
+                if (!state->AST_meta) {
+                    return -1;
+                }
+                state->AST_type = PyType_FromMetaclass((PyTypeObject*)state->AST_meta,
+                    NULL, &AST_type_spec, NULL);
                 if (!state->AST_type) {
                     return -1;
                 }
@@ -2219,7 +2322,6 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 
     def func_end(self, name, attributes):
         self.emit("assert(result != NULL);", 1)
-        self.emit("PyObject_GC_Track(result);", 1)
         self.emit("Py_LeaveRecursiveCall();", 1)
         self.emit("return (PyObject *) result;", 1)
         self.emit("failed:", 1)
@@ -2291,7 +2393,7 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 
     def emitCreateResult(self, name, fields, depth):
         self.emit(f"tp = (PyTypeObject *) data->state->{name}_frozen_type;", depth)
-        self.emit("result = PyObject_GC_New(FrozenASTObject, tp);", depth)
+        self.emit("result = PyObject_New(FrozenASTObject, tp);", depth)
         self.emit("if (!result) goto failed;", depth)
         self.emit(f"memset(result->fields, 0, sizeof(PyObject *) * {len(fields)});", depth)
         for i, field in enumerate(fields):
@@ -2772,6 +2874,7 @@ def generate_module_def(mod, metadata, f, internal_h):
         "__dict__",
         "__module__",
         "_attributes",
+        "AST_meta",
         *metadata.identifiers
     }
 

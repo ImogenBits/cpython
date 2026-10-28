@@ -16,6 +16,7 @@ extern "C" {
 struct ast_state {
     _PyOnceFlag once;
     int finalized;
+    PyObject *AST_meta;
     PyObject *AST_type;
     PyObject *Add_singleton;
     PyObject *Add_type;

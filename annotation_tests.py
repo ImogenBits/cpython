@@ -4,7 +4,7 @@ from types import ModuleType
 from importlib import import_module
 import pkgutil
 import tracemalloc
-from annotationlib import Format
+from annotationlib import Format, call_annotate_function
 import timeit
 from pathlib import Path
 from dataclasses import InitVar, dataclass
@@ -137,7 +137,7 @@ def run_test(clean: str) -> None:
         for mod in iter_modules(package):
             for annotate in iter_annotates(mod, obj_cache):
                 time_start = timeit.default_timer()
-                eval_annotate_as_types(annotate, format=Format.VALUE)
+                call_annotate_function(annotate, format=Format.AST)
                 time += timeit.default_timer() - time_start
 
     tracemalloc.stop()
