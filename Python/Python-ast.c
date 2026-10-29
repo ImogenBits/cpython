@@ -14441,6 +14441,43 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
     }
     return result;
 }
+
+static int
+ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
+    PyObject *value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->col_offset, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    return 0;
+}
 static PyObject *ann_ast_arg(AnnotationData *);
 static PyObject *ann_ast_arguments(AnnotationData *);
 static PyObject *ann_ast_boolop(AnnotationData *);
@@ -14499,26 +14536,7 @@ ann_ast_arg(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
+    if (ann_ast_add_attributes(data, result) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
@@ -15300,26 +15318,7 @@ ann_ast_expr(AnnotationData *data)
         }
     }
     assert(result != NULL);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
+    if (ann_ast_add_attributes(data, result) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
@@ -15371,26 +15370,7 @@ ann_ast_keyword(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(1);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_lineno, value) < 0)
-        goto failed;
-    Py_DECREF(value);
-    value = PyLong_FromLong(0);
-    if (!value) goto failed;
-    if (PyObject_SetAttr(result, data->state->end_col_offset, value) < 0)
-        goto failed;
-    Py_DECREF(value);
+    if (ann_ast_add_attributes(data, result) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:

@@ -29,6 +29,24 @@ build_ast_size_t(AnnotationEncoder encoder, Py_ssize_t value) {
     return SUCCESS;
 }
 
+#define DEFINE_AST_SEQ_BUILDER(TYPE)                                             \
+static int                                                                       \
+build_ast_ ## TYPE ## _seq(AnnotationEncoder encoder, asdl_ ## TYPE ## _seq *seq) \
+{                                                                                \
+    if (!seq) {                                                                  \
+        RETURN_IF_ERROR(build_ast_size_t(encoder, 0));                      \
+        return SUCCESS;                                                          \
+    }                                                                            \
+    Py_ssize_t i, n = asdl_seq_LEN(seq);                                         \
+    RETURN_IF_ERROR(build_ast_size_t(encoder, n));                          \
+    for (i = 0; i < n; i++) {                                                    \
+        RETURN_IF_ERROR(                                                         \
+            build_ast_ ## TYPE (encoder, asdl_seq_GET(seq, i))              \
+        );                                                                       \
+    }                                                                            \
+    return SUCCESS;                                                              \
+}
+
 static int
 build_ast_const(AnnotationEncoder encoder, PyObject *value) {
     Py_ssize_t index;
@@ -49,23 +67,25 @@ build_ast_const(AnnotationEncoder encoder, PyObject *value) {
     return SUCCESS;
 }
 
-#define DEFINE_AST_SEQ_BUILDER(TYPE)                                             \
-static int                                                                       \
-build_ast_ ## TYPE ## _seq(AnnotationEncoder encoder, asdl_ ## TYPE ## _seq *seq) \
-{                                                                                \
-    if (!seq) {                                                                  \
-        RETURN_IF_ERROR(build_ast_size_t(encoder, 0));                      \
-        return SUCCESS;                                                          \
-    }                                                                            \
-    Py_ssize_t i, n = asdl_seq_LEN(seq);                                         \
-    RETURN_IF_ERROR(build_ast_size_t(encoder, n));                          \
-    for (i = 0; i < n; i++) {                                                    \
-        RETURN_IF_ERROR(                                                         \
-            build_ast_ ## TYPE (encoder, asdl_seq_GET(seq, i))              \
-        );                                                                       \
-    }                                                                            \
-    return SUCCESS;                                                              \
-}                                                                                \
+static int
+build_ast_int(AnnotationEncoder encoder, long op)
+{
+    PyObject *op_obj = PyLong_FromLong(op);
+    if (!op_obj) {
+        return ERROR;
+    }
+    return build_ast_const(encoder, op_obj);
+}
+DEFINE_AST_SEQ_BUILDER(int);
+
+static int
+build_ast_loc(AnnotationEncoder encoder, int attrs[4]) {
+    RETURN_IF_ERROR(build_ast_int(encoder, attrs[0]));
+    RETURN_IF_ERROR(build_ast_int(encoder, attrs[1]));
+    RETURN_IF_ERROR(build_ast_int(encoder, attrs[2]));
+    RETURN_IF_ERROR(build_ast_int(encoder, attrs[3]));
+    return SUCCESS;
+}                                                                            \
 
 static int build_ast_expr(AnnotationEncoder encoder, expr_ty expr);
 DEFINE_AST_SEQ_BUILDER(expr);
@@ -79,6 +99,7 @@ build_ast_arg(AnnotationEncoder encoder, arg_ty arg) {
     RETURN_IF_ERROR(build_ast_const(encoder, arg->arg));
     RETURN_IF_ERROR(build_ast_expr(encoder, arg->annotation));
     RETURN_IF_ERROR(build_ast_const(encoder, arg->type_comment));
+    RETURN_IF_ERROR(build_ast_loc(encoder, &arg->lineno));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(arg);
@@ -106,17 +127,6 @@ build_ast_comprehension(AnnotationEncoder encoder, comprehension_ty comp) {
 DEFINE_AST_SEQ_BUILDER(comprehension);
 
 static int
-build_ast_int(AnnotationEncoder encoder, long op)
-{
-    PyObject *op_obj = PyLong_FromLong(op);
-    if (!op_obj) {
-        return ERROR;
-    }
-    return build_ast_const(encoder, op_obj);
-}
-DEFINE_AST_SEQ_BUILDER(int);
-
-static int
 build_ast_keyword(AnnotationEncoder encoder, keyword_ty keyword)
 {
     if (!keyword) {
@@ -125,6 +135,7 @@ build_ast_keyword(AnnotationEncoder encoder, keyword_ty keyword)
     }
     RETURN_IF_ERROR(build_ast_const(encoder, keyword->arg));
     RETURN_IF_ERROR(build_ast_expr(encoder, keyword->value));
+    RETURN_IF_ERROR(build_ast_loc(encoder, &keyword->lineno));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(keyword);
@@ -341,6 +352,9 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
     default:
         goto failed;
     }
+    if (build_ast_loc(encoder, &expr->lineno)) {
+        goto failed;
+    }
     Py_LeaveRecursiveCall();
     return SUCCESS;
 failed:
@@ -377,6 +391,9 @@ _PyAST_GetAnnotationAST(expr_ty annotation, int stringify)
         err = PyUnicodeWriter_WriteChar(encoder.data, Constant_kind);
         if (err == SUCCESS) {
             err = build_ast_const(encoder, annotation_str);
+        }
+        if (err == SUCCESS) {
+            err = build_ast_loc(encoder, &annotation->lineno);
         }
         Py_DECREF(annotation_str);
     } else {

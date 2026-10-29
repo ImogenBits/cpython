@@ -2075,6 +2075,43 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
     }
     return result;
 }
+
+static int
+ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
+    PyObject *value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->col_offset, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
+        Py_DECREF(value);
+        return -1;
+    }
+    return 0;
+}
 """.strip(), 0, reflow=False)
 
         expr_types = sorted(self.metadata.expr_types & self.types.keys())
@@ -2100,21 +2137,10 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 
     def func_end(self, name, attributes):
         self.emit("assert(result != NULL);", 1)
-        for attr in attributes:
-            if attr.name in ("lineno", "end_lineno"):
-                val = 1
-            elif attr.name in ("col_offset", "end_col_offset"):
-                val = 0
-            else:
-                raise RuntimeError(f"Unknown attribute {attr.name} in {name}")
-            self.emit(f"value = PyLong_FromLong({val});", 1)
-            self.emit("if (!value) goto failed;", 1)
-            self.emit(
-                f"if (PyObject_SetAttr(result, data->state->{attr.name}, value) < 0)",
-                1,
-            )
-            self.emit("goto failed;", 2)
-            self.emit("Py_DECREF(value);", 1)
+        if attributes:
+            if [f.name for f in attributes] != ["lineno", "col_offset", "end_lineno", "end_col_offset"]:
+                raise ValueError(f"unexpected attributes for {name}: {attributes}")
+            self.emit("if (ann_ast_add_attributes(data, result) < 0) goto failed;", 1)
         self.emit("Py_LeaveRecursiveCall();", 1)
         self.emit("return result;", 1)
         self.emit("failed:", 1)
