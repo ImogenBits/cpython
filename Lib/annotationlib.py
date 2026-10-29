@@ -1603,16 +1603,14 @@ class AnnotationNamespace(dict):
     def __len__(self):
         return len(self.keys())
 
-    def __copy__(self):
-        return type(self)(
-            locals=dict(self.locals) if self.locals is not None else None,
-            cells=dict(self.cells) if self.cells is not None else None,
-            classdict=dict(self.classdict) if self.classdict is not None else None,
-            globals=dict(self.globals),
-            explicit_globals=set(self.explicit_globals) if self.explicit_globals is not None else None,
-        )
-
     def copy(self):
+        return type(self)(
+            locals=type(self.locals)(self.locals) if self.locals is not None else None,
+            classdict=type(self.classdict)(self.classdict) if self.classdict is not None else None,
+            cells=type(self.cells)(self.cells) if self.cells is not None else None,
+            globals=type(self.globals)(self.globals) if self.globals is not None else None,
+            explicit_globals=set(self.explicit_globals) if self.explicit_globals is not None else None
+        )
         return self.__copy__()
 
     def as_inner_scope(self):
@@ -1644,7 +1642,13 @@ class AnnotationAST:
             transformer = _AnnotationASTTransformer()
             ann_ast = transformer.visit(self.ast)
             ast.fix_missing_locations(ann_ast)
-            namespace = self.namespace.copy()
+            namespace = AnnotationNamespace(
+                locals={**self.namespace.locals} if self.namespace.locals is not None else None,
+                classdict=self.namespace.classdict,
+                cells=self.namespace.cells,
+                globals=self.namespace.globals,
+                explicit_globals=self.namespace.explicit_globals,
+            )
             namespace[_ANNOTATION_AST_SKIP_CLASS] = self.namespace.as_inner_scope()
         else:
             ann_ast = self.ast
