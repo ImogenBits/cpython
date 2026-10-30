@@ -1962,6 +1962,8 @@ typedef struct {
     PyObject *consts;
     PyObject *private_name;
     int in_store_context;
+    PyObject *curr_lineno;
+    PyObject *curr_end_lineno;
 } AnnotationData;
 
 static Py_UCS1
@@ -2077,16 +2079,8 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 }
 
 static int
-ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
+ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info) {
     PyObject *value = ann_ast_constant(data);
-    if (!value) {
-        return -1;
-    }
-    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
-        Py_DECREF(value);
-        return -1;
-    }
-    value = ann_ast_constant(data);
     if (!value) {
         return -1;
     }
@@ -2098,15 +2092,29 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
     if (!value) {
         return -1;
     }
-    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
+    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
         Py_DECREF(value);
         return -1;
     }
-    value = ann_ast_constant(data);
-    if (!value) {
+    if (with_line_info) {
+        value = ann_ast_constant(data);
+        if (!value) {
+            return -1;
+        }
+        data->curr_lineno = value;
+    }
+    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
+        Py_DECREF(value);
         return -1;
     }
-    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
+    if (with_line_info) {
+        value = ann_ast_constant(data);
+        if (!value) {
+            return -1;
+        }
+        data->curr_end_lineno = value;
+    }
+    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
         Py_DECREF(value);
         return -1;
     }
@@ -2135,12 +2143,12 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
         self.emit("return NULL;", 2)
         self.emit("}", 1)
 
-    def func_end(self, name, attributes):
+    def func_end(self, name, attributes, with_line_info):
         self.emit("assert(result != NULL);", 1)
         if attributes:
             if [f.name for f in attributes] != ["lineno", "col_offset", "end_lineno", "end_col_offset"]:
                 raise ValueError(f"unexpected attributes for {name}: {attributes}")
-            self.emit("if (ann_ast_add_attributes(data, result) < 0) goto failed;", 1)
+            self.emit(f"if (ann_ast_add_attributes(data, result, {with_line_info}) < 0) goto failed;", 1)
         self.emit("Py_LeaveRecursiveCall();", 1)
         self.emit("return result;", 1)
         self.emit("failed:", 1)
@@ -2160,6 +2168,8 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
         self.emit("if (kind == 0xFF) {", 1)
         self.emit("return NULL;", 2)
         self.emit("}", 1)
+        self.emit("bool with_line_info = (kind & 0x40) != 0;", 1)
+        self.emit("kind &= 0x3F;", 1)
         self.emit("switch (kind) {", 1)
         for cons in sum.types:
             # these can't occurr in annotations
@@ -2183,7 +2193,7 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
         self.emit("goto failed;", 3)
         self.emit("}", 2)
         self.emit("}", 1)
-        self.func_end(name, sum.attributes)
+        self.func_end(name, sum.attributes, "with_line_info")
 
     def emit_simple_sum(self, sum, name):
         self.emit("static PyObject *", 0)
@@ -2220,7 +2230,7 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
     def visitProduct(self, product, name):
         self.func_begin(name)
         self.emitCreateResult(name, product.fields, 1)
-        self.func_end(name, product.attributes)
+        self.func_end(name, product.attributes, "true")
 
     def visitConstructor(self, cons, name, depth):
         self.emitCreateResult(cons.name, cons.fields, depth)
@@ -2570,6 +2580,10 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
     if (state == NULL) {
         return NULL;
     }
+    PyObject *one = PyLong_FromLong(1);
+    if (!one) {
+        return NULL;
+    }
     AnnotationData ann_data = {
         .state = state,
         .data = PyTuple_GET_ITEM(data, 0),
@@ -2577,8 +2591,11 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
         .consts = data,
         .private_name = private_name,
         .in_store_context = 0,
+        .curr_lineno = one,
+        .curr_end_lineno = one,
     };
     PyObject *expr = ann_ast_expr(&ann_data);
+    Py_DECREF(one);
     if (!expr) {
         if (!PyErr_Occurred()) {
             PyErr_Format(PyExc_RuntimeError,

@@ -14328,6 +14328,8 @@ typedef struct {
     PyObject *consts;
     PyObject *private_name;
     int in_store_context;
+    PyObject *curr_lineno;
+    PyObject *curr_end_lineno;
 } AnnotationData;
 
 static Py_UCS1
@@ -14443,16 +14445,8 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 }
 
 static int
-ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
+ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info) {
     PyObject *value = ann_ast_constant(data);
-    if (!value) {
-        return -1;
-    }
-    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
-        Py_DECREF(value);
-        return -1;
-    }
-    value = ann_ast_constant(data);
     if (!value) {
         return -1;
     }
@@ -14464,15 +14458,29 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node) {
     if (!value) {
         return -1;
     }
-    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
+    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
         Py_DECREF(value);
         return -1;
     }
-    value = ann_ast_constant(data);
-    if (!value) {
+    if (with_line_info) {
+        value = ann_ast_constant(data);
+        if (!value) {
+            return -1;
+        }
+        data->curr_lineno = value;
+    }
+    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
+        Py_DECREF(value);
         return -1;
     }
-    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
+    if (with_line_info) {
+        value = ann_ast_constant(data);
+        if (!value) {
+            return -1;
+        }
+        data->curr_end_lineno = value;
+    }
+    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
         Py_DECREF(value);
         return -1;
     }
@@ -14536,7 +14544,7 @@ ann_ast_arg(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
-    if (ann_ast_add_attributes(data, result) < 0) goto failed;
+    if (ann_ast_add_attributes(data, result, true) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
@@ -14734,6 +14742,8 @@ ann_ast_expr(AnnotationData *data)
     if (kind == 0xFF) {
         return NULL;
     }
+    bool with_line_info = (kind & 0x40) != 0;
+    kind &= 0x3F;
     switch (kind) {
         case BoolOp_kind: {
             tp = (PyTypeObject *) data->state->BoolOp_type;
@@ -15318,7 +15328,7 @@ ann_ast_expr(AnnotationData *data)
         }
     }
     assert(result != NULL);
-    if (ann_ast_add_attributes(data, result) < 0) goto failed;
+    if (ann_ast_add_attributes(data, result, with_line_info) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
@@ -15370,7 +15380,7 @@ ann_ast_keyword(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
-    if (ann_ast_add_attributes(data, result) < 0) goto failed;
+    if (ann_ast_add_attributes(data, result, true) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
@@ -15978,6 +15988,10 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
     if (state == NULL) {
         return NULL;
     }
+    PyObject *one = PyLong_FromLong(1);
+    if (!one) {
+        return NULL;
+    }
     AnnotationData ann_data = {
         .state = state,
         .data = PyTuple_GET_ITEM(data, 0),
@@ -15985,8 +15999,11 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
         .consts = data,
         .private_name = private_name,
         .in_store_context = 0,
+        .curr_lineno = one,
+        .curr_end_lineno = one,
     };
     PyObject *expr = ann_ast_expr(&ann_data);
+    Py_DECREF(one);
     if (!expr) {
         if (!PyErr_Occurred()) {
             PyErr_Format(PyExc_RuntimeError,

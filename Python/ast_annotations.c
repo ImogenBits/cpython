@@ -14,6 +14,8 @@
 typedef struct {
     PyUnicodeWriter *data;
     PyObject *const_cache;
+    Py_ssize_t curr_lineno;
+    Py_ssize_t curr_end_lineno;
 } AnnotationEncoder;
 
 static int
@@ -79,11 +81,13 @@ build_ast_int(AnnotationEncoder encoder, long op)
 DEFINE_AST_SEQ_BUILDER(int);
 
 static int
-build_ast_loc(AnnotationEncoder encoder, int attrs[4]) {
-    RETURN_IF_ERROR(build_ast_int(encoder, attrs[0]));
+build_ast_loc(AnnotationEncoder encoder, int attrs[4], bool with_line_info) {
     RETURN_IF_ERROR(build_ast_int(encoder, attrs[1]));
-    RETURN_IF_ERROR(build_ast_int(encoder, attrs[2]));
     RETURN_IF_ERROR(build_ast_int(encoder, attrs[3]));
+    if (with_line_info) {
+        RETURN_IF_ERROR(build_ast_int(encoder, attrs[0]));
+        RETURN_IF_ERROR(build_ast_int(encoder, attrs[2]));
+    }
     return SUCCESS;
 }                                                                            \
 
@@ -99,7 +103,7 @@ build_ast_arg(AnnotationEncoder encoder, arg_ty arg) {
     RETURN_IF_ERROR(build_ast_const(encoder, arg->arg));
     RETURN_IF_ERROR(build_ast_expr(encoder, arg->annotation));
     RETURN_IF_ERROR(build_ast_const(encoder, arg->type_comment));
-    RETURN_IF_ERROR(build_ast_loc(encoder, &arg->lineno));
+    RETURN_IF_ERROR(build_ast_loc(encoder, &arg->lineno, true));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(arg);
@@ -135,7 +139,7 @@ build_ast_keyword(AnnotationEncoder encoder, keyword_ty keyword)
     }
     RETURN_IF_ERROR(build_ast_const(encoder, keyword->arg));
     RETURN_IF_ERROR(build_ast_expr(encoder, keyword->value));
-    RETURN_IF_ERROR(build_ast_loc(encoder, &keyword->lineno));
+    RETURN_IF_ERROR(build_ast_loc(encoder, &keyword->lineno, true));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(keyword);
@@ -150,7 +154,10 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
     if (Py_EnterRecursiveCall(" during compilation")) {
         return ERROR;
     }
-    RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->kind));
+    bool with_line_info = encoder.curr_lineno != expr->lineno || encoder.curr_end_lineno != expr->end_lineno;
+    // highest bit can't be used because of UTF-8, so we use the 7th bit
+    Py_UCS1 kind = expr->kind | (with_line_info << 6);
+    RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, kind));
     switch (expr->kind) {
     case BoolOp_kind:
         RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->v.BoolOp.op));
@@ -352,7 +359,7 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
     default:
         goto failed;
     }
-    if (build_ast_loc(encoder, &expr->lineno)) {
+    if (build_ast_loc(encoder, &expr->lineno, with_line_info)) {
         goto failed;
     }
     Py_LeaveRecursiveCall();
@@ -379,7 +386,12 @@ _PyAST_GetAnnotationAST(expr_ty annotation, int stringify)
         Py_DECREF(const_cache);
         return NULL;
     }
-    AnnotationEncoder encoder = {data, const_cache};
+    AnnotationEncoder encoder = {
+        .data=data,
+        .const_cache=const_cache,
+        .curr_lineno=1,
+        .curr_end_lineno=1,
+    };
     int err = 0;
     if (stringify) {
         PyObject *annotation_str = _PyAST_ExprAsUnicode(annotation);
@@ -388,12 +400,12 @@ _PyAST_GetAnnotationAST(expr_ty annotation, int stringify)
             Py_DECREF(const_cache);
             return NULL;
         }
-        err = PyUnicodeWriter_WriteChar(encoder.data, Constant_kind);
+        err = PyUnicodeWriter_WriteChar(encoder.data, Constant_kind | (1 << 6));
         if (err == SUCCESS) {
             err = build_ast_const(encoder, annotation_str);
         }
         if (err == SUCCESS) {
-            err = build_ast_loc(encoder, &annotation->lineno);
+            err = build_ast_loc(encoder, &annotation->lineno, true);
         }
         Py_DECREF(annotation_str);
     } else {
