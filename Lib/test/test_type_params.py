@@ -153,14 +153,12 @@ class TypeParamsInvalidTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, r"\(MRO\) for bases object, Generic"):
             class My[X](object): ...
 
-    def test_codegen_error_in_type_param_bound_is_deferred(self):
-        # XXX: TODO: DESLOP
-        # This should not crash, see gh-145187. Because evaluate functions
-        # contain only strings, errors detected only by expression codegen
-        # are deferred until the bound is evaluated.
-        ns = run_code("if True:\n class h[l:{7 for *() in 0}]:2")
-        with self.assertRaises(SyntaxError):
-            ns["h"].__type_params__[0].__bound__
+    def test_compile_error_in_type_param_bound(self):
+        # This should not crash, see gh-145187
+        check_syntax_error(
+            self,
+            "if True:\n class h[l:{7for*()in 0}]:2"
+        )
 
 
 class TypeParamsNonlocalTest(unittest.TestCase):
