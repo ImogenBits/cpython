@@ -747,10 +747,10 @@ codegen_annotate(compiler *c, location loc, void *key, PyObject *name) {
             }
             ADDOP_I(c, loc, BUILD_MAP, n);
         }
-        for (Py_ssize_t i = 1; i < 4; i ++) {
+        for (Py_ssize_t i = 1; i < 5; i ++) {
             ADDOP_LOAD_CONST(c, loc, PyTuple_GET_ITEM(name_data, i));
         }
-        ADDOP_I(c, loc, BUILD_TUPLE, 4);
+        ADDOP_I(c, loc, BUILD_TUPLE, 5);
     }
     ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_MAKE_ANNOTATE);
     Py_DECREF(name_data);

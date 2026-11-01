@@ -16,14 +16,7 @@
 static int
 unpack_data(PyObject *data, PyAnnotateObject *self)
 {
-    if (PyUnicode_Check(data)) {
-        self->ann_qualname = Py_NewRef(data);
-        self->ann_closure = NULL;
-        self->ann_explicit_globals = NULL;
-        self->ann_private_name = NULL;
-        return 0;
-    }
-    if (!PyTuple_Check(data) || PyTuple_GET_SIZE(data) != 4) {
+    if (!PyTuple_Check(data) || PyTuple_GET_SIZE(data) != 5) {
         PyErr_Format(PyExc_SystemError,
                      "malformed annotation function data: %R", data);
         return -1;
@@ -31,11 +24,13 @@ unpack_data(PyObject *data, PyAnnotateObject *self)
     PyObject *closure = PyTuple_GET_ITEM(data, 0);
     PyObject *explicit_globals = PyTuple_GET_ITEM(data, 1);
     PyObject *private_name = PyTuple_GET_ITEM(data, 2);
-    PyObject *qualname = PyTuple_GET_ITEM(data, 3);
+    PyObject *mangled_names = PyTuple_GET_ITEM(data, 3);
+    PyObject *qualname = PyTuple_GET_ITEM(data, 4);
 
     if (   !(closure == Py_None || PyDict_Check(closure))
         || !(explicit_globals == Py_None || PyTuple_Check(explicit_globals))
         || !(private_name == Py_None || PyUnicode_Check(private_name))
+        || !(mangled_names == Py_None || PyFrozenSet_Check(mangled_names))
         || !(PyUnicode_Check(qualname)))
     {
         PyErr_Format(PyExc_SystemError,
@@ -45,6 +40,7 @@ unpack_data(PyObject *data, PyAnnotateObject *self)
     self->ann_closure = Py_NewRef(closure);
     self->ann_explicit_globals = Py_NewRef(explicit_globals);
     self->ann_private_name = Py_NewRef(private_name);
+    self->ann_mangled_names = Py_NewRef(mangled_names);
     self->ann_qualname = Py_NewRef(qualname);
     return 0;
 }
@@ -80,6 +76,7 @@ annotate_traverse(PyObject *op, visitproc visit, void *arg)
     Py_VISIT(self->ann_asts);
     Py_VISIT(self->ann_explicit_globals);
     Py_VISIT(self->ann_private_name);
+    Py_VISIT(self->ann_mangled_names);
     return 0;
 }
 
@@ -93,6 +90,7 @@ annotate_clear(PyObject *op)
     Py_CLEAR(self->ann_asts);
     Py_CLEAR(self->ann_explicit_globals);
     Py_CLEAR(self->ann_private_name);
+    Py_CLEAR(self->ann_mangled_names);
     return 0;
 }
 
@@ -175,18 +173,19 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    PyObject *private_name;
+    PyObject *private_name = self->ann_private_name;
+    PyObject *mangled_names = self->ann_mangled_names;
     PyObject *string_format = PyLong_FromLong(_Py_ANNOTATE_FORMAT_STRING);
     if (!string_format) {
         return NULL;
     }
     if (PyObject_RichCompareBool(format, string_format, Py_EQ) == 1) {
-        private_name = NULL;
-    } else {
-        private_name = self->ann_private_name;
+        mangled_names = Py_None;
+        private_name = Py_None;
     }
     Py_DECREF(string_format);
-    PyObject *parsed_asts = _PyAST_FromAnnotationData(self->ann_asts, private_name);
+    PyObject *parsed_asts = _PyAST_FromAnnotationData(
+        self->ann_asts, private_name, mangled_names);
     if (!parsed_asts) {
         return NULL;
     }
@@ -324,6 +323,7 @@ static PyMemberDef annotate_memberlist[] = {
     {"_asts", _Py_T_OBJECT, ANN_OFF(ann_asts), Py_READONLY},
     {"_explicit_globals", _Py_T_OBJECT, ANN_OFF(ann_explicit_globals), Py_READONLY},
     {"_private_name", _Py_T_OBJECT, ANN_OFF(ann_private_name), Py_READONLY},
+    {"_mangled_names", _Py_T_OBJECT, ANN_OFF(ann_mangled_names), Py_READONLY},
     {NULL}
 };
 

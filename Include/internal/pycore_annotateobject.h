@@ -24,7 +24,7 @@ typedef struct {
     PyObject *ann_explicit_globals; // names that aren't looked up in the containing
                                 // class, but always the global namespce.
     PyObject *ann_private_name;     // the private name of the containing class.
-    int ann_flags;
+    PyObject *ann_mangled_names;    // frozenset of names that should be mangled.
 } PyAnnotateObject;
 
 // Steals nothing

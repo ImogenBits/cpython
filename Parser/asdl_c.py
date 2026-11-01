@@ -1961,6 +1961,7 @@ typedef struct {
     Py_ssize_t pos;
     PyObject *consts;
     PyObject *private_name;
+    PyObject *mangled_names;
     int in_store_context;
     PyObject *curr_lineno;
     PyObject *curr_end_lineno;
@@ -2033,9 +2034,17 @@ ann_ast_identifier(AnnotationData *data) {
     if (!name) {
         return NULL;
     }
-    PyObject *mangled = _Py_Mangle(data->private_name, name);
-    Py_DECREF(name);
-    return mangled;
+    if (data->private_name != Py_None
+        && (
+            data->mangled_names == Py_None
+            || PySet_Contains(data->mangled_names, name)
+        )
+    ) {
+        PyObject *mangled = _Py_Mangle(data->private_name, name);
+        Py_DECREF(name);
+        return mangled;
+    }
+    return name;
 }
 
 static PyObject*
@@ -2574,7 +2583,7 @@ int PyAST_Check(PyObject* obj)
 }
 
 static PyObject *
-_PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
+_PyAST_FromAnnotationString(PyObject *data, PyObject *private_name, PyObject *mangled_names)
 {
     struct ast_state *state = get_ast_state();
     if (state == NULL) {
@@ -2590,6 +2599,7 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
         .pos = 0,
         .consts = data,
         .private_name = private_name,
+        .mangled_names = mangled_names,
         .in_store_context = 0,
         .curr_lineno = one,
         .curr_end_lineno = one,
@@ -2622,14 +2632,14 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name)
 }
 
 PyObject *
-_PyAST_FromAnnotationData(PyObject *data, PyObject *private_name)
+_PyAST_FromAnnotationData(PyObject *data, PyObject *private_name, PyObject *mangled_names)
 {
     if (!data || !(PyAnyDict_CheckExact(data) || PyTuple_CheckExact(data))) {
         PyErr_Format(PyExc_TypeError, "expected a dictionary or tuple for data, got %R", data);
         return NULL;
     }
     if (PyTuple_CheckExact(data)) {
-        PyObject *out = _PyAST_FromAnnotationString(data, private_name);
+        PyObject *out = _PyAST_FromAnnotationString(data, private_name, mangled_names);
         return out;
     }
     PyObject *out = PyDict_New();
@@ -2639,7 +2649,7 @@ _PyAST_FromAnnotationData(PyObject *data, PyObject *private_name)
     PyObject *name, *data_string;
     Py_ssize_t pos = 0;
     while (PyDict_Next(data, &pos, &name, &data_string)) {
-        PyObject *expr_obj = _PyAST_FromAnnotationString(data_string, private_name);
+        PyObject *expr_obj = _PyAST_FromAnnotationString(data_string, private_name, mangled_names);
         if (!expr_obj) {
             goto parsing_err;
         }
@@ -2816,7 +2826,7 @@ def write_header(mod, metadata, f):
         /* _PyAST_GetAnnotationAST is defined in ast_annotations.c */
         extern PyObject* _PyAST_GetAnnotationAST(expr_ty, int);
 
-        extern PyObject* _PyAST_FromAnnotationData(PyObject *, PyObject *);
+        extern PyObject* _PyAST_FromAnnotationData(PyObject *, PyObject *, PyObject *);
 
         /* Return the borrowed reference to the first literal string in the
            sequence of statements or NULL if it doesn't start from a literal string.

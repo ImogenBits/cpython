@@ -1211,11 +1211,16 @@ _PyCompile_AnnotateNameData(compiler *c) {
         Py_INCREF(Py_None);
     }
 
-    PyObject *private_name = NULL;
-    if (c->u->u_ste->ste_mangled_names) {
-        private_name = Py_NewRef(c->u->u_private);
+    PyObject *mangled_set = c->u->u_ste->ste_mangled_names;
+    PyObject *mangled;
+    if (mangled_set) {
+        mangled = PyFrozenSet_New(mangled_set);
+        if (!mangled) {
+            Py_DECREF(global_tuple);
+            return NULL;
+        }
     } else {
-        private_name = Py_NewRef(Py_None);
+        mangled = Py_NewRef(Py_None);
     }
 
     _PyCompile_CodeUnitMetadata *umd = &c->u->u_metadata;
@@ -1226,7 +1231,7 @@ _PyCompile_AnnotateNameData(compiler *c) {
         freevars = PyTuple_New(n);
         if (freevars == NULL) {
             Py_DECREF(global_tuple);
-            Py_DECREF(private_name);
+            Py_DECREF(mangled);
             return NULL;
         }
         PyObject *name, *index;
@@ -1235,7 +1240,7 @@ _PyCompile_AnnotateNameData(compiler *c) {
             Py_ssize_t i = PyLong_AsSsize_t(index);
             if (i == -1 && PyErr_Occurred()) {
                 Py_DECREF(global_tuple);
-                Py_DECREF(private_name);
+                Py_DECREF(mangled);
                 Py_DECREF(freevars);
                 return NULL;
             }
@@ -1244,24 +1249,18 @@ _PyCompile_AnnotateNameData(compiler *c) {
             PyTuple_SET_ITEM(freevars, i, Py_NewRef(name));
         }
     } else {
-        freevars = Py_None;
-        Py_INCREF(Py_None);
+        freevars = Py_NewRef(Py_None);
     }
 
+    PyObject *private_name = c->u->u_private ? c->u->u_private : Py_None;
+
     assert(c->u->u_metadata.u_qualname);
-    if (freevars == Py_None && global_tuple == Py_None && private_name == Py_None) {
-        Py_DECREF(Py_None);
-        Py_DECREF(Py_None);
-        Py_DECREF(Py_None);
-        return Py_NewRef(c->u->u_metadata.u_qualname);
-    } else {
-        PyObject *result = PyTuple_Pack(
-            4, freevars, global_tuple, private_name, c->u->u_metadata.u_qualname);
-        Py_DECREF(freevars);
+    PyObject *result = PyTuple_Pack(
+        5, freevars, global_tuple, private_name, mangled, c->u->u_metadata.u_qualname);
         Py_DECREF(global_tuple);
-        Py_DECREF(private_name);
-        return result;
-    }
+        Py_DECREF(mangled);
+        Py_DECREF(freevars);
+    return result;
 }
 
 int
