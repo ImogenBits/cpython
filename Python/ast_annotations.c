@@ -125,7 +125,7 @@ build_ast_comprehension(AnnotationEncoder encoder, comprehension_ty comp) {
     RETURN_IF_ERROR(build_ast_expr(encoder, comp->target));
     RETURN_IF_ERROR(build_ast_expr(encoder, comp->iter));
     RETURN_IF_ERROR(build_ast_expr_seq(encoder, comp->ifs));
-    RETURN_IF_ERROR(build_ast_size_t(encoder, comp->is_async));
+    RETURN_IF_ERROR(build_ast_int(encoder, comp->is_async));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(comprehension);
