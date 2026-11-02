@@ -133,11 +133,14 @@ __all__ = [
     'dataclass_transform',
     'disjoint_base',
     'evaluate_forward_ref',
+    'eval_annotate_as_types',
+    'eval_type',
     'final',
     'get_args',
     'get_origin',
     'get_overloads',
     'get_protocol_members',
+    'get_type_annotations',
     'get_type_hints',
     'is_protocol',
     'is_typeddict',
@@ -2436,7 +2439,7 @@ def _resolve_ast(expr, namespace, format):
             raise ValueError(f"invalid type expression: {expr}")
 
 
-def eval_annotation_AST(expr, namespace, format):
+def _eval_annotation_AST(expr, namespace, format):
     if format == annotationlib.Format.STRING:
         return ast.unparse(expr)
     if format == annotationlib.Format.VALUE_WITH_FAKE_GLOBALS:
@@ -2466,7 +2469,7 @@ def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
         ann_ast = annotation.ast.body
         if eval_str and isinstance(ann_ast, ast.Constant) and isinstance(ann_ast.value, str):
             ann_ast = ast.parse(ann_ast.value, "<annotation>", "eval").body
-        result[name] = eval_annotation_AST(ann_ast, namespace=annotation.namespace, format=format)
+        result[name] = _eval_annotation_AST(ann_ast, namespace=annotation.namespace, format=format)
 
     if "" in annotations:
         return annotations[""]
@@ -2484,7 +2487,7 @@ def get_type_annotations(obj, *, eval_str=False, format=None):
 def eval_type(type_string, globals=None, locals=None, *, format=None):
     namespace = ChainMap(globals or {}, locals or {})
     tree = ast.parse(type_string, "<type_string>", "eval").body
-    return eval_annotation_AST(tree, namespace=namespace, format=format)
+    return _eval_annotation_AST(tree, namespace=namespace, format=format)
 
 
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False,
