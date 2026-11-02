@@ -973,7 +973,7 @@ class RegressionTests(unittest.TestCase):
         # user code can rebind __conditional_annotations__ to any object
         lefts = ("__conditional_annotations__",
                  'globals()["__conditional_annotations__"]')
-        values = ("0", "{}", "[]", "''", "object()", "frozenset()")
+        values = ("0", "set()", "[]", "''", "object()", "frozenset()")
         for left, value in itertools.product(lefts, values):
             with self.subTest(left=left, value=value):
                 code = f"""
