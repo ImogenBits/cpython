@@ -386,22 +386,23 @@ dis_annot_stmt_str = """\
 
    0           RESUME                   0
 
-   2           LOAD_CONST               1 (<code object __annotate__ at 0x..., file "<dis>", line 2>)
-               MAKE_FUNCTION
-               STORE_NAME               4 (__annotate__)
-               BUILD_SET                0
+   2           BUILD_MAP                0
                STORE_NAME               0 (__conditional_annotations__)
+               LOAD_NAME                0 (__conditional_annotations__)
+               LOAD_CONST               5 ((None, None, None, None, '__annotate__'))
+               CALL_INTRINSIC_2         7 (INTRINSIC_MAKE_ANNOTATE)
+               STORE_NAME               4 (__annotate__)
                LOAD_SMALL_INT           1
                STORE_NAME               1 (x)
+               LOAD_CONST               1 (('Z\\x04\\x05\\x06\\x07\\x07', 'int', 3, 6, 2))
                LOAD_NAME                0 (__conditional_annotations__)
-               LOAD_SMALL_INT           0
-               CALL_INTRINSIC_2         6 (INTRINSIC_ADD_CONDITIONAL_ANNOTATION)
-               POP_TOP
+               LOAD_CONST               2 ('x')
+               STORE_SUBSCR
 
-   3           LOAD_NAME                0 (__conditional_annotations__)
-               LOAD_SMALL_INT           1
-               CALL_INTRINSIC_2         6 (INTRINSIC_ADD_CONDITIONAL_ANNOTATION)
-               POP_TOP
+   3           LOAD_CONST               3 (('QZ\\x04\\x05\\x06\\x05\\x05\\x01V\\x07\\x08\\t\\x05\\x05\\x00\\x05\\n\\x05\\x05', 'fun', 3, 6, 1, 7, 8, 9))
+               LOAD_NAME                0 (__conditional_annotations__)
+               LOAD_CONST               4 ('y')
+               STORE_SUBSCR
 
    4           LOAD_SMALL_INT           1
                LOAD_NAME                2 (lst)
@@ -422,8 +423,9 @@ def foo(a: int, b: str) -> str:
 dis_fn_with_annotate_str = """\
   0           RESUME                   0
 
-  2           LOAD_CONST               0 (<code object __annotate__ at 0x..., file "<dis>", line 2>)
-              MAKE_FUNCTION
+  2           LOAD_CONST               0 (frozendict({'a': ('Z\\x04\\x05\\x06\\x07\\x07', 'int', 11, 14, 2), 'b': ('Z\\x04\\x05\\x06\\x07\\x07', 'str', 19, 22, 2), 'return': ('Z\\x04\\x05\\x06\\x07\\x07', 'str', 27, 30, 2)}))
+              LOAD_CONST               2 ((None, None, None, None, 'foo.__annotate__'))
+              CALL_INTRINSIC_2         7 (INTRINSIC_MAKE_ANNOTATE)
               LOAD_CONST               1 (<code object foo at 0x..., file "<dis>", line 2>)
               MAKE_FUNCTION
               SET_FUNCTION_ATTRIBUTE  16 (annotate)
