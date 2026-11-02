@@ -1244,9 +1244,15 @@ def annotations_to_string(annotations):
 
 def annotation_to_ast(annotation):
     """Convert an annotation to approximately the AST format."""
-    node = ast.Expression(ast.Name(id="__annotation__"))
+    if isinstance(annotation, (int, float, complex, str, bytes, bool, type(None), type(...))):
+        node = ast.Constant(value=annotation)
+        namespace = {}
+    else:
+        node = ast.Name(id="__annotation__")
+        namespace = {"__annotation__": annotation}
+    node = ast.Expression(body=node)
     ast.fix_missing_locations(node)
-    return AnnotationAST(node, {"__annotation__": annotation})
+    return AnnotationAST(node, namespace)
 
 
 def annotations_to_ast(annotations):

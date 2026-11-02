@@ -78,7 +78,24 @@ build_ast_int(AnnotationEncoder encoder, long op)
     }
     return build_ast_const(encoder, op_obj);
 }
-DEFINE_AST_SEQ_BUILDER(int);
+
+// can't use the macro here because the ast enums store Compare
+// types as ints, but we expect them to be decoded as (inlined) simple sums
+static int
+build_ast_int_seq(AnnotationEncoder encoder, asdl_int_seq *seq){
+    if (!seq) {
+        RETURN_IF_ERROR(build_ast_size_t(encoder, 0));
+        return SUCCESS;
+    }
+    Py_ssize_t i, n = asdl_seq_LEN(seq);
+    RETURN_IF_ERROR(build_ast_size_t(encoder, n));
+    for (i = 0; i < n; i++) {
+        RETURN_IF_ERROR(
+            build_ast_size_t(encoder, asdl_seq_GET(seq, i))
+        );
+    }
+    return SUCCESS;
+}
 
 static int
 build_ast_loc(AnnotationEncoder encoder, int attrs[4], bool with_line_info) {
@@ -89,7 +106,7 @@ build_ast_loc(AnnotationEncoder encoder, int attrs[4], bool with_line_info) {
         RETURN_IF_ERROR(build_ast_int(encoder, attrs[2]));
     }
     return SUCCESS;
-}                                                                            \
+}
 
 static int build_ast_expr(AnnotationEncoder encoder, expr_ty expr);
 DEFINE_AST_SEQ_BUILDER(expr);
