@@ -15142,6 +15142,7 @@ ann_ast_expr(AnnotationData *data)
             Py_DECREF(value);
             break;
         }
+        case Slice_kind + 1:
         case Constant_kind: {
             tp = (PyTypeObject *) data->state->Constant_type;
             result = PyType_GenericNew(tp, NULL, NULL);
@@ -15152,7 +15153,12 @@ ann_ast_expr(AnnotationData *data)
                 goto failed;
             }
             Py_DECREF(value);
-            value = Py_NewRef(Py_None);
+            {
+                Py_UCS1 is_unicode = kind == Slice_kind + 1;
+                if (is_unicode == 0xFF) goto failed;
+                value = is_unicode ? PyUnicode_FromOrdinal((int)'u') :
+                                                           Py_NewRef(Py_None);
+            }
             if (!value) goto failed;
             if (PyObject_SetAttr(result, data->state->kind, value) == -1) {
                 goto failed;

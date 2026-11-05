@@ -171,9 +171,16 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
     if (Py_EnterRecursiveCall(" during compilation")) {
         return ERROR;
     }
-    bool with_line_info = encoder.curr_lineno != expr->lineno || encoder.curr_end_lineno != expr->end_lineno;
+    Py_UCS1 kind;
+    // use Slice_kind + 1 to indicate that the constant is prefixed with u
+    if (expr->kind == Constant_kind && expr->v.Constant.kind) {
+        kind = Slice_kind + 1;
+    } else {
+        kind = expr->kind;
+    }
     // highest bit can't be used because of UTF-8, so we use the 7th bit
-    Py_UCS1 kind = expr->kind | (with_line_info << 6);
+    bool with_line_info = encoder.curr_lineno != expr->lineno || encoder.curr_end_lineno != expr->end_lineno;
+    kind = kind | (with_line_info << 6);
     RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, kind));
     switch (expr->kind) {
     case BoolOp_kind:

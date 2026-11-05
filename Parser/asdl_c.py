@@ -2193,6 +2193,8 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info
                 self.emit("goto failed;", 3)
                 self.emit("}", 2)
             else:
+                if name == "expr" and cons.name == "Constant":
+                    self.emit("case Slice_kind + 1:", 2)
                 self.emit("case %s_kind: {" % cons.name, 2)
                 self.visitConstructor(cons, name, 3)
                 self.emit("break;", 3)
@@ -2249,7 +2251,11 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info
         if name == "comprehension" and field.name == "target":
             self.emit("data->in_store_context = 1;", depth)
         if name == "Constant" and field.name == "kind":
-            self.emit("value = Py_NewRef(Py_None);", depth)
+            self.emit("{", depth)
+            self.emit("Py_UCS1 is_unicode = kind == Slice_kind + 1;", depth + 1)
+            self.emit("if (is_unicode == 0xFF) goto failed;", depth + 1)
+            self.emit("value = is_unicode ? PyUnicode_FromOrdinal((int)'u') : Py_NewRef(Py_None);", depth + 1)
+            self.emit("}", depth)
         elif field.seq:
             self.emit(
                 f"value = ann_ast_list(data, {str(int(optional))}, ann_ast_{field.type});",
