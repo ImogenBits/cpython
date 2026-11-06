@@ -526,7 +526,17 @@ Now some general starred expressions (all fail).
       ...
     SyntaxError: multiple starred expressions in assignment
 
+    >>> var: [_ for a,*b,*c,*d in _] # doctest:+ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    SyntaxError: multiple starred expressions in assignment
+
     >>> *a = range(10) # doctest:+ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    SyntaxError: starred assignment target must be in a list or tuple
+
+    >>> var: [_ for *a in _] # doctest:+ELLIPSIS
     Traceback (most recent call last):
       ...
     SyntaxError: starred assignment target must be in a list or tuple
@@ -567,6 +577,31 @@ Now some general starred expressions (all fail).
     SyntaxError: cannot use starred expression here
 
     >>> ((*x),y) = 1, 2 # doctest:+ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    SyntaxError: cannot use starred expression here
+
+    >>> var: [_ for (*x),y in _] # doctest:+ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    SyntaxError: cannot use starred expression here
+
+    >>> var: [_ for (((*x))),y in _] # doctest:+ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    SyntaxError: cannot use starred expression here
+
+    >>> var: [_ for z,(*x),y in _] # doctest:+ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    SyntaxError: cannot use starred expression here
+
+    >>> var: [_ for z,(*x) in _] # doctest:+ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    SyntaxError: cannot use starred expression here
+
+    >>> var: [_ for ((*x),y) in _] # doctest:+ELLIPSIS
     Traceback (most recent call last):
       ...
     SyntaxError: cannot use starred expression here

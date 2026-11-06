@@ -1981,6 +1981,11 @@ Traceback (most recent call last):
    ...
 SyntaxError: keyword argument repeated: a
 
+>>> var: f(a=123, a=234)
+Traceback (most recent call last):
+    ...
+SyntaxError: keyword argument repeated: a
+
 >>> {1, 2, 3} = 42
 Traceback (most recent call last):
 SyntaxError: cannot assign to set display here. Maybe you meant '==' instead of '='?
@@ -2489,6 +2494,14 @@ A[:*b]
     Traceback (most recent call last):
         ...
     SyntaxError: invalid syntax
+    >>> var: A[:*b]
+    Traceback (most recent call last):
+        ...
+    SyntaxError: invalid syntax
+    >>> var: A[:(*b)]
+    Traceback (most recent call last):
+        ...
+    SyntaxError: cannot use starred expression here
 
 A[*b:]
 
@@ -2508,6 +2521,14 @@ A[*b:]
     Traceback (most recent call last):
         ...
     SyntaxError: invalid syntax
+    >>> var: A[*b:]
+    Traceback (most recent call last):
+        ...
+    SyntaxError: invalid syntax
+    >>> var: A[(*b):]
+    Traceback (most recent call last):
+        ...
+    SyntaxError: cannot use starred expression here
 
 A[*b:*b]
 
@@ -2527,6 +2548,14 @@ A[*b:*b]
     Traceback (most recent call last):
         ...
     SyntaxError: invalid syntax
+    >>> var: A[*b:*b]
+    Traceback (most recent call last):
+        ...
+    SyntaxError: invalid syntax
+    >>> var: A[(*b:*b)]
+    Traceback (most recent call last):
+        ...
+    SyntaxError: invalid syntax
 
 A[*(1:2)]
 
@@ -2539,6 +2568,10 @@ A[*(1:2)]
         ...
     SyntaxError: Invalid star expression
     >>> del A[*(1:2)]
+    Traceback (most recent call last):
+        ...
+    SyntaxError: Invalid star expression
+    >>> var: A[*(1:2)]
     Traceback (most recent call last):
         ...
     SyntaxError: Invalid star expression
