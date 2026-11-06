@@ -994,7 +994,7 @@ codegen_argannotation(compiler *c, identifier id,
     if (!mangled) {
         return ERROR;
     }
-    PyObject *annotation_ast = _PyAST_GetAnnotationAST(
+    PyObject *annotation_ast = _PyCompile_GetAnnotationAST(c,
         annotation, FUTURE_FEATURES(c) & CO_FUTURE_ANNOTATIONS);
     if (!annotation_ast) {
         Py_DECREF(mangled);
@@ -1160,7 +1160,7 @@ static int
 codegen_type_param_bound_or_default(compiler *c, expr_ty e,
                                     identifier name, void *key)
 {
-    PyObject *annotation_ast = _PyAST_GetAnnotationAST(e, false);
+    PyObject *annotation_ast = _PyCompile_GetAnnotationAST(c, e, false);
     if (!annotation_ast) {
         return ERROR;
     }
@@ -1651,8 +1651,8 @@ codegen_typealias_body(compiler *c, stmt_ty s)
 {
     location loc = LOC(s);
     PyObject *name = s->v.TypeAlias.name->v.Name.id;
-    PyObject *annotation_ast = _PyAST_GetAnnotationAST(
-        s->v.TypeAlias.value, false);
+    PyObject *annotation_ast = _PyCompile_GetAnnotationAST(
+        c, s->v.TypeAlias.value, false);
     if (!annotation_ast) {
         return ERROR;
     }
@@ -5645,8 +5645,8 @@ codegen_annassign(compiler *c, stmt_ty s)
             } else {
                 _PyCompile_AddDeferredAnnotation(c);
                 assert(SYMTABLE_ENTRY(c)->ste_has_conditional_annotations);
-                PyObject *annotation_ast = _PyAST_GetAnnotationAST(
-                    s->v.AnnAssign.annotation, false);
+                PyObject *annotation_ast = _PyCompile_GetAnnotationAST(
+                    c, s->v.AnnAssign.annotation, false);
                 if (!annotation_ast) {
                     return ERROR;
                 }

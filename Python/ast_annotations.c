@@ -1,7 +1,9 @@
 #include "Python.h"
 #include "pycore_ast.h"
 #include "pycore_compile.h"
+#include "pycore_symtable.h"
 
+// these should be shared from codegen.c, but there is no internal header file
 #define SUCCESS 0
 #define ERROR -1
 #define RETURN_IF_ERROR(X)  \
@@ -10,8 +12,56 @@
             return ERROR;   \
         }                   \
     } while (0)
+#define LOC(x) SRC_LOCATION_FROM_AST(x)
+
+struct _PyCompiler;
+typedef struct _PyCompiler compiler;
+typedef _Py_SourceLocation location;
+
+static int
+codegen_validate_keywords(compiler *c, asdl_keyword_seq *keywords)
+{
+    Py_ssize_t nkeywords = asdl_seq_LEN(keywords);
+    for (Py_ssize_t i = 0; i < nkeywords; i++) {
+        keyword_ty key = ((keyword_ty)asdl_seq_GET(keywords, i));
+        if (key->arg == NULL) {
+            continue;
+        }
+        for (Py_ssize_t j = i + 1; j < nkeywords; j++) {
+            keyword_ty other = ((keyword_ty)asdl_seq_GET(keywords, j));
+            if (other->arg && !PyUnicode_Compare(key->arg, other->arg)) {
+                return _PyCompile_Error(c, LOC(other), "keyword argument repeated: %U", key->arg);
+            }
+        }
+    }
+    return SUCCESS;
+}
+
+static int
+validate_unpack(compiler *c, location loc, asdl_expr_seq *elts)
+{
+    Py_ssize_t n = asdl_seq_LEN(elts);
+    int seen_star = 0;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        expr_ty e = asdl_seq_GET(elts, i);
+        if (e->kind == Starred_kind && !seen_star) {
+            seen_star = 1;
+            if ((i >= (1 << 8)) ||
+                (n-i-1 >= (INT_MAX >> 8))) {
+                return _PyCompile_Error(c, loc,
+                    "too many expressions in "
+                    "star-unpacking assignment");
+            }
+        } else if (e->kind == Starred_kind) {
+            return _PyCompile_Error(c, loc,
+                "multiple starred expressions in assignment");
+        }
+    }
+    return SUCCESS;
+}
 
 typedef struct {
+    compiler *c;
     PyUnicodeWriter *data;
     PyObject *const_cache;
     Py_ssize_t curr_lineno;
@@ -108,8 +158,9 @@ build_ast_loc(AnnotationEncoder encoder, int attrs[4], bool with_line_info) {
     return SUCCESS;
 }
 
-static int build_ast_expr(AnnotationEncoder encoder, expr_ty expr);
-DEFINE_AST_SEQ_BUILDER(expr);
+static int build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred);
+static int
+build_ast_expr_seq(AnnotationEncoder encoder, asdl_expr_seq *seq, bool allow_starred);
 
 static int
 build_ast_arg(AnnotationEncoder encoder, arg_ty arg) {
@@ -118,7 +169,7 @@ build_ast_arg(AnnotationEncoder encoder, arg_ty arg) {
         return SUCCESS;
     }
     RETURN_IF_ERROR(build_ast_const(encoder, arg->arg));
-    RETURN_IF_ERROR(build_ast_expr(encoder, arg->annotation));
+    RETURN_IF_ERROR(build_ast_expr(encoder, arg->annotation, false));
     RETURN_IF_ERROR(build_ast_const(encoder, arg->type_comment));
     RETURN_IF_ERROR(build_ast_loc(encoder, &arg->lineno, true));
     return SUCCESS;
@@ -131,17 +182,17 @@ build_ast_args(AnnotationEncoder encoder, arguments_ty args) {
     RETURN_IF_ERROR(build_ast_arg_seq(encoder, args->args));
     RETURN_IF_ERROR(build_ast_arg(encoder, args->vararg));
     RETURN_IF_ERROR(build_ast_arg_seq(encoder, args->kwonlyargs));
-    RETURN_IF_ERROR(build_ast_expr_seq(encoder, args->kw_defaults));
+    RETURN_IF_ERROR(build_ast_expr_seq(encoder, args->kw_defaults, false));
     RETURN_IF_ERROR(build_ast_arg(encoder, args->kwarg));
-    RETURN_IF_ERROR(build_ast_expr_seq(encoder, args->defaults));
+    RETURN_IF_ERROR(build_ast_expr_seq(encoder, args->defaults, false));
     return SUCCESS;
 }
 
 static int
 build_ast_comprehension(AnnotationEncoder encoder, comprehension_ty comp) {
-    RETURN_IF_ERROR(build_ast_expr(encoder, comp->target));
-    RETURN_IF_ERROR(build_ast_expr(encoder, comp->iter));
-    RETURN_IF_ERROR(build_ast_expr_seq(encoder, comp->ifs));
+    RETURN_IF_ERROR(build_ast_expr(encoder, comp->target, false));
+    RETURN_IF_ERROR(build_ast_expr(encoder, comp->iter, false));
+    RETURN_IF_ERROR(build_ast_expr_seq(encoder, comp->ifs, false));
     RETURN_IF_ERROR(build_ast_int(encoder, comp->is_async));
     return SUCCESS;
 }
@@ -155,14 +206,14 @@ build_ast_keyword(AnnotationEncoder encoder, keyword_ty keyword)
         return ERROR;
     }
     RETURN_IF_ERROR(build_ast_const(encoder, keyword->arg));
-    RETURN_IF_ERROR(build_ast_expr(encoder, keyword->value));
+    RETURN_IF_ERROR(build_ast_expr(encoder, keyword->value, false));
     RETURN_IF_ERROR(build_ast_loc(encoder, &keyword->lineno, true));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(keyword);
 
 static int
-build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
+build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
 {
     if (!expr) {
         RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, 0));
@@ -185,22 +236,22 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
     switch (expr->kind) {
     case BoolOp_kind:
         RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->v.BoolOp.op));
-        if (build_ast_expr_seq(encoder, expr->v.BoolOp.values)) {
+        if (build_ast_expr_seq(encoder, expr->v.BoolOp.values, false)) {
             goto failed;
         }
         break;
     case BinOp_kind:
-        if (build_ast_expr(encoder, expr->v.BinOp.left)) {
+        if (build_ast_expr(encoder, expr->v.BinOp.left, false)) {
             goto failed;
         }
         RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->v.BinOp.op));
-        if (build_ast_expr(encoder, expr->v.BinOp.right)) {
+        if (build_ast_expr(encoder, expr->v.BinOp.right, false)) {
             goto failed;
         }
         break;
     case UnaryOp_kind:
         RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->v.UnaryOp.op));
-        if (build_ast_expr(encoder, expr->v.UnaryOp.operand)) {
+        if (build_ast_expr(encoder, expr->v.UnaryOp.operand, false)) {
             goto failed;
         }
         break;
@@ -208,36 +259,36 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         if (build_ast_args(encoder, expr->v.Lambda.args)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.Lambda.body)) {
+        if (build_ast_expr(encoder, expr->v.Lambda.body, false)) {
             goto failed;
         }
         break;
     case IfExp_kind:
-        if (build_ast_expr(encoder, expr->v.IfExp.test)) {
+        if (build_ast_expr(encoder, expr->v.IfExp.test, false)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.IfExp.body)) {
+        if (build_ast_expr(encoder, expr->v.IfExp.body, false)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.IfExp.orelse)) {
+        if (build_ast_expr(encoder, expr->v.IfExp.orelse, false)) {
             goto failed;
         }
         break;
     case Dict_kind:
-        if (build_ast_expr_seq(encoder, expr->v.Dict.keys)) {
+        if (build_ast_expr_seq(encoder, expr->v.Dict.keys, false)) {
             goto failed;
         }
-        if (build_ast_expr_seq(encoder, expr->v.Dict.values)) {
+        if (build_ast_expr_seq(encoder, expr->v.Dict.values, false)) {
             goto failed;
         }
         break;
     case Set_kind:
-        if (build_ast_expr_seq(encoder, expr->v.Set.elts)) {
+        if (build_ast_expr_seq(encoder, expr->v.Set.elts, true)) {
             goto failed;
         }
         break;
     case ListComp_kind:
-        if (build_ast_expr(encoder, expr->v.ListComp.elt)) {
+        if (build_ast_expr(encoder, expr->v.ListComp.elt, true)) {
             goto failed;
         }
         if (build_ast_comprehension_seq(encoder, expr->v.ListComp.generators)) {
@@ -245,7 +296,7 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case SetComp_kind:
-        if (build_ast_expr(encoder, expr->v.SetComp.elt)) {
+        if (build_ast_expr(encoder, expr->v.SetComp.elt, true)) {
             goto failed;
         }
         if (build_ast_comprehension_seq(encoder, expr->v.SetComp.generators)) {
@@ -253,10 +304,10 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case DictComp_kind:
-        if (build_ast_expr(encoder, expr->v.DictComp.key)) {
+        if (build_ast_expr(encoder, expr->v.DictComp.key, false)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.DictComp.value)) {
+        if (build_ast_expr(encoder, expr->v.DictComp.value, false)) {
             goto failed;
         }
         if (build_ast_comprehension_seq(encoder, expr->v.DictComp.generators)) {
@@ -264,7 +315,7 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case GeneratorExp_kind:
-        if (build_ast_expr(encoder, expr->v.GeneratorExp.elt)) {
+        if (build_ast_expr(encoder, expr->v.GeneratorExp.elt, true)) {
             goto failed;
         }
         if (build_ast_comprehension_seq(encoder, expr->v.GeneratorExp.generators)) {
@@ -272,21 +323,24 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case Compare_kind:
-        if (build_ast_expr(encoder, expr->v.Compare.left)) {
+        if (build_ast_expr(encoder, expr->v.Compare.left, false)) {
             goto failed;
         }
         if (build_ast_int_seq(encoder, expr->v.Compare.ops)) {
             goto failed;
         }
-        if (build_ast_expr_seq(encoder, expr->v.Compare.comparators)) {
+        if (build_ast_expr_seq(encoder, expr->v.Compare.comparators, false)) {
             goto failed;
         }
         break;
     case Call_kind:
-        if (build_ast_expr(encoder, expr->v.Call.func)) {
+        if (codegen_validate_keywords(encoder.c, expr->v.Call.keywords) < 0) {
             goto failed;
         }
-        if (build_ast_expr_seq(encoder, expr->v.Call.args)) {
+        if (build_ast_expr(encoder, expr->v.Call.func, false)) {
+            goto failed;
+        }
+        if (build_ast_expr_seq(encoder, expr->v.Call.args, true)) {
             goto failed;
         }
         if (build_ast_keyword_seq(encoder, expr->v.Call.keywords)) {
@@ -294,18 +348,18 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case FormattedValue_kind:
-        if (build_ast_expr(encoder, expr->v.FormattedValue.value)) {
+        if (build_ast_expr(encoder, expr->v.FormattedValue.value, false)) {
             goto failed;
         }
         if (build_ast_int(encoder, expr->v.FormattedValue.conversion)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.FormattedValue.format_spec)) {
+        if (build_ast_expr(encoder, expr->v.FormattedValue.format_spec, false)) {
             goto failed;
         }
         break;
     case Interpolation_kind:
-        if (build_ast_expr(encoder, expr->v.Interpolation.value)) {
+        if (build_ast_expr(encoder, expr->v.Interpolation.value, false)) {
             goto failed;
         }
         if (build_ast_const(encoder, expr->v.Interpolation.str)) {
@@ -314,17 +368,17 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         if (build_ast_int(encoder, expr->v.Interpolation.conversion)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.Interpolation.format_spec)) {
+        if (build_ast_expr(encoder, expr->v.Interpolation.format_spec, false)) {
             goto failed;
         }
         break;
     case JoinedStr_kind:
-        if (build_ast_expr_seq(encoder, expr->v.JoinedStr.values)) {
+        if (build_ast_expr_seq(encoder, expr->v.JoinedStr.values, false)) {
             goto failed;
         }
         break;
     case TemplateStr_kind:
-        if (build_ast_expr_seq(encoder, expr->v.TemplateStr.values)) {
+        if (build_ast_expr_seq(encoder, expr->v.TemplateStr.values, false)) {
             goto failed;
         }
         break;
@@ -334,7 +388,7 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case Attribute_kind:
-        if (build_ast_expr(encoder, expr->v.Attribute.value)) {
+        if (build_ast_expr(encoder, expr->v.Attribute.value, false)) {
             goto failed;
         }
         if (build_ast_const(encoder, expr->v.Attribute.attr)) {
@@ -342,15 +396,24 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case Subscript_kind:
-        if (build_ast_expr(encoder, expr->v.Subscript.value)) {
+        if (build_ast_expr(encoder, expr->v.Subscript.value, false)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.Subscript.slice)) {
+        if (build_ast_expr(encoder, expr->v.Subscript.slice, false)) {
             goto failed;
         }
         break;
     case Starred_kind:
-        if (build_ast_expr(encoder, expr->v.Starred.value)) {
+        if (!allow_starred) {
+            if (expr->v.Starred.ctx == Store) {
+                _PyCompile_Error(encoder.c, LOC(expr),
+                "starred assignment target must be in a list or tuple");
+                goto failed;
+            }
+            _PyCompile_Error(encoder.c, LOC(expr), "can't use starred expression here");
+            goto failed;
+        }
+        if (build_ast_expr(encoder, expr->v.Starred.value, false)) {
             goto failed;
         }
         break;
@@ -360,23 +423,29 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr)
         }
         break;
     case List_kind:
-        if (build_ast_expr_seq(encoder, expr->v.List.elts)) {
+        if (validate_unpack(encoder.c, LOC(expr), expr->v.List.elts) < 0) {
+            goto failed;
+        }
+        if (build_ast_expr_seq(encoder, expr->v.List.elts, true)) {
             goto failed;
         }
         break;
     case Tuple_kind:
-        if (build_ast_expr_seq(encoder, expr->v.Tuple.elts)) {
+        if (validate_unpack(encoder.c, LOC(expr), expr->v.Tuple.elts) < 0) {
+            goto failed;
+        }
+        if (build_ast_expr_seq(encoder, expr->v.Tuple.elts, true)) {
             goto failed;
         }
         break;
     case Slice_kind:
-        if (build_ast_expr(encoder, expr->v.Slice.lower)) {
+        if (build_ast_expr(encoder, expr->v.Slice.lower, false)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.Slice.upper)) {
+        if (build_ast_expr(encoder, expr->v.Slice.upper, false)) {
             goto failed;
         }
-        if (build_ast_expr(encoder, expr->v.Slice.step)) {
+        if (build_ast_expr(encoder, expr->v.Slice.step, false)) {
             goto failed;
         }
         break;
@@ -393,8 +462,25 @@ failed:
     return ERROR;
 }
 
+static int
+build_ast_expr_seq(AnnotationEncoder encoder, asdl_expr_seq *seq, bool allow_starred)
+{
+    if (!seq) {
+        RETURN_IF_ERROR(build_ast_size_t(encoder, 0));
+        return SUCCESS;
+    }
+    Py_ssize_t i, n = asdl_seq_LEN(seq);
+    RETURN_IF_ERROR(build_ast_size_t(encoder, n));
+    for (i = 0; i < n; i++) {
+        RETURN_IF_ERROR(
+            build_ast_expr(encoder, asdl_seq_GET(seq, i), allow_starred)
+        );
+    }
+    return SUCCESS;
+}
+
 PyObject *
-_PyAST_GetAnnotationAST(expr_ty annotation, int stringify)
+_PyCompile_GetAnnotationAST(compiler *compiler, expr_ty annotation, int stringify)
 {
     PyUnicodeWriter *data = PyUnicodeWriter_Create(0);
     if (!data) {
@@ -411,6 +497,7 @@ _PyAST_GetAnnotationAST(expr_ty annotation, int stringify)
         return NULL;
     }
     AnnotationEncoder encoder = {
+        .c=compiler,
         .data=data,
         .const_cache=const_cache,
         .curr_lineno=1,
@@ -433,7 +520,7 @@ _PyAST_GetAnnotationAST(expr_ty annotation, int stringify)
         }
         Py_DECREF(annotation_str);
     } else {
-        err = build_ast_expr(encoder, annotation);
+        err = build_ast_expr(encoder, annotation, true);
     }
     if (err == ERROR) {
         PyUnicodeWriter_Discard(data);

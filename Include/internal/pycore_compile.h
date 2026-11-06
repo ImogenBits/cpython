@@ -164,6 +164,9 @@ PyObject *_PyCompile_StaticAttributesAsTuple(struct _PyCompiler *c);
 struct symtable *_PyCompile_Symtable(struct _PyCompiler *c);
 PySTEntryObject *_PyCompile_SymtableEntry(struct _PyCompiler *c);
 
+/* _PyCompile_GetAnnotationAST is defined in ast_annotations.c */
+PyObject *_PyCompile_GetAnnotationAST(struct _PyCompiler *compiler, expr_ty annotation, int stringify);
+
 enum {
     COMPILE_SCOPE_MODULE,
     COMPILE_SCOPE_CLASS,
