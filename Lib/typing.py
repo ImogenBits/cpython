@@ -2413,25 +2413,25 @@ def _resolve_ast(expr, namespace, format):
             resolved_value = _resolve_ast(value, namespace, format)
             if isinstance(slice, ast.Tuple):
                 resolved = tuple(
-                    eval_annotation_AST(element, namespace, format)
+                    _eval_annotation_AST(element, namespace, format)
                     for element in slice.elts
                 )
             else:
-                resolved = eval_annotation_AST(slice, namespace, format)
+                resolved = _eval_annotation_AST(slice, namespace, format)
             return resolved_value[resolved]
         case ast.Starred(value):
-            return Unpack[eval_annotation_AST(value, namespace, format)]
+            return Unpack[_eval_annotation_AST(value, namespace, format)]
         case ast.Name(identifier):
             return namespace[identifier]
         case ast.List(elts):
             return [
-                eval_annotation_AST(element, namespace, format)
+                _eval_annotation_AST(element, namespace, format)
                 for element in elts
             ]
         case ast.BinOp(left, ast.BitOr(), right):
             return types.UnionType[
-                eval_annotation_AST(left, namespace, format),
-                eval_annotation_AST(right, namespace, format),
+                _eval_annotation_AST(left, namespace, format),
+                _eval_annotation_AST(right, namespace, format),
             ]
         case ast.Constant(value):
             return value

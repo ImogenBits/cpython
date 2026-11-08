@@ -1706,4 +1706,4 @@ class AnnotationAST:
             raise
 
     def evaluate_type(self, format):
-        return typing.eval_annotation_AST(self.ast, self.namespace, format=format)
+        return typing._eval_annotation_AST(self.ast, self.namespace, format=format)
