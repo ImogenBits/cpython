@@ -113,11 +113,28 @@ annotate_repr(PyObject *op)
         self->ann_qualname, op);
 }
 
+static PyObject *
+annotate_get_name(PyObject *op, void *Py_UNUSED(closure))
+{
+    PyObject *qualname = PyAnnotateObject_CAST(op)->ann_qualname;
+    // The name is the last component of the potentially-dotted qualname.
+    Py_ssize_t len = PyUnicode_GET_LENGTH(qualname);
+    Py_ssize_t dot = PyUnicode_FindChar(qualname, '.', 0, len, -1);
+    if (dot < 0) {
+        if (dot < -1) {
+            return NULL;
+        }
+        return Py_NewRef(qualname);
+    }
+    return PyUnicode_Substring(qualname, dot + 1, len);
+}
+
 PyObject *
-_eval_ast(PyObject *ann_ast_class, PyObject *format, PyObject *ast, PyObject *namespace)
+_eval_ast(PyObject *ann_ast_class, PyObject *format, PyObject *ast, PyObject *namespace,
+          PyObject *func_name)
 {
     PyObject *ann_ast = PyObject_CallFunctionObjArgs(
-        ann_ast_class, ast, namespace, NULL);
+        ann_ast_class, ast, namespace, func_name, NULL);
     if (!ann_ast) {
         return NULL;
     }
@@ -226,11 +243,15 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
     PyObject *annASTClass = PyImport_ImportModuleAttrString(
         "annotationlib", "AnnotationAST"
     );
+    PyObject *func_name = annotate_get_name(op, NULL);
+    if (!func_name) {
+        goto failed;
+    }
     if (!annASTClass) {
         goto failed;
     }
     if (is_evaluate) {
-        result = _eval_ast(annASTClass, format, parsed_asts, namespace);
+        result = _eval_ast(annASTClass, format, parsed_asts, namespace, func_name);
     } else {
         assert(PyDict_Check(parsed_asts));
         result = PyDict_New();
@@ -240,7 +261,8 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
         PyObject *key, *value;
         Py_ssize_t pos = 0;
         while (PyDict_Next(parsed_asts, &pos, &key, &value)) {
-            PyObject *evaluated = _eval_ast(annASTClass, format, value, namespace);
+            PyObject *evaluated = _eval_ast(
+                annASTClass, format, value, namespace, func_name);
             if (!evaluated) {
                 goto failed;
             }
@@ -254,6 +276,7 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
     Py_XDECREF(annASTClass);
     Py_XDECREF(namespace);
     Py_XDECREF(parsed_asts);
+    Py_XDECREF(func_name);
     return result;
 
 failed:
@@ -261,23 +284,8 @@ failed:
     Py_XDECREF(namespace);
     Py_XDECREF(parsed_asts);
     Py_XDECREF(result);
+    Py_XDECREF(func_name);
     return NULL;
-}
-
-static PyObject *
-annotate_get_name(PyObject *op, void *Py_UNUSED(closure))
-{
-    PyObject *qualname = PyAnnotateObject_CAST(op)->ann_qualname;
-    // The name is the last component of the potentially-dotted qualname.
-    Py_ssize_t len = PyUnicode_GET_LENGTH(qualname);
-    Py_ssize_t dot = PyUnicode_FindChar(qualname, '.', 0, len, -1);
-    if (dot < 0) {
-        if (dot < -1) {
-            return NULL;
-        }
-        return Py_NewRef(qualname);
-    }
-    return PyUnicode_Substring(qualname, dot + 1, len);
 }
 
 static PyObject *

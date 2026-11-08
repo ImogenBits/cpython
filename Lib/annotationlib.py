@@ -1630,14 +1630,15 @@ class AnnotationNamespace(dict):
 
 
 class AnnotationAST:
-    __slots__ = ("ast", "namespace")
+    __slots__ = ("ast", "namespace", "func_name")
 
-    def __init__(self, ast, namespace=None):
+    def __init__(self, ast, namespace=None, func_name=None):
         super().__init__()
         self.ast = ast
         if not isinstance(namespace, AnnotationNamespace):
             namespace = AnnotationNamespace(namespace)
         self.namespace = namespace
+        self.func_name = func_name
 
     def __repr__(self):
         return f"AnnotationAST(ast={self.ast!r}, namespace={self.namespace!r})"
@@ -1693,7 +1694,16 @@ class AnnotationAST:
             raise NotImplementedError
 
         ann_ast, namespace = self.make_evalable()
-        return eval(compile(ann_ast, "<annotation>", "eval"), globals=namespace)
+        filename = namespace.globals.get("__file__", "<annotation>")
+        code = compile(ann_ast, filename, "eval")
+        if self.func_name is not None:
+            code = code.replace(co_name=self.func_name)
+        try:
+            return eval(code, globals=namespace)
+        except Exception as e:
+            if e.__traceback__ is not None:
+                e.__traceback__ = e.__traceback__.tb_next
+            raise
 
     def evaluate_type(self, format):
         return typing.eval_annotation_AST(self.ast, self.namespace, format=format)
