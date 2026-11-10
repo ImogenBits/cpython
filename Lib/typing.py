@@ -2404,34 +2404,42 @@ def assert_type(val, typ, /):
     return val
 
 
-def _resolve_ast(expr, namespace, format):
+def _ast_eval_type(expr, namespace, format):
     match expr:
         case ast.Attribute(value, attr):
-            resolved = _resolve_ast(value, namespace, format)
+            resolved = _ast_eval_type(value, namespace, format)
             return getattr(resolved, attr)
         case ast.Subscript(value, slice):
-            resolved_value = _resolve_ast(value, namespace, format)
+            resolved_value = _ast_eval_type(value, namespace, format)
+            if resolved_value is Annotated:
+                if not isinstance(slice, ast.Tuple) or len(slice.elts) < 2:
+                    raise ValueError(f"invalid type expression: {expr}")
+                inner_type = _ast_eval_type_or_forwardref(slice.elts[0], namespace, format)
+                metadata_ast = ast.Tuple(elts=slice.elts[1:], ctx=ast.Load())
+                metadata_ref = annotationlib.ForwardRef(ast.unparse(metadata_ast))
+                metadata = metadata_ref.evaluate(format=format)
+                return Annotated[inner_type, *metadata]
             if isinstance(slice, ast.Tuple):
                 resolved = tuple(
-                    _eval_annotation_AST(element, namespace, format)
+                    _ast_eval_type_or_forwardref(element, namespace, format)
                     for element in slice.elts
                 )
             else:
-                resolved = _eval_annotation_AST(slice, namespace, format)
+                resolved = _ast_eval_type_or_forwardref(slice, namespace, format)
             return resolved_value[resolved]
         case ast.Starred(value):
-            return Unpack[_eval_annotation_AST(value, namespace, format)]
+            return Unpack[_ast_eval_type(value, namespace, format)]
         case ast.Name(identifier):
             return namespace[identifier]
         case ast.List(elts):
             return [
-                _eval_annotation_AST(element, namespace, format)
+                _ast_eval_type_or_forwardref(element, namespace, format)
                 for element in elts
             ]
         case ast.BinOp(left, ast.BitOr(), right):
             return types.UnionType[
-                _eval_annotation_AST(left, namespace, format),
-                _eval_annotation_AST(right, namespace, format),
+                _ast_eval_type_or_forwardref(left, namespace, format),
+                _ast_eval_type_or_forwardref(right, namespace, format),
             ]
         case ast.Constant(value):
             return value
@@ -2439,55 +2447,53 @@ def _resolve_ast(expr, namespace, format):
             raise ValueError(f"invalid type expression: {expr}")
 
 
-def _eval_annotation_AST(expr, namespace, format):
-    if format == annotationlib.Format.STRING:
-        return ast.unparse(expr)
-    if format == annotationlib.Format.VALUE_WITH_FAKE_GLOBALS:
-        raise ValueError
-    if format == annotationlib.Format.AST:
-        return expr
+def _ast_eval_type_or_forwardref(expr, namespace, format):
     try:
-        return _resolve_ast(expr, namespace, format)
-    except KeyError:
-        if format == annotationlib.Format.FORWARDREF:
-            return ...
-        else:
+        return _ast_eval_type(expr, namespace, format)
+    except KeyError, NameError, AttributeError:
+        if format == annotationlib.Format.VALUE:
             raise
+    forwardref = annotationlib.ForwardRef(ast.unparse(expr))
+    forwardref.__globals__ = namespace
+    return forwardref
+
+
+def _eval_ast_annotations(annos, *, eval_str=False, format=None):
+    if format is None:
+        format = annotationlib.Format.VALUE
+    if format == annotationlib.Format.AST:
+        return annos
+    if format == annotationlib.Format.STRING:
+        return {name: ast.unparse(expr) for name, expr in annos.items()}
+    if format not in (annotationlib.Format.VALUE, annotationlib.Format.FORWARDREF):
+        raise NotImplementedError
+    if eval_str:
+        annos = {
+            name: ast.parse(expr.value, "<annotation>", "eval")
+            if isinstance(expr, ast.Constant) and isinstance(expr.value, str)
+            else expr
+            for name, expr in annos.items()
+        }
+    return {
+        name: _ast_eval_type_or_forwardref(anno.ast.body, anno.namespace, format)
+        for name, anno in annos.items()
+    }
 
 
 def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
     annotations = annotationlib.call_annotate_function(annotate, annotationlib.Format.AST)
-    if annotations is None:
-        return None
-    elif not isinstance(annotations, dict):
-        annotations = {"": annotations}
-    if format is None:
-        format = annotationlib.Format.VALUE
-
-    result = {}
-    for name, annotation in annotations.items():
-        ann_ast = annotation.ast.body
-        if eval_str and isinstance(ann_ast, ast.Constant) and isinstance(ann_ast.value, str):
-            ann_ast = ast.parse(ann_ast.value, "<annotation>", "eval").body
-        result[name] = _eval_annotation_AST(ann_ast, namespace=annotation.namespace, format=format)
-
-    if "" in annotations:
-        return annotations[""]
-    else:
-        return annotations
+    return _eval_ast_annotations(annotations, eval_str=eval_str, format=format)
 
 
 def get_type_annotations(obj, *, eval_str=False, format=None):
-    if not hasattr(obj, "__annotate__"):
-        raise ValueError
-    annotate = obj.__annotate__
-    return eval_annotate_as_types(annotate, format=format)
+    annotations = annotationlib.get_annotations(obj, format=annotationlib.Format.AST)
+    return _eval_ast_annotations(annotations, eval_str=eval_str, format=format)
 
 
 def eval_type(type_string, globals=None, locals=None, *, format=None):
     namespace = ChainMap(globals or {}, locals or {})
     tree = ast.parse(type_string, "<type_string>", "eval").body
-    return _eval_annotation_AST(tree, namespace=namespace, format=format)
+    return _eval_ast_annotations({"": tree}, namespace=namespace, format=format)[""]
 
 
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False,
