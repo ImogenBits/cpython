@@ -8,6 +8,7 @@ from reprlib import recursive_repr
 lazy import copy
 lazy import re
 lazy import ast
+lazy import typing
 
 
 __all__ = ['dataclass',
@@ -539,7 +540,7 @@ def _make_annotate_function(__class__, method_name, annotation_fields, return_ty
                 cls_annotations = {}
                 for base in reversed(__class__.__mro__):
                     cls_annotations.update(
-                        annotationlib.get_annotations(base, format=format)
+                        typing.get_type_annotations(base, format=format)
                     )
 
                 new_annotations = {}
@@ -1057,7 +1058,7 @@ def _process_class(cls, init, repr, eq, order, unsafe_hash, frozen,
     # actual default value.  Pseudo-fields ClassVars and InitVars are
     # included, despite the fact that they're not real fields.  That's
     # dealt with later.
-    cls_annotations = annotationlib.get_annotations(
+    cls_annotations = typing.get_type_annotations(
         cls, format=annotationlib.Format.FORWARDREF)
 
     # Now find fields in our class.  While doing so, validate some
@@ -1413,7 +1414,7 @@ def _add_slots(cls, is_frozen, weakref_slot, defined_fields):
 
     # Get new annotations to remove references to the original class
     # in forward references
-    newcls_ann = annotationlib.get_annotations(
+    newcls_ann = typing.get_type_annotations(
         newcls, format=annotationlib.Format.FORWARDREF)
 
     # Fix references in dataclass Fields
