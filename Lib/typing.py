@@ -2404,69 +2404,79 @@ def assert_type(val, typ, /):
     return val
 
 
-def _ast_eval_type(expr, namespace, format):
-    match expr:
-        case ast.Attribute(value, attr):
-            resolved = _ast_eval_type(value, namespace, format)
-            return getattr(resolved, attr)
-        case ast.Subscript(value, slice):
-            resolved_value = _ast_eval_type(value, namespace, format)
-            if resolved_value is Annotated:
-                if not isinstance(slice, ast.Tuple) or len(slice.elts) < 2:
-                    raise ValueError(f"invalid type expression: {expr}")
-                inner_type = _ast_eval_type_or_forwardref(slice.elts[0], namespace, format)
-                metadata_ast = ast.Tuple(elts=slice.elts[1:], ctx=ast.Load())
-                metadata_ref = annotationlib.ForwardRef(ast.unparse(metadata_ast))
-                metadata = metadata_ref.evaluate(format=format)
-                return Annotated[inner_type, *metadata]
-            if isinstance(slice, ast.Tuple):
-                resolved = tuple(
-                    _ast_eval_type_or_forwardref(element, namespace, format)
-                    for element in slice.elts
-                )
-            else:
-                resolved = _ast_eval_type_or_forwardref(slice, namespace, format)
-            return resolved_value[resolved]
-        case ast.Starred(value):
-            return Unpack[_ast_eval_type(value, namespace, format)]
-        case ast.Name(identifier):
-            return namespace[identifier]
-        case ast.List(elts):
-            return [
-                _ast_eval_type_or_forwardref(element, namespace, format)
-                for element in elts
-            ]
-        case ast.BinOp(left, ast.BitOr(), right):
-            return types.UnionType[
-                _ast_eval_type_or_forwardref(left, namespace, format),
-                _ast_eval_type_or_forwardref(right, namespace, format),
-            ]
-        case ast.Constant(value):
-            return value
-        case _:
-            raise ValueError(f"invalid type expression: {expr}")
-
-
-def _ast_eval_type_or_forwardref(expr, namespace, format):
-    try:
-        return _ast_eval_type(expr, namespace, format)
-    except KeyError, NameError, AttributeError:
-        if format == annotationlib.Format.VALUE:
-            raise
+def _ast_make_forwardref(expr, namespace):
     forwardref = annotationlib.ForwardRef(ast.unparse(expr))
     forwardref.__globals__ = namespace
     return forwardref
 
 
-def _eval_ast_annotations(annos, *, eval_str=False, format=None):
-    if format is None:
-        format = annotationlib.Format.VALUE
-    if format == annotationlib.Format.AST:
-        return annos
-    if format == annotationlib.Format.STRING:
-        return {name: ast.unparse(expr) for name, expr in annos.items()}
-    if format not in (annotationlib.Format.VALUE, annotationlib.Format.FORWARDREF):
-        raise NotImplementedError
+def _ast_eval_metadata(metadata_asts, namespace, format):
+    metadata_ast = ast.Expression(
+        ast.Tuple(
+            elts=metadata_asts,
+            ctx=ast.Load(),
+            lineno=metadata_asts[0].lineno,
+            col_offset=metadata_asts[0].col_offset,
+            end_lineno=metadata_asts[-1].end_lineno,
+            end_col_offset=metadata_asts[-1].end_col_offset,
+        ),
+    )
+    code = compile(metadata_ast, "<string>", "eval")
+    try:
+        return eval(code, globals=namespace)
+    except Exception as e:
+        if format == annotationlib.Format.VALUE:
+            raise
+    return tuple(_ast_make_forwardref(node, namespace) for node in metadata_asts)
+
+
+def _ast_eval_type(expr, namespace, format, forwardref_ok=True):
+    try:
+        match expr:
+            case ast.Attribute(value, attr):
+                resolved = _ast_eval_type(value, namespace, format, False)
+                return getattr(resolved, attr)
+            case ast.Subscript(value, slice):
+                resolved_value = _ast_eval_type(value, namespace, format, False)
+                if resolved_value is Annotated:
+                    if not isinstance(slice, ast.Tuple) or len(slice.elts) < 2:
+                        raise ValueError(f"invalid type expression: {expr}")
+                    inner_type = _ast_eval_type(slice.elts[0], namespace, format)
+                    metadata = _ast_eval_metadata(slice.elts[1:], namespace, format)
+                    return Annotated[inner_type, *metadata]
+                if isinstance(slice, ast.Tuple):
+                    resolved = tuple(
+                        _ast_eval_type(element, namespace, format)
+                        for element in slice.elts
+                    )
+                else:
+                    resolved = _ast_eval_type(slice, namespace, format)
+                return resolved_value[resolved]
+            case ast.Starred(value):
+                return Unpack[_ast_eval_type(value, namespace, format, False)]
+            case ast.Name(identifier):
+                return namespace[identifier]
+            case ast.List(elts):
+                return [
+                    _ast_eval_type(element, namespace, format)
+                    for element in elts
+                ]
+            case ast.BinOp(left, ast.BitOr(), right):
+                return types.UnionType[
+                    _ast_eval_type(left, namespace, format),
+                    _ast_eval_type(right, namespace, format),
+                ]
+            case ast.Constant(value):
+                return value
+            case _:
+                raise ValueError(f"invalid type expression: {expr}")
+    except KeyError, NameError, AttributeError:
+        if not forwardref_ok or format == annotationlib.Format.VALUE:
+            raise
+    return _ast_make_forwardref(expr, namespace)
+
+
+def _eval_ast_annotations(annos, *, eval_str=False, format):
     if eval_str:
         annos = {
             name: ast.parse(expr.value, "<annotation>", "eval")
@@ -2475,7 +2485,7 @@ def _eval_ast_annotations(annos, *, eval_str=False, format=None):
             for name, expr in annos.items()
         }
     return {
-        name: _ast_eval_type_or_forwardref(anno.ast.body, anno.namespace, format)
+        name: _ast_eval_type(anno.ast.body, anno.namespace, format)
         for name, anno in annos.items()
     }
 
@@ -2486,6 +2496,8 @@ def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
 
 
 def get_type_annotations(obj, *, eval_str=False, format=None):
+    if format in (annotationlib.Format.AST, annotationlib.Format.STRING):
+        return annotationlib.get_annotations(obj, format=format)
     annotations = annotationlib.get_annotations(obj, format=annotationlib.Format.AST)
     return _eval_ast_annotations(annotations, eval_str=eval_str, format=format)
 
