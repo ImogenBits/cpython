@@ -70,17 +70,17 @@ def _measure_dataclass_creation(class_factory, iterations=1000):
 
 
 def make_simple_class():
-    class Simple:
+    class SimpleData:
         id: int
         name: str
         active: bool
         score: float
 
-    return Simple
+    return SimpleData
 
 
 def make_complex_class():
-    class Complex:
+    class ComplexData:
         id: int
         name: str
         address: _Address
@@ -91,11 +91,11 @@ def make_complex_class():
         _cache: ClassVar[dict[str, object]]
         source: InitVar[str]
 
-    return Complex
+    return ComplexData
 
 
 def make_forwardref_class():
-    class ForwardRef:
+    class ForwardRefData:
         id: int
         name: str
         address: MissingAddress
@@ -106,44 +106,54 @@ def make_forwardref_class():
         _cache: ClassVar[dict[str, object]]
         source: InitVar[str]
 
-    return ForwardRef
+    return ForwardRefData
 
 
-def run_test(clean: str) -> None:
+def run_test(clean: bool, dataclass_only: bool, profiler=None) -> None:
     sys.path.insert(0, str(VENV_PATH))
 
     if clean:
         for path in VENV_PATH.glob("**/__pycache__"):
             shutil.rmtree(path)
 
-    tracemalloc.start()
-    with open("/dev/null", "w") as dev_null, redirect_stdout(dev_null):
-        start, _ = tracemalloc.get_traced_memory()
-        time = timeit.default_timer()
-        for package in PACKAGES:
-            for mod in iter_modules(package):
-                pass
-        import_time = timeit.default_timer() - time
-    end, _ = tracemalloc.get_traced_memory()
-    memory = end - start
+    if dataclass_only:
+        import_time, memory, pyc_size, time = 0.0, 0, 0, 0.0
+    else:
+        tracemalloc.start()
+        with open("/dev/null", "w") as dev_null, redirect_stdout(dev_null):
+            start, _ = tracemalloc.get_traced_memory()
+            time = timeit.default_timer()
+            for package in PACKAGES:
+                for mod in iter_modules(package):
+                    pass
+            import_time = timeit.default_timer() - time
+        end, _ = tracemalloc.get_traced_memory()
+        memory = end - start
 
-    pyc_size = 0
-    for path in VENV_PATH.glob("**/*.pyc"):
-        pyc_size += path.stat().st_size
+        pyc_size = 0
+        for path in VENV_PATH.glob("**/*.pyc"):
+            pyc_size += path.stat().st_size
 
-    obj_cache = set()
-    time = 0
-    for package in PACKAGES:
-        for mod in iter_modules(package):
-            for annotate in iter_annotates(mod, obj_cache):
-                time_start = timeit.default_timer()
-                call_annotate_function(annotate, format=Format.VALUE)
-                time += timeit.default_timer() - time_start
-
-    tracemalloc.stop()
+        obj_cache = set()
+        time = 0
+        annotates = [
+            annotate
+            for package in PACKAGES
+            for mod in iter_modules(package)
+            for annotate in iter_annotates(mod, obj_cache)
+        ]
+        for annotate in annotates:
+            time_start = timeit.default_timer()
+            call_annotate_function(annotate, format=Format.VALUE)
+            time += timeit.default_timer() - time_start
+        tracemalloc.stop()
+    if profiler is not None:
+        profiler.start()
     simple = _measure_dataclass_creation(make_simple_class)
     complex = _measure_dataclass_creation(make_complex_class)
     forwardref = _measure_dataclass_creation(make_forwardref_class)
+    if profiler is not None:
+        profiler.stop()
 
     return (
         import_time,
@@ -158,7 +168,7 @@ def run_test(clean: str) -> None:
 
 code = """
 import annotation_tests
-print(*annotation_tests.run_test({clean}))
+print(*annotation_tests.run_test({clean}, {dataclass_only}))
 """
 
 if __name__ == "__main__":
@@ -166,17 +176,26 @@ if __name__ == "__main__":
     if len(sys.argv) >= 2:
         count = int(sys.argv[1])
     clean = len(sys.argv) >= 3 and sys.argv[2] == "c"
+    dataclass_only = len(sys.argv) >= 3 and sys.argv[2] == "d"
+    profile = len(sys.argv) >= 3 and sys.argv[2] == "p"
     sys.argv = ["annotation_tests.py"]
 
     res = (0.0,) * 7
     import_times = []
-    if count > 1:
+    if profile:
+        import pyinstrument
+        interval = 0.000_001
+        profiler = pyinstrument.Profiler(interval=interval)
+        res = run_test(clean, dataclass_only, profiler)
+        html = profiler.output_html(interval)
+        Path("annotation_tests_profile.html").write_text(html)
+    elif count > 1:
         if not clean and not list(VENV_PATH.glob("**/__pycache__")):
             sys.path.insert(0, str(VENV_PATH))
             for package in PACKAGES:
                 for mod in iter_modules(package):
                     pass
-        code = code.format(clean=clean)
+        code = code.format(clean=clean, dataclass_only=dataclass_only)
         procs = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True) for _ in range(count)]
         for proc in procs:
             if proc.stderr:
@@ -188,7 +207,7 @@ if __name__ == "__main__":
             )
             import_times.append(float(proc.stdout.split()[0]))
     else:
-        res = run_test(clean)
+        res = run_test(clean, dataclass_only)
 
     print(
         f"Import times: {", ".join(f"{t:.2f}" for t in import_times)}\n"
