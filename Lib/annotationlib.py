@@ -83,10 +83,15 @@ class ForwardRef:
         is_argument=True,
         is_class=False,
     ):
-        if not isinstance(arg, str):
-            raise TypeError(f"Forward reference must be a string -- got {arg!r}")
+        if isinstance(arg, str):
+            self.__arg__ = arg
+            self.__ast_node__ = None
+        elif isinstance(arg, ast.AST):
+            self.__arg__ = None
+            self.__ast_node__ = arg
+        else:
+            raise TypeError(f"Forward reference must be a string or AST -- got {arg!r}")
 
-        self.__arg__ = arg
         self.__forward_is_argument__ = is_argument
         self.__forward_is_class__ = is_class
         self.__forward_module__ = module
@@ -102,7 +107,6 @@ class ForwardRef:
         # These are initially None but serve as a cache and may be set to a non-None
         # value later.
         self.__code__ = None
-        self.__ast_node__ = None
         self.__resolved_str_cache__ = None
 
     def __init_subclass__(cls, /, *args, **kwds):
@@ -1635,8 +1639,6 @@ class AnnotationAST:
     def __init__(self, ast, namespace=None, func_name=None):
         super().__init__()
         self.ast = ast
-        if not isinstance(namespace, AnnotationNamespace):
-            namespace = AnnotationNamespace(namespace)
         self.namespace = namespace
         self.func_name = func_name
 

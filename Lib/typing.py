@@ -2405,7 +2405,7 @@ def assert_type(val, typ, /):
 
 
 def _ast_make_forwardref(expr, namespace):
-    forwardref = annotationlib.ForwardRef(ast.unparse(expr))
+    forwardref = annotationlib.ForwardRef(expr)
     forwardref.__globals__ = namespace
     return forwardref
 
