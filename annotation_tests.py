@@ -203,13 +203,13 @@ if __name__ == "__main__":
                 for mod in iter_modules(package):
                     pass
         code = code.format(clean=clean, dataclass_only=dataclass_only)
-        procs = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True) for _ in range(count)]
-        for proc in procs:
+        for _ in range(count):
+            proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
             if proc.stderr:
                 print(proc.stderr)
                 raise SystemExit
             res = tuple(
-                curr + float(x) / len(procs)
+                curr + float(x) / count
                 for curr, x in zip(res, proc.stdout.split())
             )
             import_times.append(float(proc.stdout.split()[0]))
