@@ -74,9 +74,15 @@ def make_simple_class():
         id: int
         name: str
         active: bool
-        score: float
+        thingy: list[dict[str, int]] | None
+        score: dict[str, str]
+        _cache: ClassVar[dict[str, object]]
 
     return SimpleData
+
+
+def f():
+    return 123
 
 
 def make_complex_class():
@@ -84,7 +90,7 @@ def make_complex_class():
         id: int
         name: str
         address: _Address
-        addresses: list[_Address]
+        addresses: Annotated[list[_Address], f()]
         metadata: dict[str, str]
         nickname: str | None
         score: Annotated[int, "display score"]
@@ -102,7 +108,7 @@ def make_forwardref_class():
         addresses: list[MissingAddress]
         metadata: dict[str, str]
         nickname: str | None
-        score: Annotated[MissingScore, "display score"]
+        score: dict[MissingScore, "display score"]
         _cache: ClassVar[dict[str, object]]
         source: InitVar[str]
 
