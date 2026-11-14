@@ -69,21 +69,21 @@ typedef struct {
 } AnnotationEncoder;
 
 static int
-build_ast_size_t(AnnotationEncoder encoder, Py_ssize_t value) {
+build_ast_size_t(AnnotationEncoder *encoder, Py_ssize_t value) {
     do {
         unsigned char byte = value & 0x3F;
         value >>= 6;
         if (value) {
             byte |= 0x40;
         }
-        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, byte));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder->data, byte));
     } while (value);
     return SUCCESS;
 }
 
 #define DEFINE_AST_SEQ_BUILDER(TYPE)                                             \
 static int                                                                       \
-build_ast_ ## TYPE ## _seq(AnnotationEncoder encoder, asdl_ ## TYPE ## _seq *seq) \
+build_ast_ ## TYPE ## _seq(AnnotationEncoder *encoder, asdl_ ## TYPE ## _seq *seq) \
 {                                                                                \
     if (!seq) {                                                                  \
         RETURN_IF_ERROR(build_ast_size_t(encoder, 0));                      \
@@ -100,7 +100,7 @@ build_ast_ ## TYPE ## _seq(AnnotationEncoder encoder, asdl_ ## TYPE ## _seq *seq
 }
 
 static int
-build_ast_const(AnnotationEncoder encoder, PyObject *value) {
+build_ast_const(AnnotationEncoder *encoder, PyObject *value) {
     Py_ssize_t index;
     if (!value) {
         index = 0;
@@ -113,14 +113,14 @@ build_ast_const(AnnotationEncoder encoder, PyObject *value) {
     } else if (value == Py_Ellipsis) {
         index = 3;
     } else {
-        index = 3 + _PyCompile_DictAddObj(encoder.const_cache, value);
+        index = 3 + _PyCompile_DictAddObj(encoder->const_cache, value);
     }
     RETURN_IF_ERROR(build_ast_size_t(encoder, index));
     return SUCCESS;
 }
 
 static int
-build_ast_int(AnnotationEncoder encoder, long op)
+build_ast_int(AnnotationEncoder *encoder, long op)
 {
     PyObject *op_obj = PyLong_FromLong(op);
     if (!op_obj) {
@@ -132,7 +132,7 @@ build_ast_int(AnnotationEncoder encoder, long op)
 // can't use the macro here because the ast enums store Compare
 // types as ints, but we expect them to be decoded as (inlined) simple sums
 static int
-build_ast_int_seq(AnnotationEncoder encoder, asdl_int_seq *seq){
+build_ast_int_seq(AnnotationEncoder *encoder, asdl_int_seq *seq){
     if (!seq) {
         RETURN_IF_ERROR(build_ast_size_t(encoder, 0));
         return SUCCESS;
@@ -148,36 +148,38 @@ build_ast_int_seq(AnnotationEncoder encoder, asdl_int_seq *seq){
 }
 
 static int
-build_ast_loc(AnnotationEncoder encoder, int attrs[4], bool with_line_info) {
+build_ast_loc(AnnotationEncoder *encoder, int attrs[4], bool with_line_info) {
     RETURN_IF_ERROR(build_ast_int(encoder, attrs[1]));
     RETURN_IF_ERROR(build_ast_int(encoder, attrs[3]));
     if (with_line_info) {
+        encoder->curr_lineno = attrs[0];
+        encoder->curr_end_lineno = attrs[2];
         RETURN_IF_ERROR(build_ast_int(encoder, attrs[0]));
         RETURN_IF_ERROR(build_ast_int(encoder, attrs[2]));
     }
     return SUCCESS;
 }
 
-static int build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred);
+static int build_ast_expr(AnnotationEncoder *encoder, expr_ty expr, bool allow_starred);
 static int
-build_ast_expr_seq(AnnotationEncoder encoder, asdl_expr_seq *seq, bool allow_starred);
+build_ast_expr_seq(AnnotationEncoder *encoder, asdl_expr_seq *seq, bool allow_starred);
 
 static int
-build_ast_arg(AnnotationEncoder encoder, arg_ty arg) {
+build_ast_arg(AnnotationEncoder *encoder, arg_ty arg) {
     if (!arg) {
-        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, 0));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder->data, 0));
         return SUCCESS;
     }
+    RETURN_IF_ERROR(build_ast_loc(encoder, &arg->lineno, true));
     RETURN_IF_ERROR(build_ast_const(encoder, arg->arg));
     RETURN_IF_ERROR(build_ast_expr(encoder, arg->annotation, false));
     RETURN_IF_ERROR(build_ast_const(encoder, arg->type_comment));
-    RETURN_IF_ERROR(build_ast_loc(encoder, &arg->lineno, true));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(arg);
 
 static int
-build_ast_args(AnnotationEncoder encoder, arguments_ty args) {
+build_ast_args(AnnotationEncoder *encoder, arguments_ty args) {
     RETURN_IF_ERROR(build_ast_arg_seq(encoder, args->posonlyargs));
     RETURN_IF_ERROR(build_ast_arg_seq(encoder, args->args));
     RETURN_IF_ERROR(build_ast_arg(encoder, args->vararg));
@@ -189,7 +191,7 @@ build_ast_args(AnnotationEncoder encoder, arguments_ty args) {
 }
 
 static int
-build_ast_comprehension(AnnotationEncoder encoder, comprehension_ty comp) {
+build_ast_comprehension(AnnotationEncoder *encoder, comprehension_ty comp) {
     RETURN_IF_ERROR(build_ast_expr(encoder, comp->target, false));
     RETURN_IF_ERROR(build_ast_expr(encoder, comp->iter, false));
     RETURN_IF_ERROR(build_ast_expr_seq(encoder, comp->ifs, false));
@@ -199,24 +201,24 @@ build_ast_comprehension(AnnotationEncoder encoder, comprehension_ty comp) {
 DEFINE_AST_SEQ_BUILDER(comprehension);
 
 static int
-build_ast_keyword(AnnotationEncoder encoder, keyword_ty keyword)
+build_ast_keyword(AnnotationEncoder *encoder, keyword_ty keyword)
 {
     if (!keyword) {
         PyErr_SetString(PyExc_ValueError, "malformed AST");
         return ERROR;
     }
+    RETURN_IF_ERROR(build_ast_loc(encoder, &keyword->lineno, true));
     RETURN_IF_ERROR(build_ast_const(encoder, keyword->arg));
     RETURN_IF_ERROR(build_ast_expr(encoder, keyword->value, false));
-    RETURN_IF_ERROR(build_ast_loc(encoder, &keyword->lineno, true));
     return SUCCESS;
 }
 DEFINE_AST_SEQ_BUILDER(keyword);
 
 static int
-build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
+build_ast_expr(AnnotationEncoder *encoder, expr_ty expr, bool allow_starred)
 {
     if (!expr) {
-        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, 0));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder->data, 0));
         return SUCCESS;
     }
     if (Py_EnterRecursiveCall(" during compilation")) {
@@ -230,12 +232,17 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
         kind = expr->kind;
     }
     // highest bit can't be used because of UTF-8, so we use the 7th bit
-    bool with_line_info = encoder.curr_lineno != expr->lineno || encoder.curr_end_lineno != expr->end_lineno;
+    bool with_line_info = encoder->curr_lineno != expr->lineno || encoder->curr_end_lineno != expr->end_lineno;
     kind = kind | (with_line_info << 6);
-    RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, kind));
+    if (PyUnicodeWriter_WriteChar(encoder->data, kind) < 0) {
+        goto failed;
+    }
+    if (build_ast_loc(encoder, &expr->lineno, with_line_info)) {
+        goto failed;
+    }
     switch (expr->kind) {
     case BoolOp_kind:
-        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->v.BoolOp.op));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder->data, expr->v.BoolOp.op));
         if (build_ast_expr_seq(encoder, expr->v.BoolOp.values, false)) {
             goto failed;
         }
@@ -244,13 +251,13 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
         if (build_ast_expr(encoder, expr->v.BinOp.left, false)) {
             goto failed;
         }
-        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->v.BinOp.op));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder->data, expr->v.BinOp.op));
         if (build_ast_expr(encoder, expr->v.BinOp.right, false)) {
             goto failed;
         }
         break;
     case UnaryOp_kind:
-        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder.data, expr->v.UnaryOp.op));
+        RETURN_IF_ERROR(PyUnicodeWriter_WriteChar(encoder->data, expr->v.UnaryOp.op));
         if (build_ast_expr(encoder, expr->v.UnaryOp.operand, false)) {
             goto failed;
         }
@@ -334,7 +341,7 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
         }
         break;
     case Call_kind:
-        if (codegen_validate_keywords(encoder.c, expr->v.Call.keywords) < 0) {
+        if (codegen_validate_keywords(encoder->c, expr->v.Call.keywords) < 0) {
             goto failed;
         }
         if (build_ast_expr(encoder, expr->v.Call.func, false)) {
@@ -406,11 +413,11 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
     case Starred_kind:
         if (!allow_starred) {
             if (expr->v.Starred.ctx == Store) {
-                _PyCompile_Error(encoder.c, LOC(expr),
+                _PyCompile_Error(encoder->c, LOC(expr),
                 "starred assignment target must be in a list or tuple");
                 goto failed;
             }
-            _PyCompile_Error(encoder.c, LOC(expr), "can't use starred expression here");
+            _PyCompile_Error(encoder->c, LOC(expr), "can't use starred expression here");
             goto failed;
         }
         if (build_ast_expr(encoder, expr->v.Starred.value, false)) {
@@ -423,7 +430,7 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
         }
         break;
     case List_kind:
-        if (validate_unpack(encoder.c, LOC(expr), expr->v.List.elts) < 0) {
+        if (validate_unpack(encoder->c, LOC(expr), expr->v.List.elts) < 0) {
             goto failed;
         }
         if (build_ast_expr_seq(encoder, expr->v.List.elts, true)) {
@@ -431,7 +438,7 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
         }
         break;
     case Tuple_kind:
-        if (validate_unpack(encoder.c, LOC(expr), expr->v.Tuple.elts) < 0) {
+        if (validate_unpack(encoder->c, LOC(expr), expr->v.Tuple.elts) < 0) {
             goto failed;
         }
         if (build_ast_expr_seq(encoder, expr->v.Tuple.elts, true)) {
@@ -452,9 +459,6 @@ build_ast_expr(AnnotationEncoder encoder, expr_ty expr, bool allow_starred)
     default:
         goto failed;
     }
-    if (build_ast_loc(encoder, &expr->lineno, with_line_info)) {
-        goto failed;
-    }
     Py_LeaveRecursiveCall();
     return SUCCESS;
 failed:
@@ -463,7 +467,7 @@ failed:
 }
 
 static int
-build_ast_expr_seq(AnnotationEncoder encoder, asdl_expr_seq *seq, bool allow_starred)
+build_ast_expr_seq(AnnotationEncoder *encoder, asdl_expr_seq *seq, bool allow_starred)
 {
     if (!seq) {
         RETURN_IF_ERROR(build_ast_size_t(encoder, 0));
@@ -513,14 +517,14 @@ _PyCompile_GetAnnotationAST(compiler *compiler, expr_ty annotation, int stringif
         }
         err = PyUnicodeWriter_WriteChar(encoder.data, Constant_kind | (1 << 6));
         if (err == SUCCESS) {
-            err = build_ast_const(encoder, annotation_str);
+            err = build_ast_loc(&encoder, &annotation->lineno, true);
         }
         if (err == SUCCESS) {
-            err = build_ast_loc(encoder, &annotation->lineno, true);
+            err = build_ast_const(&encoder, annotation_str);
         }
         Py_DECREF(annotation_str);
     } else {
-        err = build_ast_expr(encoder, annotation, true);
+        err = build_ast_expr(&encoder, annotation, true);
     }
     if (err == ERROR) {
         PyUnicodeWriter_Discard(data);

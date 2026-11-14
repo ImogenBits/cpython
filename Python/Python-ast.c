@@ -14455,43 +14455,49 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 }
 
 static int
-ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info) {
-    PyObject *value = ann_ast_constant(data);
-    if (!value) {
+ann_ast_get_loc(AnnotationData *data, PyObject *loc_data[4], bool with_line_info) {
+    loc_data[1] = ann_ast_constant(data);
+    if (!loc_data[1]) {
         return -1;
     }
-    if (PyObject_SetAttr(node, data->state->col_offset, value) < 0) {
-        Py_DECREF(value);
-        return -1;
-    }
-    value = ann_ast_constant(data);
-    if (!value) {
-        return -1;
-    }
-    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
-        Py_DECREF(value);
+    loc_data[3] = ann_ast_constant(data);
+    if (!loc_data[3]) {
         return -1;
     }
     if (with_line_info) {
-        value = ann_ast_constant(data);
-        if (!value) {
+        loc_data[0] = ann_ast_constant(data);
+        if (!loc_data[0]) {
             return -1;
         }
-        data->curr_lineno = value;
+        data->curr_lineno = loc_data[0];
+        loc_data[2] = ann_ast_constant(data);
+        if (!loc_data[2]) {
+            return -1;
+        }
+        data->curr_end_lineno = loc_data[2];
+    } else {
+        loc_data[0] = Py_NewRef(data->curr_lineno);
+        loc_data[2] = Py_NewRef(data->curr_end_lineno);
     }
-    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
-        Py_DECREF(value);
+    return 0;
+}
+
+static int
+ann_ast_add_loc(AnnotationData *data, PyObject *node, PyObject *loc_data[4]) {
+    Py_DECREF(loc_data[0]);
+    Py_DECREF(loc_data[1]);
+    Py_DECREF(loc_data[2]);
+    Py_DECREF(loc_data[3]);
+    if (PyObject_SetAttr(node, data->state->lineno, loc_data[0]) < 0) {
         return -1;
     }
-    if (with_line_info) {
-        value = ann_ast_constant(data);
-        if (!value) {
-            return -1;
-        }
-        data->curr_end_lineno = value;
+    if (PyObject_SetAttr(node, data->state->col_offset, loc_data[1]) < 0) {
+        return -1;
     }
-    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
-        Py_DECREF(value);
+    if (PyObject_SetAttr(node, data->state->end_lineno, loc_data[2]) < 0) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->end_col_offset, loc_data[3]) < 0) {
         return -1;
     }
     return 0;
@@ -14510,10 +14516,12 @@ static PyObject *
 ann_ast_arg(AnnotationData *data)
 {
     PyObject *result = NULL, *value = NULL;
+    PyObject *loc_data[4] = {NULL, NULL, NULL, NULL};
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
     }
+    if (ann_ast_get_loc(data, loc_data, true) < 0) goto failed;
     tp = (PyTypeObject *) data->state->arg_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) goto failed;
@@ -14554,12 +14562,16 @@ ann_ast_arg(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
-    if (ann_ast_add_attributes(data, result, true) < 0) goto failed;
+    if (ann_ast_add_loc(data, result, loc_data) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
+    Py_XDECREF(loc_data[0]);
+    Py_XDECREF(loc_data[1]);
+    Py_XDECREF(loc_data[2]);
+    Py_XDECREF(loc_data[3]);
     Py_LeaveRecursiveCall();
     return NULL;
 }
@@ -14568,6 +14580,7 @@ static PyObject *
 ann_ast_arguments(AnnotationData *data)
 {
     PyObject *result = NULL, *value = NULL;
+    PyObject *loc_data[4] = {NULL, NULL, NULL, NULL};
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
@@ -14636,11 +14649,16 @@ ann_ast_arguments(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
+    if (ann_ast_add_loc(data, result, loc_data) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
+    Py_XDECREF(loc_data[0]);
+    Py_XDECREF(loc_data[1]);
+    Py_XDECREF(loc_data[2]);
+    Py_XDECREF(loc_data[3]);
     Py_LeaveRecursiveCall();
     return NULL;
 }
@@ -14697,6 +14715,7 @@ static PyObject *
 ann_ast_comprehension(AnnotationData *data)
 {
     PyObject *result = NULL, *value = NULL;
+    PyObject *loc_data[4] = {NULL, NULL, NULL, NULL};
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
@@ -14731,11 +14750,16 @@ ann_ast_comprehension(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
+    if (ann_ast_add_loc(data, result, loc_data) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
+    Py_XDECREF(loc_data[0]);
+    Py_XDECREF(loc_data[1]);
+    Py_XDECREF(loc_data[2]);
+    Py_XDECREF(loc_data[3]);
     Py_LeaveRecursiveCall();
     return NULL;
 }
@@ -14744,6 +14768,7 @@ static PyObject *
 ann_ast_expr(AnnotationData *data)
 {
     PyObject *result = NULL, *value = NULL;
+    PyObject *loc_data[4] = {NULL, NULL, NULL, NULL};
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
@@ -14755,6 +14780,7 @@ ann_ast_expr(AnnotationData *data)
     }
     bool with_line_info = (kind & 0x40) != 0;
     kind &= 0x3F;
+    if (ann_ast_get_loc(data, loc_data, with_line_info) < 0) goto failed;
     switch (kind) {
         case BoolOp_kind: {
             tp = (PyTypeObject *) data->state->BoolOp_type;
@@ -15345,12 +15371,16 @@ ann_ast_expr(AnnotationData *data)
         }
     }
     assert(result != NULL);
-    if (ann_ast_add_attributes(data, result, with_line_info) < 0) goto failed;
+    if (ann_ast_add_loc(data, result, loc_data) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
+    Py_XDECREF(loc_data[0]);
+    Py_XDECREF(loc_data[1]);
+    Py_XDECREF(loc_data[2]);
+    Py_XDECREF(loc_data[3]);
     Py_LeaveRecursiveCall();
     return NULL;
 }
@@ -15368,10 +15398,12 @@ static PyObject *
 ann_ast_keyword(AnnotationData *data)
 {
     PyObject *result = NULL, *value = NULL;
+    PyObject *loc_data[4] = {NULL, NULL, NULL, NULL};
     PyTypeObject *tp;
     if (Py_EnterRecursiveCall(" during ast construction")) {
         return NULL;
     }
+    if (ann_ast_get_loc(data, loc_data, true) < 0) goto failed;
     tp = (PyTypeObject *) data->state->keyword_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) goto failed;
@@ -15397,12 +15429,16 @@ ann_ast_keyword(AnnotationData *data)
     }
     Py_DECREF(value);
     assert(result != NULL);
-    if (ann_ast_add_attributes(data, result, true) < 0) goto failed;
+    if (ann_ast_add_loc(data, result, loc_data) < 0) goto failed;
     Py_LeaveRecursiveCall();
     return result;
     failed:
     Py_XDECREF(value);
     Py_XDECREF(result);
+    Py_XDECREF(loc_data[0]);
+    Py_XDECREF(loc_data[1]);
+    Py_XDECREF(loc_data[2]);
+    Py_XDECREF(loc_data[3]);
     Py_LeaveRecursiveCall();
     return NULL;
 }
@@ -15567,6 +15603,9 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
     }
     bool with_line_info = (kind & 0x40) != 0;
     kind &= 0x3F;
+    if (ann_ast_consume_attributes(data, ctx, with_line_info) < 0) {
+        goto failed;
+    }
     switch (kind) {
         case Slice_kind + 1:
         case Constant_kind: {
@@ -15686,7 +15725,6 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
     if (!result) {
         goto failed;
     }
-    ann_ast_consume_attributes(data, ctx, with_line_info);
     Py_DECREF(curr_lineno);
     Py_DECREF(curr_end_lineno);
     Py_LeaveRecursiveCall();

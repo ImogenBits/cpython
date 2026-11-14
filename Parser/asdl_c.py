@@ -2088,43 +2088,49 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
 }
 
 static int
-ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info) {
-    PyObject *value = ann_ast_constant(data);
-    if (!value) {
+ann_ast_get_loc(AnnotationData *data, PyObject *loc_data[4], bool with_line_info) {
+    loc_data[1] = ann_ast_constant(data);
+    if (!loc_data[1]) {
         return -1;
     }
-    if (PyObject_SetAttr(node, data->state->col_offset, value) < 0) {
-        Py_DECREF(value);
-        return -1;
-    }
-    value = ann_ast_constant(data);
-    if (!value) {
-        return -1;
-    }
-    if (PyObject_SetAttr(node, data->state->end_col_offset, value) < 0) {
-        Py_DECREF(value);
+    loc_data[3] = ann_ast_constant(data);
+    if (!loc_data[3]) {
         return -1;
     }
     if (with_line_info) {
-        value = ann_ast_constant(data);
-        if (!value) {
+        loc_data[0] = ann_ast_constant(data);
+        if (!loc_data[0]) {
             return -1;
         }
-        data->curr_lineno = value;
+        data->curr_lineno = loc_data[0];
+        loc_data[2] = ann_ast_constant(data);
+        if (!loc_data[2]) {
+            return -1;
+        }
+        data->curr_end_lineno = loc_data[2];
+    } else {
+        loc_data[0] = Py_NewRef(data->curr_lineno);
+        loc_data[2] = Py_NewRef(data->curr_end_lineno);
     }
-    if (PyObject_SetAttr(node, data->state->lineno, value) < 0) {
-        Py_DECREF(value);
+    return 0;
+}
+
+static int
+ann_ast_add_loc(AnnotationData *data, PyObject *node, PyObject *loc_data[4]) {
+    Py_DECREF(loc_data[0]);
+    Py_DECREF(loc_data[1]);
+    Py_DECREF(loc_data[2]);
+    Py_DECREF(loc_data[3]);
+    if (PyObject_SetAttr(node, data->state->lineno, loc_data[0]) < 0) {
         return -1;
     }
-    if (with_line_info) {
-        value = ann_ast_constant(data);
-        if (!value) {
-            return -1;
-        }
-        data->curr_end_lineno = value;
+    if (PyObject_SetAttr(node, data->state->col_offset, loc_data[1]) < 0) {
+        return -1;
     }
-    if (PyObject_SetAttr(node, data->state->end_lineno, value) < 0) {
-        Py_DECREF(value);
+    if (PyObject_SetAttr(node, data->state->end_lineno, loc_data[2]) < 0) {
+        return -1;
+    }
+    if (PyObject_SetAttr(node, data->state->end_col_offset, loc_data[3]) < 0) {
         return -1;
     }
     return 0;
@@ -2246,6 +2252,9 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
     }
     bool with_line_info = (kind & 0x40) != 0;
     kind &= 0x3F;
+    if (ann_ast_consume_attributes(data, ctx, with_line_info) < 0) {
+        goto failed;
+    }
     switch (kind) {
         case Slice_kind + 1:
         case Constant_kind: {
@@ -2365,7 +2374,6 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
     if (!result) {
         goto failed;
     }
-    ann_ast_consume_attributes(data, ctx, with_line_info);
     Py_DECREF(curr_lineno);
     Py_DECREF(curr_end_lineno);
     Py_LeaveRecursiveCall();
@@ -2402,22 +2410,24 @@ failed:
         self.emit("ann_ast_%s(AnnotationData *data)" % name, 0)
         self.emit("{", 0)
         self.emit("PyObject *result = NULL, *value = NULL;", 1)
+        self.emit("PyObject *loc_data[4] = {NULL, NULL, NULL, NULL};", 1)
         self.emit("PyTypeObject *tp;", 1)
         self.emit('if (Py_EnterRecursiveCall(" during ast construction")) {', 1)
         self.emit("return NULL;", 2)
         self.emit("}", 1)
 
-    def func_end(self, name, attributes, with_line_info):
+    def func_end(self):
         self.emit("assert(result != NULL);", 1)
-        if attributes:
-            if [f.name for f in attributes] != ["lineno", "col_offset", "end_lineno", "end_col_offset"]:
-                raise ValueError(f"unexpected attributes for {name}: {attributes}")
-            self.emit(f"if (ann_ast_add_attributes(data, result, {with_line_info}) < 0) goto failed;", 1)
+        self.emit(f"if (ann_ast_add_loc(data, result, loc_data) < 0) goto failed;", 1)
         self.emit("Py_LeaveRecursiveCall();", 1)
         self.emit("return result;", 1)
         self.emit("failed:", 1)
         self.emit("Py_XDECREF(value);", 1)
         self.emit("Py_XDECREF(result);", 1)
+        self.emit("Py_XDECREF(loc_data[0]);", 1)
+        self.emit("Py_XDECREF(loc_data[1]);", 1)
+        self.emit("Py_XDECREF(loc_data[2]);", 1)
+        self.emit("Py_XDECREF(loc_data[3]);", 1)
         self.emit("Py_LeaveRecursiveCall();", 1)
         self.emit("return NULL;", 1)
         self.emit("}", 0)
@@ -2435,6 +2445,10 @@ failed:
         self.emit("}", 1)
         self.emit("bool with_line_info = (kind & 0x40) != 0;", 1)
         self.emit("kind &= 0x3F;", 1)
+        if sum.attributes:
+            if [f.name for f in sum.attributes] != ["lineno", "col_offset", "end_lineno", "end_col_offset"]:
+                raise ValueError(f"unexpected attributes for {name}: {sum.attributes}")
+            self.emit(f"if (ann_ast_get_loc(data, loc_data, with_line_info) < 0) goto failed;", 1)
         self.emit("switch (kind) {", 1)
         for cons in sum.types:
             # these can't occurr in annotations
@@ -2460,7 +2474,7 @@ failed:
         self.emit("goto failed;", 3)
         self.emit("}", 2)
         self.emit("}", 1)
-        self.func_end(name, sum.attributes, "with_line_info")
+        self.func_end()
 
     def emit_simple_sum(self, sum, name):
         self.emit("static PyObject *", 0)
@@ -2496,8 +2510,12 @@ failed:
 
     def visitProduct(self, product, name):
         self.func_begin(name)
+        if product.attributes:
+            if [f.name for f in product.attributes] != ["lineno", "col_offset", "end_lineno", "end_col_offset"]:
+                raise ValueError(f"unexpected attributes for {name}: {product.attributes}")
+            self.emit(f"if (ann_ast_get_loc(data, loc_data, true) < 0) goto failed;", 1)
         self.emitCreateResult(name, product.fields, 1)
-        self.func_end(name, product.attributes, "true")
+        self.func_end()
 
     def visitConstructor(self, cons, name, depth):
         self.emitCreateResult(cons.name, cons.fields, depth)
