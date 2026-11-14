@@ -2462,7 +2462,7 @@ def _ast_eval_type(expr, namespace, format, forwardref_ok=True):
                     for element in elts
                 ]
             case ast.BinOp(left, ast.BitOr(), right):
-                return types.UnionType[
+                return Union[
                     _ast_eval_type(left, namespace, format),
                     _ast_eval_type(right, namespace, format),
                 ]
