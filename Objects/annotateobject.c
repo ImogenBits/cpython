@@ -130,6 +130,39 @@ annotate_get_name(PyObject *op, void *Py_UNUSED(closure))
 }
 
 PyObject *
+_make_namespace(PyAnnotateObject *self)
+{
+    PyObject *namespace_class = PyImport_ImportModuleAttrString(
+        "annotationlib", "AnnotationNamespace"
+    );
+    if (!namespace_class) {
+        return NULL;
+    }
+    PyObject *classdict = NULL;
+    if (self->ann_closure) {
+        classdict = PyDict_GetItemString(self->ann_closure, "__classdict__");
+        if (classdict) {
+            classdict = PyCell_Get(classdict);
+            if (PyErr_Occurred()) {
+                Py_DECREF(namespace_class);
+                return NULL;
+            }
+        }
+    }
+    PyObject *namespace = PyObject_CallFunctionObjArgs(
+        namespace_class,
+        Py_None,
+        classdict ? classdict : Py_None,
+        self->ann_closure ? self->ann_closure : Py_None,
+        self->ann_globals ? self->ann_globals : Py_None,
+        self->ann_explicit_globals ? self->ann_explicit_globals : Py_None,
+        NULL
+    );
+    Py_DECREF(namespace_class);
+    return namespace;
+}
+
+PyObject *
 _eval_ast(PyObject *ann_ast_class, PyObject *format, PyObject *ast, PyObject *namespace,
           PyObject *func_name)
 {
@@ -206,35 +239,7 @@ annotate_call(PyObject *op, PyObject *args, PyObject *kwargs)
     if (!parsed_asts) {
         return NULL;
     }
-
-    PyObject *namespace_class = PyImport_ImportModuleAttrString(
-        "annotationlib", "AnnotationNamespace"
-    );
-    if (!namespace_class) {
-        Py_DECREF(parsed_asts);
-        return NULL;
-    }
-    PyObject *classdict = NULL;
-    if (self->ann_closure) {
-        classdict = PyDict_GetItemString(self->ann_closure, "__classdict__");
-        if (classdict) {
-            classdict = PyCell_Get(classdict);
-            if (PyErr_Occurred()) {
-                Py_DECREF(parsed_asts);
-                return NULL;
-            }
-        }
-    }
-    PyObject *namespace = PyObject_CallFunctionObjArgs(
-        namespace_class,
-        Py_None,
-        classdict ? classdict : Py_None,
-        self->ann_closure ? self->ann_closure : Py_None,
-        self->ann_globals ? self->ann_globals : Py_None,
-        self->ann_explicit_globals ? self->ann_explicit_globals : Py_None,
-        NULL
-    );
-    Py_DECREF(namespace_class);
+    PyObject *namespace = _make_namespace(self);
     if (!namespace) {
         Py_DECREF(parsed_asts);
         return NULL;
@@ -289,6 +294,30 @@ failed:
 }
 
 static PyObject *
+annotate_eval_as_type(PyObject *op, PyObject *args)
+{
+    PyAnnotateObject *self = PyAnnotateObject_CAST(op);
+    PyObject *format, *eval_metadata, *make_forwardref, *unpack, *type_union, *annotated;
+    if (PyArg_UnpackTuple(args, "_ast_eval_as_type", 6, 6,
+        &format, &eval_metadata, &make_forwardref, &unpack, &type_union, &annotated
+    ) < 0) {
+        return NULL;
+    }
+    PyObject *namespace = _make_namespace(self);
+    if (!namespace) {
+        return NULL;
+    }
+    PyObject *result = _PyAST_EvalTypeAnnotation(
+        self->ann_asts, self->ann_private_name, self->ann_mangled_names,
+        namespace, format, eval_metadata,
+        make_forwardref, unpack, type_union,
+        annotated
+    );
+    Py_XDECREF(namespace);
+    return result;
+}
+
+static PyObject *
 annotate_get_module(PyObject *op, void *Py_UNUSED(closure))
 {
     PyObject *globals = PyAnnotateObject_CAST(op)->ann_globals;
@@ -314,6 +343,12 @@ annotate_get_text_signature(PyObject *op, void *Py_UNUSED(closure))
         : "(format=1, /)";
     return PyUnicode_FromString(signature);
 }
+
+static PyMethodDef annotate_methods[] = {
+    {"_eval_as_type", _PyCFunction_CAST(annotate_eval_as_type),
+    METH_VARARGS, NULL},
+    {NULL}
+};
 
 static PyGetSetDef annotate_getsetlist[] = {
     {"__name__", annotate_get_name, NULL, NULL},
@@ -357,6 +392,7 @@ PyTypeObject PyAnnotate_Type = {
     .tp_getattro = PyObject_GenericGetAttr,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
     .tp_doc = annotate_doc,
+    .tp_methods = annotate_methods,
     .tp_traverse = annotate_traverse,
     .tp_clear = annotate_clear,
     .tp_members = annotate_memberlist,

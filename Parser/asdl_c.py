@@ -2142,6 +2142,261 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info
             value = self.types[name]
             self.visit(value, name)
 
+        self.emit("""
+
+typedef struct {
+    PyObject *namespace;
+    int format;
+    PyObject *eval_metadata;
+    PyObject *make_forwardref;
+    PyObject *unpack;
+    PyObject *type_union;
+    PyObject *annotated;
+    bool in_annotated;
+    bool in_subscript;
+} AnnotationEvalContext;
+
+static int
+ann_ast_consume_attributes(AnnotationData *data, AnnotationEvalContext *ctx, bool with_line_info) {
+    PyObject *value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    Py_DECREF(value);
+    value = ann_ast_constant(data);
+    if (!value) {
+        return -1;
+    }
+    Py_DECREF(value);
+    if (with_line_info) {
+        value = ann_ast_constant(data);
+        if (!value) {
+            return -1;
+        }
+        data->curr_lineno = value;
+        Py_DECREF(value);
+        value = ann_ast_constant(data);
+        if (!value) {
+            return -1;
+        }
+        data->curr_end_lineno = value;
+        Py_DECREF(value);
+    }
+    return 0;
+}
+
+static PyObject *ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok);
+
+static PyObject*
+ann_eval_list(AnnotationData *data, AnnotationEvalContext *ctx) {
+    Py_ssize_t n;
+    if (ann_ast_size_t(data, &n) < 0 || n < 0) {
+        PyErr_Format(PyExc_ValueError,
+            "invalid length encoding in annotation data %R at position %zd",
+            data->data, data->pos);
+        return NULL;
+    }
+    if (ctx->in_annotated && n < 2) {
+        PyErr_Format(PyExc_ValueError,
+            "invalid AST data %R at position %zd: annotated types must have at least 2 elements",
+            data->data, data->pos);
+        return NULL;
+    }
+    PyObject *result = PyList_New(n);
+    PyObject *value;
+    if (!result) {
+        return NULL;
+    }
+    for (Py_ssize_t i = 0; i < n; i++) {
+        if (ctx->in_annotated && i > 0) {
+            PyObject *arg = ann_ast_expr(data);
+            if (!arg) {
+                Py_DECREF(result);
+                return NULL;
+            }
+            value = PyObject_CallFunction(ctx->eval_metadata, "(O)Oi",
+                arg, ctx->namespace, ctx->format, NULL
+            );
+            Py_DECREF(arg);
+        } else {
+            value = ann_eval_expr(data, ctx, true);
+        }
+        if (!value) {
+            Py_DECREF(result);
+            return NULL;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+}
+
+static PyObject*
+ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) {
+    PyObject *result = NULL;
+    if (Py_EnterRecursiveCall(" during AST evaluation")) {
+        return NULL;
+    }
+    Py_ssize_t pos = data->pos;
+    PyObject *curr_lineno = Py_NewRef(data->curr_lineno);
+    PyObject *curr_end_lineno = Py_NewRef(data->curr_end_lineno);
+    Py_UCS1 kind = ann_ast_next(data);
+    if (kind == 0xFF) {
+        Py_LeaveRecursiveCall();
+        return NULL;
+    }
+    bool with_line_info = (kind & 0x40) != 0;
+    kind &= 0x3F;
+    switch (kind) {
+        case Slice_kind + 1:
+        case Constant_kind: {
+            result = ann_ast_constant(data);
+            break;
+        }
+        case Name_kind: {
+            PyObject *name = ann_ast_identifier(data);
+            if (!name) {
+                goto failed;
+            }
+            result = PyObject_GetItem(ctx->namespace, name);
+            Py_DECREF(name);
+            break;
+        }
+        case Attribute_kind: {
+            PyObject *value = ann_eval_expr(data, ctx, false);
+            if (!value) {
+                goto failed;
+            }
+            PyObject *attr = ann_ast_identifier(data);
+            if (!attr) {
+                Py_DECREF(value);
+                goto failed;
+            }
+            result = PyObject_GetAttr(value, attr);
+            Py_DECREF(attr);
+            Py_DECREF(value);
+            break;
+        }
+        case Starred_kind: {
+            PyObject *value = ann_eval_expr(data, ctx, false);
+            if (!value) {
+                goto failed;
+            }
+            result = PyObject_GetItem(ctx->unpack, value);
+            Py_DECREF(value);
+            break;
+        }
+        case Subscript_kind: {
+            PyObject *value = ann_eval_expr(data, ctx, false);
+            if (!value) {
+                goto failed;
+            }
+            ctx->in_annotated = Py_Is(value, ctx->annotated);
+            ctx->in_subscript = true;
+            PyObject *slice = ann_eval_expr(data, ctx, true);
+            ctx->in_subscript = false;
+            ctx->in_annotated = false;
+            if (!slice) {
+                Py_DECREF(value);
+                goto failed;
+            }
+            result = PyObject_GetItem(value, slice);
+            Py_DECREF(slice);
+            Py_DECREF(value);
+            break;
+        }
+        case BinOp_kind: {
+            PyObject *left = ann_eval_expr(data, ctx, false);
+            if (!left) {
+                goto failed;
+            }
+            Py_UCS1 op = ann_ast_next(data);
+            if (op == 0xFF) {
+                Py_DECREF(left);
+                goto failed;
+            }
+            if (op != BitOr) {
+                PyErr_Format(PyExc_RuntimeError,
+                    "invalid operator kind %c in annotation expression", op);
+                Py_DECREF(left);
+                goto failed;
+            }
+            PyObject *right = ann_eval_expr(data, ctx, false);
+            if (!right) {
+                Py_DECREF(left);
+                goto failed;
+            }
+            PyObject *args = PyTuple_Pack(2, left, right);
+            Py_DECREF(left);
+            Py_DECREF(right);
+            if (!args) {
+                goto failed;
+            }
+            result = PyObject_GetItem(ctx->type_union, args);
+            Py_DECREF(args);
+            break;
+        }
+        case List_kind: {
+            result = ann_eval_list(data, ctx);
+            break;
+        }
+        case Tuple_kind: {
+            if (!ctx->in_subscript) {
+                PyErr_Format(PyExc_ValueError,
+                    "invalid annotation expression kind %d in annotation data %R at position %zd: "
+                    "tuples are only allowed in subscript expressions",
+                    kind, data->consts, data->pos);
+                goto failed;
+            }
+            PyObject *list = ann_eval_list(data, ctx);
+            if (!list) {
+                goto failed;
+            }
+            result = PyList_AsTuple(list);
+            Py_DECREF(list);
+            break;
+        }
+        default: {
+            PyErr_Format(PyExc_RuntimeError,
+                "invalid annotation expression kind %d in annotation data %R at position %zd",
+                kind, data->consts, data->pos);
+            goto failed;
+        }
+    }
+    if (!result) {
+        goto failed;
+    }
+    ann_ast_consume_attributes(data, ctx, with_line_info);
+    Py_DECREF(curr_lineno);
+    Py_DECREF(curr_end_lineno);
+    Py_LeaveRecursiveCall();
+    return result;
+failed:
+    Py_XDECREF(result);
+    if (!fwdref_ok || ctx->format == _Py_ANNOTATE_FORMAT_VALUE) {
+        Py_DECREF(curr_lineno);
+        Py_DECREF(curr_end_lineno);
+        Py_LeaveRecursiveCall();
+        return NULL;
+    }
+    PyErr_Clear();
+    data->pos = pos;
+    data->curr_lineno = curr_lineno;
+    data->curr_end_lineno = curr_end_lineno;
+    Py_DECREF(curr_lineno);
+    Py_DECREF(curr_end_lineno);
+    PyObject *ast = ann_ast_expr(data);
+    if (!ast) {
+        Py_LeaveRecursiveCall();
+        return NULL;
+    }
+    result = PyObject_CallFunctionObjArgs(ctx->make_forwardref, ast, ctx->namespace, NULL);
+    Py_LeaveRecursiveCall();
+    return result;
+}
+
+
+""".strip(), 0, reflow=False)
+
     def func_begin(self, name):
         self.emit("static PyObject *", 0)
         self.emit("ann_ast_%s(AnnotationData *data)" % name, 0)
@@ -2175,6 +2430,7 @@ ann_ast_add_attributes(AnnotationData *data, PyObject *node, bool with_line_info
         self.func_begin(name)
         self.emit("Py_UCS1 kind = ann_ast_next(data);", 1)
         self.emit("if (kind == 0xFF) {", 1)
+        self.emit("Py_LeaveRecursiveCall();", 2)
         self.emit("return NULL;", 2)
         self.emit("}", 1)
         self.emit("bool with_line_info = (kind & 0x40) != 0;", 1)
@@ -2671,6 +2927,110 @@ parsing_err:
     Py_XDECREF(out);
     return NULL;
 }
+
+PyObject *
+_PyAST_EvalTypeAnnotationString(
+    PyObject *data, PyObject *private_name, PyObject *mangled_names,
+    PyObject *namespace, int format, PyObject *eval_metadata,
+    PyObject *make_forwardref, PyObject *unpack, PyObject *type_union,
+    PyObject *annotated
+) {
+    struct ast_state *state = get_ast_state();
+    if (state == NULL) {
+        return NULL;
+    }
+    PyObject *one = PyLong_FromLong(1);
+    if (!one) {
+        return NULL;
+    }
+    AnnotationData ann_data = {
+        .state = state,
+        .data = PyTuple_GET_ITEM(data, 0),
+        .pos = 0,
+        .consts = data,
+        .private_name = private_name,
+        .mangled_names = mangled_names,
+        .in_store_context = 0,
+        .curr_lineno = one,
+        .curr_end_lineno = one,
+    };
+    AnnotationEvalContext ctx = {
+        .namespace = namespace,
+        .format = format,
+        .eval_metadata = eval_metadata,
+        .make_forwardref = make_forwardref,
+        .unpack = unpack,
+        .type_union = type_union,
+        .annotated = annotated,
+    };
+    PyObject *result = ann_eval_expr(&ann_data, &ctx, true);
+    Py_DECREF(one);
+    if (!result) {
+        if (!PyErr_Occurred()) {
+            PyErr_Format(PyExc_RuntimeError,
+                "error parsing binary AST data: %R", data);
+        }
+        return NULL;
+    }
+    if (ann_data.pos != PyUnicode_GET_LENGTH(ann_data.data)) {
+        PyErr_Format(PyExc_RuntimeError,
+            "malformed binary AST data: %R", data);
+        Py_DECREF(result);
+        return NULL;
+    }
+    return result;
+}
+
+PyObject *
+_PyAST_EvalTypeAnnotation(
+    PyObject *data, PyObject *private_name, PyObject *mangled_names,
+    PyObject *namespace, PyObject *format, PyObject *eval_metadata,
+    PyObject *make_forwardref, PyObject *unpack, PyObject *type_union,
+    PyObject *annotated
+) {
+    if (!data || !(PyAnyDict_CheckExact(data) || PyTuple_CheckExact(data))) {
+        PyErr_Format(PyExc_TypeError, "expected a dictionary or tuple for data, got %R", data);
+        return NULL;
+    }
+    int format_int = PyLong_AsLong(format);
+    if (format_int == -1 && PyErr_Occurred()) {
+        return NULL;
+    }
+    if (PyTuple_CheckExact(data)) {
+        PyObject *out = _PyAST_EvalTypeAnnotationString(
+            data, private_name, mangled_names, namespace,
+            format_int, eval_metadata, make_forwardref, unpack,
+            type_union, annotated
+        );
+        return out;
+    }
+    PyObject *out = PyDict_New();
+    if (out == NULL) {
+        goto parsing_err;
+    }
+    PyObject *name, *data_string;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(data, &pos, &name, &data_string)) {
+        PyObject *expr_obj = _PyAST_EvalTypeAnnotationString(
+            data_string, private_name, mangled_names, namespace,
+            format_int, eval_metadata, make_forwardref, unpack,
+            type_union, annotated
+        );
+        if (!expr_obj) {
+            goto parsing_err;
+        }
+        if (PyDict_SetItem(out, name, expr_obj) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "error setting annotation in dictionary");
+            Py_DECREF(expr_obj);
+            goto parsing_err;
+        }
+        Py_DECREF(expr_obj);
+    }
+    return out;
+parsing_err:
+    Py_XDECREF(out);
+    return NULL;
+}
 """
 
 class ChainOfVisitors:
@@ -2758,6 +3118,7 @@ def generate_module_def(mod, metadata, f, internal_h):
         #include "pycore_setobject.h"     // _PySet_NextEntry()
         #include "pycore_symtable.h"      // _Py_Mangle()
         #include "pycore_unionobject.h"   // _Py_union_type_or
+        #include "pycore_object.h"        // _PyAnnotateFormat
 
         #include <stddef.h>               // offsetof()
 
@@ -2830,6 +3191,12 @@ def write_header(mod, metadata, f):
         extern PyObject* _PyAST_ExprAsUnicode(expr_ty);
 
         extern PyObject* _PyAST_FromAnnotationData(PyObject *, PyObject *, PyObject *);
+        extern PyObject* _PyAST_EvalTypeAnnotation(
+            PyObject *, PyObject *, PyObject *,
+            PyObject *, PyObject *, PyObject *,
+            PyObject *, PyObject *, PyObject *,
+            PyObject *
+        );
 
         /* Return the borrowed reference to the first literal string in the
            sequence of statements or NULL if it doesn't start from a literal string.
