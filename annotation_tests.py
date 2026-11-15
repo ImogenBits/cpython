@@ -104,10 +104,11 @@ def make_forwardref_class():
     class ForwardRefData:
         id: int
         name: str
-        address: MissingAddress
+        address: MissingAddress | None
         addresses: list[MissingAddress]
         metadata: dict[str, str]
         nickname: str | None
+        other: MissingScore[int, str | None]
         score: dict[MissingScore, "display score"]
         _cache: ClassVar[dict[str, object]]
         source: InitVar[str]
