@@ -298,9 +298,9 @@ annotate_eval_as_type(PyObject *op, PyObject *args)
 {
     PyAnnotateObject *self = PyAnnotateObject_CAST(op);
     PyObject *format, *eval_metadata, *make_forwardref, *unpack, *type_union, *annotated;
-    if (PyArg_UnpackTuple(args, "_ast_eval_as_type", 6, 6,
+    if (!PyArg_UnpackTuple(args, "_ast_eval_as_type", 6, 6,
         &format, &eval_metadata, &make_forwardref, &unpack, &type_union, &annotated
-    ) < 0) {
+    )) {
         return NULL;
     }
     PyObject *namespace = _make_namespace(self);

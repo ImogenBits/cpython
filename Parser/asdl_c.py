@@ -1965,6 +1965,7 @@ typedef struct {
     int in_store_context;
     PyObject *curr_lineno;
     PyObject *curr_end_lineno;
+    bool parsing_err;
 } AnnotationData;
 
 static Py_UCS1
@@ -1974,6 +1975,7 @@ ann_ast_next(AnnotationData *data)
         PyErr_Format(PyExc_ValueError,
                     "tried to read past the end of annotation data %R at position %zd",
                     data->consts, data->pos);
+        data->parsing_err = true;
         return 0xFF;
     }
     return PyUnicode_1BYTE_DATA(data->data)[(data->pos)++];
@@ -1991,6 +1993,7 @@ ann_ast_size_t(AnnotationData *data, Py_ssize_t *out)
             PyErr_Format(PyExc_ValueError,
                 "invalid size_t encoding in annotation data %R at position %zd",
                 data->data, data->pos);
+            data->parsing_err = true;
             return -1;
         }
         res |= (Py_ssize_t)(curr & 0x3F) << shift;
@@ -2055,6 +2058,7 @@ ann_ast_list(AnnotationData *data, int optional, PyObject* (*func)(AnnotationDat
         PyErr_Format(PyExc_ValueError,
             "invalid length encoding in annotation data %R at position %zd",
             data->data, data->pos);
+        data->parsing_err = true;
         return NULL;
     }
     PyObject *result = PyList_New(n);
@@ -2200,12 +2204,14 @@ ann_eval_list(AnnotationData *data, AnnotationEvalContext *ctx) {
         PyErr_Format(PyExc_ValueError,
             "invalid length encoding in annotation data %R at position %zd",
             data->data, data->pos);
+        data->parsing_err = true;
         return NULL;
     }
     if (ctx->in_annotated && n < 2) {
         PyErr_Format(PyExc_ValueError,
             "invalid AST data %R at position %zd: annotated types must have at least 2 elements",
             data->data, data->pos);
+        data->parsing_err = true;
         return NULL;
     }
     PyObject *result = PyList_New(n);
@@ -2324,8 +2330,9 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
                 goto failed;
             }
             if (op != BitOr) {
-                PyErr_Format(PyExc_RuntimeError,
-                    "invalid operator kind %c in annotation expression", op);
+                PyErr_Format(PyExc_ValueError,
+                    "invalid operator kind %d in annotation expression", op);
+                data->parsing_err = true;
                 Py_DECREF(left);
                 goto failed;
             }
@@ -2354,6 +2361,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
                     "invalid annotation expression kind %d in annotation data %R at position %zd: "
                     "tuples are only allowed in subscript expressions",
                     kind, data->consts, data->pos);
+                data->parsing_err = true;
                 goto failed;
             }
             PyObject *list = ann_eval_list(data, ctx);
@@ -2365,9 +2373,10 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
             break;
         }
         default: {
-            PyErr_Format(PyExc_RuntimeError,
+            PyErr_Format(PyExc_ValueError,
                 "invalid annotation expression kind %d in annotation data %R at position %zd",
                 kind, data->consts, data->pos);
+            data->parsing_err = true;
             goto failed;
         }
     }
@@ -2380,7 +2389,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
     return result;
 failed:
     Py_XDECREF(result);
-    if (!fwdref_ok || ctx->format == _Py_ANNOTATE_FORMAT_VALUE) {
+    if (!fwdref_ok || ctx->format == _Py_ANNOTATE_FORMAT_VALUE || data->parsing_err) {
         Py_DECREF(curr_lineno);
         Py_DECREF(curr_end_lineno);
         Py_LeaveRecursiveCall();
@@ -2883,6 +2892,7 @@ _PyAST_FromAnnotationString(PyObject *data, PyObject *private_name, PyObject *ma
         .in_store_context = 0,
         .curr_lineno = one,
         .curr_end_lineno = one,
+        .parsing_err = false,
     };
     PyObject *expr = ann_ast_expr(&ann_data);
     Py_DECREF(one);
@@ -2971,6 +2981,7 @@ _PyAST_EvalTypeAnnotationString(
         .in_store_context = 0,
         .curr_lineno = one,
         .curr_end_lineno = one,
+        .parsing_err = false,
     };
     AnnotationEvalContext ctx = {
         .namespace = namespace,
