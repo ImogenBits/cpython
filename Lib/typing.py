@@ -2491,6 +2491,8 @@ def _eval_ast_annotations(annos, *, eval_str=False, format):
 
 
 def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
+    if format is None:
+        format = annotationlib.Format.VALUE
     if isinstance(annotate, types.AnnotateObjectType):
         return annotate._eval_as_type(
             format, _ast_eval_metadata, _ast_make_forwardref,
@@ -2501,6 +2503,8 @@ def eval_annotate_as_types(annotate, *, eval_str=False, format=None):
 
 
 def get_type_annotations(obj, *, eval_str=False, format=None):
+    if format is None:
+        format = annotationlib.Format.VALUE
     if format in (annotationlib.Format.AST, annotationlib.Format.STRING):
         return annotationlib.get_annotations(obj, format=format)
     if isinstance(getattr(obj, "__annotate__", None), types.AnnotateObjectType):
