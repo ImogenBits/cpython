@@ -15513,12 +15513,17 @@ typedef struct {
     PyObject *unpack;
     PyObject *type_union;
     PyObject *annotated;
+} AnnotationEvalState;
+
+typedef struct {
+    AnnotationEvalState *state;
+    bool fwdref_ok;
     bool in_annotated;
     bool in_subscript;
 } AnnotationEvalContext;
 
 static int
-ann_ast_consume_attributes(AnnotationData *data, AnnotationEvalContext *ctx, bool with_line_info) {
+ann_ast_consume_attributes(AnnotationData *data, bool with_line_info) {
     PyObject *value = ann_ast_constant(data);
     if (!value) {
         return -1;
@@ -15546,21 +15551,14 @@ ann_ast_consume_attributes(AnnotationData *data, AnnotationEvalContext *ctx, boo
     return 0;
 }
 
-static PyObject *ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok);
+static PyObject *ann_eval_expr(AnnotationData *data, AnnotationEvalContext ctx);
 
 static PyObject*
-ann_eval_list(AnnotationData *data, AnnotationEvalContext *ctx) {
+ann_eval_list(AnnotationData *data, AnnotationEvalContext ctx) {
     Py_ssize_t n;
     if (ann_ast_size_t(data, &n) < 0 || n < 0) {
         PyErr_Format(PyExc_ValueError,
             "invalid length encoding in annotation data %R at position %zd",
-            data->data, data->pos);
-        data->parsing_err = true;
-        return NULL;
-    }
-    if (ctx->in_annotated && n < 2) {
-        PyErr_Format(PyExc_ValueError,
-            "invalid AST data %R at position %zd: annotated types must have at least 2 elements",
             data->data, data->pos);
         data->parsing_err = true;
         return NULL;
@@ -15570,19 +15568,25 @@ ann_eval_list(AnnotationData *data, AnnotationEvalContext *ctx) {
     if (!result) {
         return NULL;
     }
+    AnnotationEvalContext new_ctx = {
+        .state = ctx.state,
+        .fwdref_ok = true,
+        .in_annotated = false,
+        .in_subscript = false
+    };
     for (Py_ssize_t i = 0; i < n; i++) {
-        if (ctx->in_annotated && i > 0) {
+        if (ctx.in_annotated && i > 0) {
             PyObject *arg = ann_ast_expr(data);
             if (!arg) {
                 Py_DECREF(result);
                 return NULL;
             }
-            value = PyObject_CallFunction(ctx->eval_metadata, "(O)Oi",
-                arg, ctx->namespace, ctx->format, NULL
+            value = PyObject_CallFunction(ctx.state->eval_metadata, "[O]Oi",
+                arg, ctx.state->namespace, ctx.state->format, NULL
             );
             Py_DECREF(arg);
         } else {
-            value = ann_eval_expr(data, ctx, true);
+            value = ann_eval_expr(data, new_ctx);
         }
         if (!value) {
             Py_DECREF(result);
@@ -15594,7 +15598,7 @@ ann_eval_list(AnnotationData *data, AnnotationEvalContext *ctx) {
 }
 
 static PyObject*
-ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) {
+ann_eval_expr(AnnotationData *data, AnnotationEvalContext ctx) {
     PyObject *result = NULL;
     if (Py_EnterRecursiveCall(" during AST evaluation")) {
         return NULL;
@@ -15609,9 +15613,15 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
     }
     bool with_line_info = (kind & 0x40) != 0;
     kind &= 0x3F;
-    if (ann_ast_consume_attributes(data, ctx, with_line_info) < 0) {
+    if (ann_ast_consume_attributes(data, with_line_info) < 0) {
         goto failed;
     }
+    AnnotationEvalContext new_ctx = {
+        .state = ctx.state,
+        .fwdref_ok = false,
+        .in_annotated = false,
+        .in_subscript = false
+    };
     switch (kind) {
         case Slice_kind + 1:
         case Constant_kind: {
@@ -15623,12 +15633,12 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
             if (!name) {
                 goto failed;
             }
-            result = PyObject_GetItem(ctx->namespace, name);
+            result = PyObject_GetItem(ctx.state->namespace, name);
             Py_DECREF(name);
             break;
         }
         case Attribute_kind: {
-            PyObject *value = ann_eval_expr(data, ctx, false);
+            PyObject *value = ann_eval_expr(data, new_ctx);
             if (!value) {
                 goto failed;
             }
@@ -15643,24 +15653,23 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
             break;
         }
         case Starred_kind: {
-            PyObject *value = ann_eval_expr(data, ctx, false);
+            PyObject *value = ann_eval_expr(data, new_ctx);
             if (!value) {
                 goto failed;
             }
-            result = PyObject_GetItem(ctx->unpack, value);
+            result = PyObject_GetItem(ctx.state->unpack, value);
             Py_DECREF(value);
             break;
         }
         case Subscript_kind: {
-            PyObject *value = ann_eval_expr(data, ctx, false);
+            PyObject *value = ann_eval_expr(data, new_ctx);
             if (!value) {
                 goto failed;
             }
-            ctx->in_annotated = Py_Is(value, ctx->annotated);
-            ctx->in_subscript = true;
-            PyObject *slice = ann_eval_expr(data, ctx, true);
-            ctx->in_subscript = false;
-            ctx->in_annotated = false;
+            new_ctx.in_annotated = Py_Is(value, ctx.state->annotated);
+            new_ctx.in_subscript = true;
+            new_ctx.fwdref_ok = true;
+            PyObject *slice = ann_eval_expr(data, new_ctx);
             if (!slice) {
                 Py_DECREF(value);
                 goto failed;
@@ -15671,7 +15680,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
             break;
         }
         case BinOp_kind: {
-            PyObject *left = ann_eval_expr(data, ctx, false);
+            PyObject *left = ann_eval_expr(data, new_ctx);
             if (!left) {
                 goto failed;
             }
@@ -15687,7 +15696,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
                 Py_DECREF(left);
                 goto failed;
             }
-            PyObject *right = ann_eval_expr(data, ctx, false);
+            PyObject *right = ann_eval_expr(data, new_ctx);
             if (!right) {
                 Py_DECREF(left);
                 goto failed;
@@ -15698,7 +15707,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
             if (!args) {
                 goto failed;
             }
-            result = PyObject_GetItem(ctx->type_union, args);
+            result = PyObject_GetItem(ctx.state->type_union, args);
             Py_DECREF(args);
             break;
         }
@@ -15707,7 +15716,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
             break;
         }
         case Tuple_kind: {
-            if (!ctx->in_subscript) {
+            if (!ctx.in_subscript) {
                 PyErr_Format(PyExc_ValueError,
                     "invalid annotation expression kind %d in annotation data %R at position %zd: "
                     "tuples are only allowed in subscript expressions",
@@ -15715,6 +15724,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
                 data->parsing_err = true;
                 goto failed;
             }
+            ctx.fwdref_ok = false;
             PyObject *list = ann_eval_list(data, ctx);
             if (!list) {
                 goto failed;
@@ -15740,7 +15750,7 @@ ann_eval_expr(AnnotationData *data, AnnotationEvalContext *ctx, bool fwdref_ok) 
     return result;
 failed:
     Py_XDECREF(result);
-    if (!fwdref_ok || ctx->format == _Py_ANNOTATE_FORMAT_VALUE || data->parsing_err) {
+    if (!ctx.fwdref_ok || ctx.state->format == _Py_ANNOTATE_FORMAT_VALUE || data->parsing_err) {
         Py_DECREF(curr_lineno);
         Py_DECREF(curr_end_lineno);
         Py_LeaveRecursiveCall();
@@ -15757,7 +15767,7 @@ failed:
         Py_LeaveRecursiveCall();
         return NULL;
     }
-    result = PyObject_CallFunctionObjArgs(ctx->make_forwardref, ast, ctx->namespace, NULL);
+    result = PyObject_CallFunctionObjArgs(ctx.state->make_forwardref, ast, ctx.state->namespace, NULL);
     Py_LeaveRecursiveCall();
     return result;
 }
@@ -16406,7 +16416,7 @@ _PyAST_EvalTypeAnnotationString(
         .curr_end_lineno = one,
         .parsing_err = false,
     };
-    AnnotationEvalContext ctx = {
+    AnnotationEvalState eval_state = {
         .namespace = namespace,
         .format = format,
         .eval_metadata = eval_metadata,
@@ -16415,7 +16425,13 @@ _PyAST_EvalTypeAnnotationString(
         .type_union = type_union,
         .annotated = annotated,
     };
-    PyObject *result = ann_eval_expr(&ann_data, &ctx, true);
+    AnnotationEvalContext ctx = {
+        .state = &eval_state,
+        .in_annotated = false,
+        .in_subscript = false,
+        .fwdref_ok = true,
+    };
+    PyObject *result = ann_eval_expr(&ann_data, ctx);
     Py_DECREF(one);
     if (!result) {
         if (!PyErr_Occurred()) {
