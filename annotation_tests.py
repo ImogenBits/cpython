@@ -122,7 +122,7 @@ def run_test(clean: bool, dataclass_only: bool, profiler=None) -> None:
         for path in VENV_PATH.glob("**/__pycache__"):
             shutil.rmtree(path)
 
-    if dataclass_only:
+    if dataclass_only or profiler is not None:
         import_time, memory, pyc_size, time = 0.0, 0, 0, 0.0
     else:
         tracemalloc.start()
@@ -180,11 +180,13 @@ print(*annotation_tests.run_test({clean}, {dataclass_only}))
 
 if __name__ == "__main__":
     count = 1
+    profile = False
     if len(sys.argv) >= 2:
-        count = int(sys.argv[1])
+        profile = sys.argv[1] == "p"
+        if not profile:
+            count = int(sys.argv[1])
     clean = len(sys.argv) >= 3 and sys.argv[2] == "c"
     dataclass_only = len(sys.argv) >= 3 and sys.argv[2] == "d"
-    profile = len(sys.argv) >= 3 and sys.argv[2] == "p"
     sys.argv = ["annotation_tests.py"]
 
     res = (0.0,) * 7
@@ -216,13 +218,19 @@ if __name__ == "__main__":
     else:
         res = run_test(clean, dataclass_only)
 
-    print(
-        f"Import times: {", ".join(f"{t:.2f}" for t in import_times)}\n"
-        f"Average import time: {res[0]:.2f} s\n"
-        f"Memory: {res[1] / 1_000_000:.3f} MB\n"
-        f"Pyc size: {res[2] / 1_000_000:.3f} MB\n"
-        f"Exec time: {res[3]:.4f} s\n"
-        f"Dataclass creation (simple): {res[4] * 1_000_000:.2f} us\n"
-        f"Dataclass creation (complex): {res[5] * 1_000_000:.2f} us\n"
-        f"Dataclass creation (forward refs): {res[6] * 1_000_000:.2f} us"
-    )
+    lines = []
+    if sum(import_times, 0.0):
+        lines.append(f"Import times: {", ".join(f"{t:.2f}" for t in import_times)}")
+    if not dataclass_only and not profile:
+        lines.extend([
+            f"Average import time: {res[0]:.2f} s",
+            f"Memory: {res[1] / 1_000_000:.3f} MB",
+            f"Pyc size: {res[2] / 1_000_000:.3f} MB",
+            f"Exec time: {res[3]:.4f} s",
+        ])
+    lines.extend([
+        f"Dataclass creation (simple): {res[4] * 1_000_000:.2f} us",
+        f"Dataclass creation (complex): {res[5] * 1_000_000:.2f} us",
+        f"Dataclass creation (forward refs): {res[6] * 1_000_000:.2f} us",
+    ])
+    print("\n".join(lines))
