@@ -2173,29 +2173,12 @@ typedef struct {
 
 static int
 ann_ast_consume_attributes(AnnotationData *data, bool with_line_info) {
-    PyObject *value = ann_ast_constant(data);
-    if (!value) {
-        return -1;
-    }
-    Py_DECREF(value);
-    value = ann_ast_constant(data);
-    if (!value) {
-        return -1;
-    }
-    Py_DECREF(value);
-    if (with_line_info) {
-        value = ann_ast_constant(data);
-        if (!value) {
+    int num = with_line_info ? 4 : 2;
+    Py_ssize_t _out;
+    for (int i = 0; i < num; i++) {
+        if (ann_ast_size_t(data, &_out) < 0) {
             return -1;
         }
-        data->curr_lineno = value;
-        Py_DECREF(value);
-        value = ann_ast_constant(data);
-        if (!value) {
-            return -1;
-        }
-        data->curr_end_lineno = value;
-        Py_DECREF(value);
     }
     return 0;
 }
