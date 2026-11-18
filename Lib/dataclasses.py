@@ -821,7 +821,7 @@ def _get_type_from_annotation(annotation, cls):
     return root
 
 
-def _get_field(cls, a_name, a_type, default_kw_only):
+def _get_field(cls, a_name, type_qualifiers, default_kw_only):
     # Return a Field object for this field name and type.  ClassVars and
     # InitVars are also returned, but marked as such (see f._field_type).
     # default_kw_only is the value of kw_only to use if there isn't a field()
@@ -840,7 +840,7 @@ def _get_field(cls, a_name, a_type, default_kw_only):
 
     # Only at this point do we know the name and the type.  Set them.
     f.name = a_name
-    f.type = a_type
+    f.type = int
 
     # Assume it's a normal field until proven otherwise.  We're next
     # going to decide if it's a ClassVar or InitVar, everything else
@@ -855,11 +855,6 @@ def _get_field(cls, a_name, a_type, default_kw_only):
     # or InitVar using regex's and checking that the thing referenced
     # is actually of the correct type.
 
-    # For the complete discussion, see https://bugs.python.org/issue33453
-    if isinstance(a_type, str):
-        a_type_annotation = _get_type_from_annotation(a_type, cls)
-    else:
-        a_type_annotation = a_type
 
     # If typing has not been imported, then it's impossible for any
     # annotation to be a ClassVar.  So, only look for ClassVar if
@@ -867,7 +862,7 @@ def _get_field(cls, a_name, a_type, default_kw_only):
     # module).
     typing = sys.modules.get('typing')
     if typing:
-        if _is_classvar(a_type_annotation, typing):
+        if typing.ClassVar in type_qualifiers:
             f._field_type = _FIELD_CLASSVAR
 
     # If the type is InitVar, or if it's a matching string annotation,
@@ -876,7 +871,7 @@ def _get_field(cls, a_name, a_type, default_kw_only):
         # The module we're checking against is the module we're
         # currently in (dataclasses.py).
         dataclasses = sys.modules[__name__]
-        if _is_initvar(a_type_annotation, dataclasses):
+        if dataclasses.InitVar in type_qualifiers:
             f._field_type = _FIELD_INITVAR
 
     # Validations for individual fields.  This is delayed until now,
@@ -1058,8 +1053,7 @@ def _process_class(cls, init, repr, eq, order, unsafe_hash, frozen,
     # actual default value.  Pseudo-fields ClassVars and InitVars are
     # included, despite the fact that they're not real fields.  That's
     # dealt with later.
-    cls_annotations = typing.get_type_annotations(
-        cls, format=annotationlib.Format.FORWARDREF)
+    cls_annotations = typing.get_type_qualifiers(cls)
 
     # Now find fields in our class.  While doing so, validate some
     # things, and set the default values (as class attributes) where
@@ -1068,13 +1062,9 @@ def _process_class(cls, init, repr, eq, order, unsafe_hash, frozen,
     # Get a reference to this module for the _is_kw_only() test.
     KW_ONLY_seen = False
     dataclasses = sys.modules[__name__]
-    for name, type in cls_annotations.items():
+    for name, type_qualifiers in cls_annotations.items():
         # See if this is a marker to change the value of kw_only.
-        if isinstance(type, str):
-            a_type_annotation = _get_type_from_annotation(type, cls)
-        else:
-            a_type_annotation = type
-        if _is_kw_only(a_type_annotation, dataclasses):
+        if dataclasses.KW_ONLY in type_qualifiers:
             # Switch the default to kw_only=True, and ignore this
             # annotation: it's not a real field.
             if KW_ONLY_seen:
@@ -1084,7 +1074,7 @@ def _process_class(cls, init, repr, eq, order, unsafe_hash, frozen,
             kw_only = True
         else:
             # Otherwise it's a field of some type.
-            cls_fields.append(_get_field(cls, name, type, kw_only))
+            cls_fields.append(_get_field(cls, name, type_qualifiers, kw_only))
 
     for f in cls_fields:
         fields[f.name] = f

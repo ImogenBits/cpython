@@ -59,6 +59,20 @@ _SLOTS = (
 )
 
 
+def _get_globals(obj):
+    if isinstance(obj, type):
+        module_name = getattr(obj, "__module__", None)
+        if module_name:
+            module = sys.modules.get(module_name, None)
+            if module:
+                return getattr(module, "__dict__", None)
+    elif isinstance(obj, types.ModuleType):
+        return getattr(obj, "__dict__", None)
+    elif callable(obj):
+        return getattr(obj, "__globals__", None)
+    return None
+
+
 class ForwardRef:
     """Wrapper that holds a forward reference.
 
@@ -149,16 +163,7 @@ class ForwardRef:
         if globals is None:
             globals = self.__globals__
         if globals is None:
-            if isinstance(owner, type):
-                module_name = getattr(owner, "__module__", None)
-                if module_name:
-                    module = sys.modules.get(module_name, None)
-                    if module:
-                        globals = getattr(module, "__dict__", None)
-            elif isinstance(owner, types.ModuleType):
-                globals = getattr(owner, "__dict__", None)
-            elif callable(owner):
-                globals = getattr(owner, "__globals__", None)
+            globals = _get_globals(owner)
 
         # If we pass None to eval() below, the globals of this module are used.
         if globals is None:
@@ -1110,7 +1115,8 @@ def get_annotations(
             # which is in VALUE format, so we convert that to ASTs
             ann = _get_dunder_annotations(obj)
             if ann is not None:
-                return annotations_to_ast(ann)
+                namespace = AnnotationNamespace(globals=_get_globals(obj))
+                return annotations_to_ast(ann, namespace)
         case _:
             raise ValueError(f"Unsupported format {format!r}")
 
@@ -1246,26 +1252,28 @@ def annotations_to_string(annotations):
     }
 
 
-def annotation_to_ast(annotation):
+def annotation_to_ast(annotation, namespace=None):
     """Convert an annotation to approximately the AST format."""
+    if namespace is None:
+        namespace = AnnotationNamespace()
     if isinstance(annotation, (int, float, complex, str, bytes, bool, type(None), type(...))):
         node = ast.Constant(value=annotation)
-        namespace = {}
     else:
         node = ast.Name(id="__annotation__")
-        namespace = {"__annotation__": annotation}
+        namespace["__annotation__"] = annotation
     node = ast.Expression(body=node)
     ast.fix_missing_locations(node)
     return AnnotationAST(node, namespace)
 
 
-def annotations_to_ast(annotations):
+
+def annotations_to_ast(annotations, namespace=None):
     """Convert an annotation dict containing values to approximately the AST format.
 
     Always returns a fresh dictionary.
     """
     return {
-        n: annotation_to_ast(t)
+        n: annotation_to_ast(t, namespace)
         for n, t in annotations.items()
     }
 

@@ -2476,6 +2476,40 @@ def _ast_eval_type(expr, namespace, format, forwardref_ok=True):
     return _ast_make_forwardref(expr, namespace)
 
 
+def _ast_eval_type_qualifiers(expr, namespace):
+    match expr:
+        case ast.Subscript(value, slice):
+            resolved_value = _ast_eval_type(value, namespace, annotationlib.Format.FORWARDREF)
+            res = set()
+            if resolved_value in _TYPE_QUALIFIERS:
+                res.add(resolved_value)
+                res.update(_ast_eval_type_qualifiers(slice, namespace))
+            return res
+        case ast.Name() | ast.Attribute():
+            resolved_value = _ast_eval_type(expr, namespace, annotationlib.Format.FORWARDREF)
+            return {resolved_value} if resolved_value in _TYPE_QUALIFIERS else set()
+        case _:
+            return set()
+
+_SKIP_THINGY = False
+
+def get_type_qualifiers(obj):
+    if "dataclasses" in sys.modules:
+        from dataclasses import InitVar
+        _TYPE_QUALIFIERS.add(InitVar)
+    if _SKIP_THINGY and isinstance(getattr(obj, "__annotate__", None), types.AnnotateObjectType):
+        return obj.__annotate__._eval_type_qualifiers(_TYPE_QUALIFIERS)
+    annotations = annotationlib.get_annotations(obj, format=annotationlib.Format.AST)
+    res = {}
+    for name, anno in annotations.items():
+        if isinstance(anno.ast.body, ast.Constant) and isinstance(anno.ast.body.value, str):
+            expr = ast.parse(anno.ast.body.value, "<annotation>", "eval").body
+        else:
+            expr = anno.ast.body
+        res[name] = _ast_eval_type_qualifiers(anno.ast.body, anno.namespace)
+    return res
+
+
 def _eval_ast_annotations(annos, *, eval_str=False, format):
     if eval_str:
         annos = {
@@ -4080,3 +4114,14 @@ def __getattr__(attr):
         raise AttributeError(f"module {__name__!r} has no attribute {attr!r}")
     globals()[attr] = obj
     return obj
+
+
+_TYPE_QUALIFIERS = {
+    Required,
+    NotRequired,
+    ReadOnly,
+    ClassVar,
+    Final,
+    TypeAlias,
+    Unpack,
+}

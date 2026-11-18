@@ -2399,6 +2399,98 @@ failed:
     return result;
 }
 
+PyObject *
+ann_eval_type_quals(AnnotationData *data, AnnotationEvalState *state, PyObject *all_type_quals) {
+    PyObject *result = NULL, *type_quals = NULL;
+    if (Py_EnterRecursiveCall(" during AST evaluation")) {
+        return NULL;
+    }
+    Py_ssize_t pos = data->pos;
+    PyObject *curr_lineno = data->curr_lineno;
+    PyObject *curr_end_lineno = data->curr_end_lineno;
+    Py_UCS1 kind = ann_ast_next(data);
+    if (kind == 0xFF) {
+        Py_LeaveRecursiveCall();
+        return NULL;
+    }
+    bool with_line_info = (kind & 0x40) != 0;
+    kind &= 0x3F;
+    if (ann_ast_consume_attributes(data, with_line_info) < 0) {
+        goto failed;
+    }
+    switch (kind) {
+        case Name_kind:
+        case Attribute_kind: {
+            data->pos = pos;
+            data->curr_lineno = curr_lineno;
+            data->curr_end_lineno = curr_end_lineno;
+            result = ann_eval_expr(data, state);
+            if (!result) {
+                goto failed;
+            }
+            int contains = PySet_Contains(all_type_quals, result);
+            if (contains < 0) {
+                Py_DECREF(result);
+                goto failed;
+            }
+            if (!contains) {
+                Py_DECREF(result);
+                result = NULL;
+                break;
+            }
+            break;
+        }
+        case Subscript_kind: {
+            result = ann_eval_expr(data, state);
+            if (!result) {
+                goto failed;
+            }
+            int contains = PySet_Contains(all_type_quals, result);
+            if (contains < 0) {
+                Py_DECREF(result);
+                goto failed;
+            }
+            if (!contains) {
+                Py_DECREF(result);
+                result = NULL;
+                break;
+            }
+            type_quals = ann_eval_type_quals(data, state, all_type_quals);
+            if (!type_quals) {
+                Py_DECREF(result);
+                goto failed;
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+    if (result && type_quals) {
+        PyList_Append(type_quals, result);
+        Py_DECREF(result);
+    } else if (result) {
+        type_quals = PyList_New(1);
+        if (!type_quals) {
+            Py_DECREF(result);
+            goto failed;
+        }
+        PyList_SET_ITEM(type_quals, 0, result);
+    } else if (!type_quals) {
+        type_quals = PyList_New(0);
+    }
+    Py_LeaveRecursiveCall();
+    return type_quals;
+failed:
+    Py_LeaveRecursiveCall();
+    if (data->parsing_err) {
+        return NULL;
+    }
+    PyErr_Clear();
+    type_quals = PyList_New(0);
+    return type_quals;
+}
+
 
 """.strip(), 0, reflow=False)
 
@@ -3048,6 +3140,93 @@ parsing_err:
     Py_XDECREF(out);
     return NULL;
 }
+
+PyObject *
+_PyAST_EvalTypeQualifiersSingle(
+    PyObject *data, PyObject *private_name, PyObject *mangled_names,
+    PyObject *namespace, PyObject *type_qualifiers
+) {
+    struct ast_state *state = get_ast_state();
+    if (state == NULL) {
+        return NULL;
+    }
+    PyObject *one = PyLong_FromLong(1);
+    if (!one) {
+        return NULL;
+    }
+    AnnotationData ann_data = {
+        .state = state,
+        .data = PyTuple_GET_ITEM(data, 0),
+        .pos = 0,
+        .consts = data,
+        .private_name = private_name,
+        .mangled_names = mangled_names,
+        .in_store_context = 0,
+        .curr_lineno = one,
+        .curr_end_lineno = one,
+        .parsing_err = false,
+    };
+    AnnotationEvalState eval_state = {
+        .namespace = namespace,
+        .format = _Py_ANNOTATE_FORMAT_FORWARDREF,
+        .eval_metadata = NULL,
+        .make_forwardref = NULL,
+        .unpack = NULL,
+        .type_union = NULL,
+        .annotated = NULL,
+    };
+    PyObject *result = ann_eval_type_quals(&ann_data, &eval_state, type_qualifiers);
+    Py_DECREF(one);
+    if (!result) {
+        if (!PyErr_Occurred()) {
+            PyErr_Format(PyExc_RuntimeError,
+                "error parsing binary AST data: %R", data);
+        }
+        return NULL;
+    }
+    return result;
+}
+
+PyObject *
+_PyAST_EvalTypeQualifiers(
+    PyObject *data, PyObject *private_name, PyObject *mangled_names,
+    PyObject *namespace, PyObject *type_qualifiers
+) {
+    if (!data || !(PyAnyDict_CheckExact(data) || PyTuple_CheckExact(data))) {
+        PyErr_Format(PyExc_TypeError, "expected a dictionary or tuple for data, got %R", data);
+        return NULL;
+    }
+    if (PyTuple_CheckExact(data)) {
+        PyObject *out = _PyAST_EvalTypeQualifiersSingle(
+            data, private_name, mangled_names, namespace, type_qualifiers
+        );
+        return out;
+    }
+    PyObject *out = PyDict_New();
+    if (out == NULL) {
+        goto parsing_err;
+    }
+    PyObject *name, *data_string;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(data, &pos, &name, &data_string)) {
+        PyObject *expr_obj = _PyAST_EvalTypeQualifiersSingle(
+            data_string, private_name, mangled_names, namespace, type_qualifiers
+        );
+        if (!expr_obj) {
+            goto parsing_err;
+        }
+        if (PyDict_SetItem(out, name, expr_obj) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "error setting annotation in dictionary");
+            Py_DECREF(expr_obj);
+            goto parsing_err;
+        }
+        Py_DECREF(expr_obj);
+    }
+    return out;
+parsing_err:
+    Py_XDECREF(out);
+    return NULL;
+}
 """
 
 class ChainOfVisitors:
@@ -3214,6 +3393,10 @@ def write_header(mod, metadata, f):
             PyObject *, PyObject *, PyObject *,
             PyObject *
         );
+        extern PyObject* _PyAST_EvalTypeQualifiers(
+            PyObject *, PyObject *, PyObject *,
+            PyObject *, PyObject *
+        ) ;
 
         /* Return the borrowed reference to the first literal string in the
            sequence of statements or NULL if it doesn't start from a literal string.

@@ -318,6 +318,28 @@ annotate_eval_as_type(PyObject *op, PyObject *args)
 }
 
 static PyObject *
+annotate_eval_type_qualifiers(PyObject *op, PyObject *args)
+{
+    PyAnnotateObject *self = PyAnnotateObject_CAST(op);
+    PyObject *type_qualifiers;
+    if (!PyArg_UnpackTuple(args, "_ast_eval_as_type", 1, 1,
+        &type_qualifiers
+    )) {
+        return NULL;
+    }
+    PyObject *namespace = _make_namespace(self);
+    if (!namespace) {
+        return NULL;
+    }
+    PyObject *result = _PyAST_EvalTypeQualifiers(
+        self->ann_asts, self->ann_private_name, self->ann_mangled_names,
+        namespace, type_qualifiers
+    );
+    Py_XDECREF(namespace);
+    return result;
+}
+
+static PyObject *
 annotate_get_module(PyObject *op, void *Py_UNUSED(closure))
 {
     PyObject *globals = PyAnnotateObject_CAST(op)->ann_globals;
@@ -345,8 +367,8 @@ annotate_get_text_signature(PyObject *op, void *Py_UNUSED(closure))
 }
 
 static PyMethodDef annotate_methods[] = {
-    {"_eval_as_type", _PyCFunction_CAST(annotate_eval_as_type),
-    METH_VARARGS, NULL},
+    {"_eval_as_type", _PyCFunction_CAST(annotate_eval_as_type), METH_VARARGS, NULL},
+    {"_eval_type_qualifiers", _PyCFunction_CAST(annotate_eval_type_qualifiers), METH_VARARGS, NULL},
     {NULL}
 };
 

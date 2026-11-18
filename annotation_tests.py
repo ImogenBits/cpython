@@ -12,6 +12,7 @@ from typing import Annotated, ClassVar, eval_annotate_as_types
 from contextlib import redirect_stdout
 import subprocess
 import shutil
+import typing
 
 
 VENV_PATH = Path() / ".venv/Lib/site-packages"
@@ -157,6 +158,7 @@ def run_test(clean: bool, dataclass_only: bool, profiler=None) -> None:
         tracemalloc.stop()
     if profiler is not None:
         profiler.start()
+    typing._SKIP_THINGY = True
     simple = _measure_dataclass_creation(make_simple_class)
     complex = _measure_dataclass_creation(make_complex_class)
     forwardref = _measure_dataclass_creation(make_forwardref_class)

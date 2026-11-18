@@ -944,6 +944,10 @@ extern PyObject* _PyAST_EvalTypeAnnotation(
     PyObject *, PyObject *, PyObject *,
     PyObject *
 );
+extern PyObject* _PyAST_EvalTypeQualifiers(
+    PyObject *, PyObject *, PyObject *,
+    PyObject *, PyObject *
+) ;
 
 /* Return the borrowed reference to the first literal string in the
    sequence of statements or NULL if it doesn't start from a literal string.
